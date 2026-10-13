@@ -1,5 +1,5 @@
 // A small, safe arithmetic expression language for waypoint dimensions,
-// e.g. `upper_chest/2 + ease/4`, `max(neck_width, 15)`, `2in + 1.5`.
+// e.g. `upper_chest/2 + ease/4`, `max(back_neck_width, 15)`, `2in + 1.5`.
 // All lengths evaluate to centimetres; bare numbers are cm, `in`/`mm`/`cm` suffixes convert.
 
 import { CM_PER_INCH } from './units';
@@ -294,7 +294,7 @@ export interface ResolvedDefinitions {
 
 /**
  * Evaluate a set of named expressions that may refer to each other and to fixed base values,
- * e.g. { neck_width: 'cross_chest_back * 0.45' } with base { cross_chest_back: 38.25 }.
+ * e.g. { back_neck_width: 'cross_back * 0.45' } with base { cross_back: 38.25 }.
  * Detects cycles; a definition that fails makes its dependents fail too, with the cause named.
  */
 export function resolveDefinitions(defs: Record<string, string>, base: Record<string, number> = {}): ResolvedDefinitions {

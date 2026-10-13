@@ -144,20 +144,38 @@ duplicate (⧉) or delete (×) any panel there. Options: knitting direction, nec
 
 | Template | Waypoints (bottom to top) | Notes |
 |---|---|---|
-| **Back** | hem `(waist + full_hip)/4 + ease/2` → waist `waist/2 + ease/2 − waist_shift` → underarm `upper_chest/2 + ease/2` → armhole_bo at `underarm.height + 2 * row_h` (40 % of the armhole width change bound off in one go: the beginning of the next 2 rows) → armhole_end `cross_chest_back + 1` at `armhole_depth × 0.45` → shoulder at `underarm.height + armhole_depth` → neck_side `neck_width` (shoulder slope in bind-off steps) | Round back neck, `back_neck_depth`, centre `neck_width − 2` |
-| **Front** | as the back, waist `+ waist_shift` | Round: depth `front_neck_depth`, centre `neck_width × 0.4`. V: depth `front_neck_depth × 2`, no centre. Square: depth `front_neck_depth + 2`, whole width at once. Boat: `neck_width + 6` wide, `back_neck_depth + 1` deep |
+| **Back** | hem `hem_circ/2 + ease/2` at 0 → waist `waist/2 + ease/2 − waist_shift` at `hem_drop` → underarm `upper_chest/2 + ease/2` at `waist.height + waist_to_underarm` → armhole_bo at `underarm.height + 2 * row_h` (40 % of the armhole width change bound off in one go: the beginning of the next 2 rows) → armhole_end `cross_back_w + 1` at `armhole_depth × 0.45` → shoulder `shoulder_w` at `underarm.height + armhole_depth` (increases from armhole_end: the *widen to the shoulder width* option, on by default; off = straight up at the armhole_end width) → neck_side `back_neck_width` at `shoulder.height + shoulder_drop` (shoulder slope in bind-off steps) | Round back neck, `back_neck_drop`, centre `back_neck_width − 2` |
+| **Front** | as the back, waist `+ waist_shift`, underarm `+ bust_side_w`, armhole_end `cross_front + 1` (the same `shoulder_w` at the shoulder, so the shoulder seams match) | Round: depth `front_neck_drop`, centre `back_neck_width × 0.4`. V: depth `front_neck_drop × 2`, no centre. Square: depth `front_neck_drop + 2`, whole width at once. Boat: `back_neck_width + 6` wide, `back_neck_drop + 1` deep |
 | **Sleeve, set-in** | cuff `wrist + ease.wrist` → underarm `bicep + ease.bicep` at `arm_length` → cap_bo 2 rows up (bind-off matching the body's, in one go) → cap_low → cap_high → cap_top `max(8, bicep × 0.22)`, its height **fitted to the armhole** | Bell cap: fast, steady, fast; cap decreases may fall on any row. 2x2 rib cuff section (5 cm) |
 | **Sleeve, drop shoulder** | cuff → top `armhole_depth × 2` at `arm_length` | Ribbed cuff |
 | **Sleeve, straight** | cuff = top `bicep + ease.bicep` | Rounded to the rib multiple so the count stays constant |
 | **Plain rectangle** | bottom → top, 20 × 30 cm | |
-| **Neckband strip** | `neck_width × 2 + front_neck_depth × 2` long, 2.5 cm deep, 1x1 rib | Length is an estimate until the pick-up helper |
+| **Neckband strip** | `back_neck_width × 2 + front_neck_drop × 2` long, 2.5 cm deep, 1x1 rib | Length is an estimate until the pick-up helper |
 
 **Set-in cap height follows the armhole.** `armhole_len` is the armhole the sleeve is sewn into, measured along the
 edges: the other side of a seam join that contains one of the sleeve's edges, or else the Front + Back panels' left
-armholes (underarm → shoulder), or, with no bodies at all, an estimate from `armhole_depth` (noted in the checks). The
+armholes (underarm → shoulder), or, with no bodies at all, the body's `scye_circumference` (or, without it, an
+estimate from `armhole_depth`; noted in the checks). The
 cap top height solves `both cap edges ≈ armhole_len + cap_ease` (`cap_ease`, default 1.5 cm, is a graded measurement):
 `cap_bo.height + sqrt(((armhole_len + cap_ease)/2 × 0.966 − bind-off run)² − horizontal run²)`; 0.966 allows for the
-bell's curve. In the sample sizes the cap comes out 1.0–2.4 cm longer than the armhole; the seam check shows the exact figure.
+bell's curve. In the sample sizes the cap comes out 0.3–2.6 cm longer than the armhole; the seam check shows the exact figure.
+
+**Fit choices** (Project tab → *Fit*) pick sizing-table columns for names the templates use. They behave like
+measurements with an expression rule (shown in the Measurements grid with a *fit* tag); a measurement of the same name
+wins over them.
+
+| Name | Follows | Choice |
+|---|---|---|
+| `bust` | `bust_ab_cup` / `bust_cd_cup` / `bust_ef_cup` / `bust_gh_cup` / `bust_custom` | cup (default C/D) |
+| `dart_height`, `apex_to_apex` | `dart_height_<cup>`, `apex_to_apex_b/d/f/h` | cup |
+| `hem_circ` | `high_hip` (default), `hip_seat_straight` or `hip_seat_curvy` | hem |
+| `hem_drop` | `waist_to_high_hip` (high hip) or `waist_to_full_hip` (seat) | hem |
+| `shoulder_w`, `cross_back_w` | `back_shoulder_width`, `cross_back` (or the `_broad` columns) | broad back |
+
+A template that refers to a choice whose column the project lacks (e.g. an old project without `high_hip`) says so in
+the checks: import or merge the sizing table, or pick another choice. `waist_to_underarm` is a derived, editable
+measurement: `back_neck_drop + back_waist_length − shoulder_drop − armhole_depth` (HPS → waist minus HPS → underarm).
+Vertical bust darts start at the waist.
 
 **Top-down tops are worked shoulders first** (the default for top-down backs and fronts, and the first template,
 *Top-down top (back + front)*, which adds both panels and their joins):
@@ -366,19 +384,21 @@ Each measurement resolves per size with this precedence (shown as a coloured dot
 2. **table**: a value imported from the sizing table.
 3. **rule**: the grading rule, either *increment* (base value at the base size plus per-size steps) or *expression* (derived from other measurements).
 
-Measurements missing from the sizing table are seeded as **estimates** with expression rules. Check them:
+Measurements the templates need that the sizing table lacks are seeded as **estimates** with expression rules. The
+shipped table has most of them; the first group is only seeded for older tables. Check them:
 
 | Name | Default rule (cm) |
 |---|---|
-| `shoulder_width` | `round(cross_chest_back + 3, 0.5)` |
-| `neck_width` | `round(13 + upper_chest * 0.03, 0.5)` |
-| `back_neck_depth` | `2` |
-| `front_neck_depth` | `round(5.5 + upper_chest * 0.02, 0.5)` |
-| `shoulder_slope` | `round(1.5 + upper_chest * 0.012, 0.5)` |
-| `hem_to_waist` | `15` |
-| `bust_point_depth` | `round(20 + bust * 0.07, 0.5)`: high point of shoulder to apex |
-| `apex_to_apex` | `round(14 + bust * 0.04, 0.5)` |
+| `back_shoulder_width` | `round(cross_back + 3, 0.5)` (older tables only) |
+| `back_neck_width` | `round(13 + upper_chest * 0.03, 0.5)` (older tables only) |
+| `back_neck_drop` | `2` (older tables only) |
+| `front_neck_drop` | `round(5.5 + upper_chest * 0.02, 0.5)` (older tables only) |
+| `shoulder_drop` | `round(1.5 + upper_chest * 0.012, 0.5)` (older tables only) |
+| `hps_to_apex` | `round(20 + bust * 0.07, 0.5)` (older tables only) |
+| `apex_to_apex` | `round(14 + bust * 0.04, 0.5)` (tables without the apex columns) |
 | `cap_height` | `round(armhole_depth * 0.65, 0.5)` |
+| `underarm_co` | `round(upper_chest * 0.05, 0.5)` |
+| `cap_ease` | `1.5` |
 | `waist_shift` | `(bust - waist) / 4`: share of the bust-to-waist narrowing taken by the back. Back waist `waist/2 + ease/2 − waist_shift`, front waist `+ waist_shift`. Use `/ 2` for a more shaped back. |
 
 **Ease** is total circumference ease in cm. `ease` is the global value; `ease.<measurement>` is a

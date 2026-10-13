@@ -17,9 +17,9 @@ import { dim } from './model';
 import { computePanel } from './panel';
 import { applyImport, readSizingTable, suggestMapping, validateMapping } from './sizing';
 import { backBodice } from './templates';
-import { fixtureProject, LEGACY_CSV, sizeId } from './testFixtures';
+import { fixtureProject, legacyFixtureProject, LEGACY_CSV, sizeId } from './testFixtures';
 
-const values = (p: ReturnType<typeof fixtureProject>, name: string) => p.sizes.map((s) => resolveMeasurements(p, s.id).values[name]?.value);
+const values = (p: ReturnType<typeof legacyFixtureProject>, name: string) => p.sizes.map((s) => resolveMeasurements(p, s.id).values[name]?.value);
 
 describe('reading sizing tables', () => {
   it('reads the sample CSV', () => {
@@ -47,7 +47,7 @@ describe('reading sizing tables', () => {
 
 describe('column mapping', () => {
   it('recognises the standard columns and synonyms', () => {
-    const p = fixtureProject();
+    const p = legacyFixtureProject();
     const r = readSizingTable('Size,Full Bust (cm),High bust,Hips,Shoulder to shoulder,Notes\nS,90,85,95,38,petite');
     if (!r.ok) throw new Error(r.error);
     const m = suggestMapping(r.table, p);
@@ -72,7 +72,7 @@ describe('column mapping', () => {
 
 describe('applying an import', () => {
   it('merges into matching sizes, adds new sizes and measurements, converts inches', () => {
-    const p = fixtureProject();
+    const p = legacyFixtureProject();
     const r = readSizingTable('size,bust_ef_cup,shoulder_to_shoulder\nM,50,16\n5X,75,20');
     if (!r.ok) throw new Error(r.error);
     const { project, report } = applyImport(p, r.table, suggestMapping(r.table, p), { units: 'in', mode: 'merge' });
@@ -86,7 +86,7 @@ describe('applying an import', () => {
   });
 
   it('replaces sizes, keeping ids of sizes that stay so overrides survive', () => {
-    const p = fixtureProject();
+    const p = legacyFixtureProject();
     const M = sizeId(p, 'M');
     p.panels[0].waypoints[1].width = dim('waist/2', { [M]: 50, [sizeId(p, 'S')]: 45 });
     const r = readSizingTable('size,bust\nS,90\nM,100');
@@ -100,7 +100,7 @@ describe('applying an import', () => {
   });
 
   it('a table value replaces an estimate', () => {
-    const p = fixtureProject();
+    const p = legacyFixtureProject();
     const r = readSizingTable('size,back_neck_width\nM,40');
     if (!r.ok) throw new Error(r.error);
     const { project } = applyImport(p, r.table, suggestMapping(r.table, p), { units: 'cm', mode: 'merge' });
@@ -111,7 +111,7 @@ describe('applying an import', () => {
   });
 
   it('reports non-numeric cells', () => {
-    const p = fixtureProject();
+    const p = legacyFixtureProject();
     const r = readSizingTable('size,bust\nM,big');
     if (!r.ok) throw new Error(r.error);
     expect(applyImport(p, r.table, suggestMapping(r.table, p), { units: 'cm', mode: 'merge' }).report.warnings[0]).toMatch(/"big" for bust/);
@@ -120,7 +120,7 @@ describe('applying an import', () => {
 
 describe('grading operations', () => {
   it('converts table values to an increment rule that reproduces them exactly', () => {
-    const p = fixtureProject();
+    const p = legacyFixtureProject();
     const before = values(p, 'bust_ef_cup');
     const q = convertToIncrementRule(p, 'bust_ef_cup');
     const m = q.measurements.find((x) => x.name === 'bust_ef_cup')!;
@@ -131,21 +131,21 @@ describe('grading operations', () => {
   });
 
   it('keeps values when the base size changes', () => {
-    const q = convertToIncrementRule(fixtureProject(), 'bust_ef_cup');
+    const q = convertToIncrementRule(legacyFixtureProject(), 'bust_ef_cup');
     const before = values(q, 'bust');
     const r = setBaseSize(q, sizeId(q, '2X'));
     values(r, 'bust').forEach((v, i) => expect(v).toBeCloseTo(before[i]!, 6));
   });
 
   it('applies a uniform step', () => {
-    const q = uniformSteps(convertToIncrementRule(fixtureProject(), 'wrist'), 'wrist', 0.5);
+    const q = uniformSteps(convertToIncrementRule(legacyFixtureProject(), 'wrist'), 'wrist', 0.5);
     const v = values(q, 'wrist') as number[];
     expect(v[5] - v[4]).toBeCloseTo(0.5, 6);
     expect(v[1] - v[0]).toBeCloseTo(0.5, 6);
   });
 
   it('adds, moves and removes sizes, cleaning up per-size data', () => {
-    const p = fixtureProject();
+    const p = legacyFixtureProject();
     const S = sizeId(p, 'S');
     p.measurements[0].manual[S] = 1;
     p.panels[0].waypoints[0].width.overrides[S] = 9;
@@ -164,7 +164,7 @@ describe('grading operations', () => {
   });
 
   it('renames a measurement everywhere it is used', () => {
-    const p = fixtureProject();
+    const p = legacyFixtureProject();
     p.ease.per.upper_chest = 8;
     p.panels[0].waypoints[2].width = dim('upper_chest/2 + ease.upper_chest/2 + hps_to_apex*0');
     const q = renameMeasurement(p, 'upper_chest', 'high_bust');
@@ -176,7 +176,7 @@ describe('grading operations', () => {
   });
 
   it('finds usages and validates names', () => {
-    const p = fixtureProject();
+    const p = legacyFixtureProject();
     expect(measurementUsage(p, 'upper_chest')).toContain('Back › underarm width');
     expect(measurementUsage(p, 'bust')).toContain('measurement apex_to_apex');
     expect(validateNewName(p, 'waist')).toMatch(/already exists/);
@@ -185,7 +185,7 @@ describe('grading operations', () => {
   });
 
   it('flags values that go against the size trend', () => {
-    const p = fixtureProject();
+    const p = legacyFixtureProject();
     expect(trendFlags(p, 'waist_to_armhole')).toEqual([]); // rises then falls: a grading shape, not a zigzag
     expect(trendFlags(p, 'bust_ef_cup')).toEqual([]);
     p.measurements.find((m) => m.name === 'bust_ef_cup')!.manual[sizeId(p, 'M')] = 110;

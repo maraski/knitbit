@@ -23,7 +23,7 @@ export type GradingRule =
   | { type: 'none' }
   /** Base value at the project's base size; `steps[sizeId]` = change from the previous size to that size. */
   | { type: 'increment'; baseValue: number; defaultStep: number; steps: Record<Id, number> }
-  /** Derived from other measurements, e.g. `cross_chest_back + 3`. */
+  /** Derived from other measurements, e.g. `cross_back + 3`. */
   | { type: 'expression'; expr: string };
 
 export interface Measurement {
@@ -43,9 +43,15 @@ export type ValueSource = 'table' | 'rule' | 'manual';
 /** Which bust column of the sizing table `bust` (and `apex_to_apex`, `dart_height`) follow; custom = `bust_custom`. */
 export type CupChoice = 'ab' | 'cd' | 'ef' | 'gh' | 'custom';
 
+export type HemChoice = 'high_hip' | 'hip_seat_straight' | 'hip_seat_curvy';
+
 /** Project-level choices that pick sizing-table columns for the names templates use. */
 export interface FitChoices {
   cup: CupChoice;
+  /** Which circumference the hem follows (`hem_circ`) and the matching waist-to-hem length (`hem_drop`). Default high hip. */
+  hem?: HemChoice;
+  /** Use the broad-back columns for `shoulder_w` and `cross_back_w`. */
+  broadBack?: boolean;
 }
 
 /** Ease is total circumference ease in cm, split between panels by the expressions that use it. */
@@ -226,7 +232,7 @@ export function defaultBust(): BustShaping {
     apexOffset: dim('apex_to_apex / 2'),
     shortRows: { style: 'german', pairs: null, order: 'shortening', zoneWidth: dim('max(6, bust_l * 2.5)') },
     dart: { placement: 'side', tipGap: dim(2.5) },
-    vertical: { bottom: dim('waist.height + 2.5'), gap: dim(2), top: dim('underarm.height + armhole_depth * 0.5') },
+    vertical: { bottom: dim('waist.height'), gap: dim(2), top: dim('underarm.height + armhole_depth * 0.5') },
     manual: {},
   };
 }

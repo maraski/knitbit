@@ -19,10 +19,10 @@ describe('bust formulas', () => {
     const p = fixtureProject();
     const M = sizeId(p, 'M');
     const c = computePanel(p, front(), M);
-    expect(c.bust!.D).toBe(10);
-    expect(c.bust!.width).toMatchObject({ plugged: '(124.5 - 114.5) * 1.0', value: 10, overridden: false });
-    expect(c.bust!.length).toMatchObject({ plugged: 'max(0, (124.5 - 114.5) - 0) * 0.5', value: 5 });
-    expect(plugIn('bust/2 + ease/2', buildScope(p, M))).toBe('124.5/2 + 5/2');
+    expect(c.bust!.D).toBe(7.5); // C/D cup: 122 − 114.5
+    expect(c.bust!.width).toMatchObject({ plugged: '(122 - 114.5) * 1.0', value: 7.5, overridden: false });
+    expect(c.bust!.length).toMatchObject({ plugged: 'max(0, (122 - 114.5) - 0) * 0.5', value: 3.75 });
+    expect(plugIn('bust/2 + ease/2', buildScope(p, M))).toBe('122/2 + 5/2');
   });
 
   it('takes a per-size override', () => {
@@ -37,7 +37,7 @@ describe('bust formulas', () => {
     const p = fixtureProject();
     const M = sizeId(p, 'M');
     const under = (f: Panel) => computePanel(p, f, M).waypoints.find((w) => w.name === 'underarm')!.widthCm;
-    expect(under(front()) - under(bodice('back'))).toBeCloseTo(10, 6);
+    expect(under(front()) - under(bodice('back'))).toBeCloseTo(7.5, 6);
     expect(under(front('shortrows', (f) => (f.bust!.sideWidth = false)))).toBeCloseTo(under(bodice('back')), 6);
     expect(under(front('vertical-dart'))).toBeCloseTo(under(bodice('back')), 6); // darts carry the width instead
   });

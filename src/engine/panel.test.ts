@@ -170,7 +170,7 @@ describe('back bodice template', () => {
     // 22 sts / 10 cm, 30 rows / 10 cm, 1+1 selvedge
     expect(byName.underarm.widthCm).toBeCloseTo(59.75, 5);
     expect(byName.underarm.stitches).toBe(134); // 131.45 → 131, +2 selvedge = 133, made even → 134
-    expect(byName.waist.row).toBe(45);
+    expect(byName.waist.row).toBe(35); // hem_drop = waist_to_high_hip 11.5 cm
     expect(c.neck).not.toBeNull();
     expect(c.neck!.splitRow % 2).toBe(1);
     expect(c.counts[c.totalRows]).toBeLessThanOrEqual(1); // shoulders and neck bound off (an odd top leaves 1)

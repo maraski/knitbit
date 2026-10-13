@@ -19,6 +19,11 @@ export interface TemplateOptions {
   construction?: 'shoulders-first' | 'standalone';
   shoulderSlope?: 'shortrows' | 'none'; // top-down: German short rows, or straight shoulders
   backNeck?: 'straight' | 'shaped'; // top-down back: cast on straight across, or a shaped back neck
+  /**
+   * Set-in bodices: after the armhole decreases reach the cross back (front: cross front), widen again to the back
+   * shoulder width at the shoulder line (default). Off: straight up from the armhole to the shoulder.
+   */
+  shoulderFlare?: boolean;
 }
 
 export const TEMPLATES: { id: TemplateId; label: string; description: string; options: (keyof TemplateOptions)[] }[] = [
@@ -26,10 +31,10 @@ export const TEMPLATES: { id: TemplateId; label: string; description: string; op
     id: 'top',
     label: 'Top-down top (back + front)',
     description: 'Back cast on at the shoulders; front shoulders picked up from it; neck joined at the centre; underarms cast on half each, then in the round. Joins are tagged for you.',
-    options: ['neckline', 'shoulderSlope', 'backNeck', 'joinInRound'],
+    options: ['neckline', 'shoulderSlope', 'backNeck', 'shoulderFlare', 'joinInRound'],
   },
-  { id: 'back', label: 'Back bodice', description: 'Hem, waist, set-in armholes, shoulder slope and back neck.', options: ['direction', 'shoulderSlope', 'backNeck', 'joinInRound'] },
-  { id: 'front', label: 'Front bodice', description: 'Like the back, with a front neckline.', options: ['direction', 'neckline', 'shoulderSlope', 'joinInRound'] },
+  { id: 'back', label: 'Back bodice', description: 'Hem, waist, set-in armholes, shoulder slope and back neck.', options: ['direction', 'shoulderSlope', 'backNeck', 'shoulderFlare', 'joinInRound'] },
+  { id: 'front', label: 'Front bodice', description: 'Like the back, with a front neckline.', options: ['direction', 'neckline', 'shoulderSlope', 'shoulderFlare', 'joinInRound'] },
   { id: 'sleeve', label: 'Sleeve', description: 'Set-in cap, drop shoulder or straight, with a ribbed cuff.', options: ['direction', 'sleeve'] },
   { id: 'rectangle', label: 'Plain rectangle', description: 'Two waypoints, no shaping.', options: ['direction'] },
   { id: 'neckband', label: 'Neckband strip', description: 'A ribbed strip; its length is a starting estimate.', options: [] },
@@ -37,9 +42,9 @@ export const TEMPLATES: { id: TemplateId; label: string; description: string; op
 
 /** Measurements each template's expressions rely on that may be missing (seeded estimates). */
 export const TEMPLATE_MEASUREMENTS: Record<TemplateId, string[]> = {
-  top: ['hem_to_waist', 'shoulder_drop', 'back_neck_width', 'front_neck_drop', 'back_neck_drop', 'waist_shift', 'hps_to_apex', 'apex_to_apex', 'underarm_co'],
-  back: ['hem_to_waist', 'shoulder_drop', 'back_neck_width', 'back_neck_drop', 'waist_shift', 'underarm_co'],
-  front: ['hem_to_waist', 'shoulder_drop', 'back_neck_width', 'front_neck_drop', 'back_neck_drop', 'waist_shift', 'hps_to_apex', 'apex_to_apex', 'underarm_co'],
+  top: ['back_shoulder_width', 'shoulder_drop', 'back_neck_width', 'front_neck_drop', 'back_neck_drop', 'waist_to_underarm', 'waist_shift', 'hps_to_apex', 'apex_to_apex', 'underarm_co'],
+  back: ['back_shoulder_width', 'shoulder_drop', 'back_neck_width', 'back_neck_drop', 'waist_to_underarm', 'waist_shift', 'underarm_co'],
+  front: ['back_shoulder_width', 'shoulder_drop', 'back_neck_width', 'front_neck_drop', 'back_neck_drop', 'waist_to_underarm', 'waist_shift', 'hps_to_apex', 'apex_to_apex', 'underarm_co'],
   sleeve: ['cap_height', 'cap_ease'],
   rectangle: [],
   neckband: ['back_neck_width', 'front_neck_drop'],
@@ -73,9 +78,10 @@ export function bodice(kind: 'back' | 'front', opts: TemplateOptions = {}): Pane
   p.rounding.parity = 'even'; // keeps both edges shaping in pairs
   const shift = kind === 'back' ? '- waist_shift' : '+ waist_shift';
 
-  const hem = newWaypoint('hem', 0, '(waist + hip_seat_straight) / 4 + ease / 2');
-  const waist = newWaypoint('waist', 'hem_to_waist', `waist / 2 + ease / 2 ${shift}`);
-  const underarm = newWaypoint('underarm', 'hem_to_waist + waist_to_armhole', kind === 'front' ? 'upper_chest / 2 + ease / 2 + bust_side_w' : 'upper_chest / 2 + ease / 2');
+  // Hem at the chosen hem level (Project → Fit): hem_circ is high hip by default, hem_drop the matching waist-to-hem length.
+  const hem = newWaypoint('hem', 0, 'hem_circ / 2 + ease / 2');
+  const waist = newWaypoint('waist', 'hem_drop', `waist / 2 + ease / 2 ${shift}`);
+  const underarm = newWaypoint('underarm', 'waist.height + waist_to_underarm', kind === 'front' ? 'upper_chest / 2 + ease / 2 + bust_side_w' : 'upper_chest / 2 + ease / 2');
   // Underarm bind-off in one go ("bind off X sts at the beginning of the next 2 rows"), then armhole decreases.
   // The front carries the bust width to the underarm, so it binds off more and shapes over a longer span.
   const front = kind === 'front';
@@ -85,15 +91,18 @@ export function bodice(kind: 'back' | 'front', opts: TemplateOptions = {}): Pane
   const boWidth = shouldersFirst ? 'underarm.width - 2 * round(underarm_co / 2 / st_w) * st_w' : `underarm.width - (underarm.width - armhole_end.width) * ${front ? 0.5 : 0.4}`;
   const bo = newWaypoint('armhole_bo', 'underarm.height + 2 * row_h', boWidth);
   const endAt = shouldersFirstEarly(direction, opts) ? (front ? 0.75 : 0.6) : front ? 0.6 : 0.45;
-  const end = newWaypoint('armhole_end', `underarm.height + armhole_depth * ${endAt}`, 'cross_back + 1');
-  const shoulder = newWaypoint('shoulder', 'underarm.height + armhole_depth', 'armhole_end.width');
+  // Armhole decreases end at the cross back (front: cross front); with the flare the edge then widens to the
+  // shoulder width at the shoulder line, front and back alike so the shoulder seams match.
+  const flare = opts.shoulderFlare ?? true;
+  const end = newWaypoint('armhole_end', `underarm.height + armhole_depth * ${endAt}`, front ? 'cross_front + 1' : 'cross_back_w + 1');
+  const shoulder = newWaypoint('shoulder', 'underarm.height + armhole_depth', flare ? 'shoulder_w' : 'armhole_end.width');
   p.waypoints = [hem, waist, underarm, bo, end, shoulder];
   p.segments = [
     newSegment(hem.id),
     newSegment(waist.id),
     newSegment(underarm.id, { kind: 'steps', steps: null, maxPerStep: 99, align: 'start' }),
     newSegment(bo.id, { ...defaultAutoMethod(), side: 'any', align: 'start', order: 'shortFirst' }),
-    newSegment(end.id, { kind: 'straight' }),
+    newSegment(end.id, flare ? { ...defaultAutoMethod(), align: 'center' } : { kind: 'straight' }),
   ];
   // Straight shoulders (top-down option): the panel ends at the shoulder line, no slope.
   const sloped = direction !== 'top-down' || (opts.shoulderSlope ?? 'shortrows') === 'shortrows';
@@ -141,7 +150,7 @@ export function sleeve(type: SleeveType = 'set-in', direction: KnitDirection = '
     // Bell-shaped cap: bind off to match the body's armhole bind-off, decrease fast, then steadily, then fast
     // again, and bind off the top. Decreases may fall on any row: caps are steep.
     const underarm = newWaypoint('underarm', 'arm_length', 'bicep + ease.bicep');
-    const bo = newWaypoint('cap_bo', 'underarm.height + 2 * row_h', 'underarm.width - 0.4 * (upper_chest / 2 + ease / 2 - cross_back - 1)');
+    const bo = newWaypoint('cap_bo', 'underarm.height + 2 * row_h', 'underarm.width - 0.4 * (upper_chest / 2 + ease / 2 - cross_back_w - 1)');
     const low = newWaypoint('cap_low', 'cap_bo.height + 2', 'cap_bo.width - 5');
     const high = newWaypoint('cap_high', 'cap_top.height - 2', 'cap_top.width + 5');
     // Cap height fitted so both cap edges ≈ armhole_len + cap_ease: half of that per edge, minus the bind-off

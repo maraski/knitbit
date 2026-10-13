@@ -28,16 +28,22 @@ export const STANDARD_COLUMNS: Record<string, { label: string; kind: Measurement
 };
 
 /**
- * Measurement names the templates still use that the new (Ysolda) table derives rather than lists. Seeded as
- * expressions when every column they need is in the table and the name is not.
+ * Measurements the templates use that the sizing table derives rather than lists: seeded as editable expression
+ * rules when every column they need is there and the name is not.
  */
-export const DERIVED_FROM_NEW: Record<string, { expr: string; needs: string[] }> = {
-  waist_to_armhole: {
+export const DERIVED_FROM_NEW: Record<string, { label: string; expr: string; needs: string[]; note: string }> = {
+  waist_to_underarm: {
+    label: 'Waist to underarm',
     expr: 'back_neck_drop + back_waist_length - shoulder_drop - armhole_depth',
     needs: ['back_neck_drop', 'back_waist_length', 'shoulder_drop', 'armhole_depth'],
+    note: 'Vertical distance from the waist up to the underarm: HPS → waist (back_neck_drop + back_waist_length) minus HPS → underarm (shoulder_drop + armhole_depth).',
   },
-  hem_to_waist: { expr: 'waist_to_high_hip', needs: ['waist_to_high_hip'] },
 };
+
+function derivedMeasurement(name: string): Measurement {
+  const d = DERIVED_FROM_NEW[name];
+  return { ...newMeasurement(name, d.label, 'length'), rule: { type: 'expression', expr: d.expr }, note: d.note };
+}
 
 /**
  * Measurements not in the sizing table, seeded as graded estimates (cm). All flagged `estimate`
@@ -50,7 +56,6 @@ export const ESTIMATED_MEASUREMENTS: { name: string; label: string; expr: string
   { name: 'back_neck_drop', label: 'Back neck drop', expr: '2', note: 'Drop of the back neckline below the shoulder line.' },
   { name: 'front_neck_drop', label: 'Front neck drop', expr: 'round(5.5 + upper_chest * 0.02, 0.5)', note: 'Crew-neck depth below the shoulder line.' },
   { name: 'shoulder_drop', label: 'Shoulder drop', expr: 'round(1.5 + upper_chest * 0.012, 0.5)', note: 'Height difference between the neck side and the shoulder point.' },
-  { name: 'hem_to_waist', label: 'Hem to waist', expr: '15', note: 'Length of the body below the natural waist.' },
   { name: 'hps_to_apex', label: 'HPS to apex', expr: 'round(20 + bust * 0.07, 0.5)', note: 'High point of shoulder down to the bust apex.' },
   { name: 'apex_to_apex', label: 'Apex to apex', expr: 'round(14 + bust * 0.04, 0.5)', note: 'Horizontal distance between bust points.' },
   { name: 'cap_height', label: 'Sleeve cap height', expr: 'round(armhole_depth * 0.65, 0.5)', note: 'Set-in sleeve cap height (not used by the set-in template, which fits the cap to the armhole).' },
@@ -76,7 +81,10 @@ export function estimatedMeasurements(): Measurement[] {
 /** Add any estimated measurements that are missing (e.g. when a template needs one an older project lacks). */
 export function ensureEstimates(project: Project, names: string[]): { project: Project; added: string[] } {
   const have = new Set([...project.measurements.map((m) => m.name), ...Object.keys(fitAliases(project))]);
-  const add = estimatedMeasurements().filter((m) => names.includes(m.name) && !have.has(m.name));
+  const derived = Object.entries(DERIVED_FROM_NEW)
+    .filter(([n, d]) => names.includes(n) && !have.has(n) && d.needs.every((x) => have.has(x)))
+    .map(([n]) => derivedMeasurement(n));
+  const add = [...derived, ...estimatedMeasurements().filter((m) => names.includes(m.name) && !have.has(m.name))];
   if (!add.length) return { project, added: [] };
   return { project: { ...project, measurements: [...project.measurements, ...add] }, added: add.map((m) => m.name) };
 }
@@ -127,8 +135,7 @@ export function projectFromTable(table: CsvTable, name = 'Untitled top', baseSiz
   const existing = new Set(seeded.measurements.map((m) => m.name));
   for (const [n, d] of Object.entries(DERIVED_FROM_NEW)) {
     if (existing.has(n) || !d.needs.every((x) => existing.has(x))) continue;
-    const std = STANDARD_COLUMNS[n] ?? { label: n.replace(/_/g, ' '), kind: 'length' as const };
-    seeded.measurements.push({ ...newMeasurement(n, std.label, std.kind), rule: { type: 'expression', expr: d.expr }, note: `Derived from the sizing table: ${d.expr}.` });
+    seeded.measurements.push(derivedMeasurement(n));
     existing.add(n);
   }
   const covered = new Set([...existing, ...Object.keys(fitAliases(seeded))]);

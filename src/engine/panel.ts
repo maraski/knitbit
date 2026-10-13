@@ -11,6 +11,7 @@
 import { distributeAuto, distributeFixed, distributeMixed, describeSchedule, eligibleRows, placeIntervals, splitEvenly, type RowSide, type RowSpan, type ShapingSchedule } from './distribute';
 import { resolveDefinitions } from './expr';
 import { rowsPerCm, stitchesPerCm } from './gauge';
+import { missingAliasHint } from './fit';
 import { buildScope, evaluateDim } from './measurements';
 import type { Id, ManualEvent, Panel, Project, Segment, SegmentMethod, ShapingPlacement } from './model';
 import { defaultAutoMethod, defaultPrincess } from './model';
@@ -252,10 +253,12 @@ export function armholeLength(project: Project, panel: Panel, sizeId: Id): { val
       const u = body?.waypoints.find((w) => waypointKey(w.name) === 'underarm');
       const sh = body?.waypoints.find((w) => waypointKey(w.name) === 'shoulder');
       if (!body || !u || !sh) {
-        // No body to measure: estimate from the measurements (armhole depth plus its horizontal shaping, both sides).
+        // No body to measure: the body's scye circumference when the sizing table has it, else an estimate from the
+        // armhole depth plus its horizontal shaping, both sides.
         const m = buildScope(project, sizeId);
+        if (m.scye_circumference !== undefined) return { value: m.scye_circumference, source: 'scye_circumference (no Front and Back panels to measure)' };
         if (m.armhole_depth === undefined) return { error: 'No seam join, no Front and Back panels, and no armhole_depth to estimate from.' };
-        const across = Math.max(0, ((m.upper_chest ?? 0) / 2 + (m.ease ?? 0) / 2 - (m.cross_chest_back ?? 0)) / 2);
+        const across = Math.max(0, ((m.upper_chest ?? 0) / 2 + (m.ease ?? 0) / 2 - (m.cross_back ?? 0)) / 2);
         return { value: 2 * Math.hypot(m.armhole_depth, across) + 2 * across * 0.4, source: 'an estimate (no Front and Back panels to measure)' };
       }
       const v = measure(body.id, 'left', u.id, sh.id);
@@ -300,6 +303,18 @@ function emptyPanel(panel: Panel, sizeId: Id, spc: number, rpc: number, issues: 
 }
 
 export function computePanel(project: Project, panel: Panel, sizeId: Id): ComputedPanel {
+  const c = computePanelRaw(project, panel, sizeId);
+  // Explain unknown names that follow a fit choice (e.g. hem_circ when the table has no high_hip).
+  if (!c.issues.some((i) => /Unknown name "/.test(i.message))) return c;
+  const issues = c.issues.map((i) => {
+    const m = /Unknown name "([\w.]+)"/.exec(i.message);
+    const hint = m && missingAliasHint(project, m[1]);
+    return hint ? { ...i, message: `${i.message}: ${hint}.` } : i;
+  });
+  return { ...c, issues };
+}
+
+function computePanelRaw(project: Project, panel: Panel, sizeId: Id): ComputedPanel {
   const spc = stitchesPerCm(project.gauge);
   const rpc = rowsPerCm(project.gauge);
   const issues: Issue[] = [];

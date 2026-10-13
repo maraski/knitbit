@@ -246,7 +246,7 @@ const project = obj({
     }),
   ),
   ease: obj({ global: num, per: rec(num) }),
-  fit: obj({ cup: oneOf('ab', 'cd', 'ef', 'gh', 'custom') }),
+  fit: obj({ cup: oneOf('ab', 'cd', 'ef', 'gh', 'custom'), hem: optional(oneOf('high_hip', 'hip_seat_straight', 'hip_seat_curvy')), broadBack: optional(bool) }),
   panels: arr(panel),
   joins: optional(arr(obj({ id: str, name: str, tag: oneOf('seam', 'pickup', 'live', 'bindoff', 'caston', 'free'), edges: arr(edgeRef), partner: arr(edgeRef), ratio: nullable(obj({ stitches: num, rows: num })), note: str }))),
   symbols: optional(arr(obj({ id: str, label: str, abbr: str, color: str, change: num }))),

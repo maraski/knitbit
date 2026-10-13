@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { FitSettings } from './FitSettings';
 import { convertGauge, type GaugeBasis } from '../../engine/gauge';
 import { newId, type Id, type Project } from '../../engine/model';
 import { ensureEstimates } from '../../engine/seed';
@@ -176,6 +177,12 @@ function PanelList({ project, panelId, update, selectPanel }: Props) {
             </select>
           </label>
         )}
+        {def.options.includes('shoulderFlare') && (
+          <label className="check" title="After the armhole decreases reach the cross back/front, widen again to the shoulder width at the shoulder line.">
+            <input type="checkbox" checked={opts.shoulderFlare ?? true} onChange={(e) => setOpts({ ...opts, shoulderFlare: e.target.checked })} />
+            Widen to the shoulder width above the armhole
+          </label>
+        )}
         {shouldersFirst && <p className="hint">Underarms: half the cast-on on the front, half on the back (Underarm cast-on, an estimated measurement).</p>}
         {def.options.includes('joinInRound') && (
           <label className="check">
@@ -268,6 +275,7 @@ function ProjectSettings({ project, update }: Props) {
           </select>
         </div>
       </div>
+      <FitSettings project={project} update={update} />
       <h4>Ease</h4>
       <div className="field">
         <label>Total circumference ease (cm)</label>

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { fitAliases, fitAliasList } from '../../engine/fit';
 import { EstMark } from './EstMark';
 import { measurementTooltip } from '../../engine/dictionary';
 import { trendFlags, validateNewName, addMeasurement } from '../../engine/grading';
@@ -33,6 +34,11 @@ export function MeasurementsView({ project, update, selected, onSelect, currentS
       if (f.length) out[m.name] = Object.fromEntries(f.map((x) => [x.sizeId, x.message]));
     }
     return out;
+  }, [project]);
+
+  const derived = useMemo(() => {
+    const live = fitAliases(project);
+    return fitAliasList(project).filter((a) => a.name in live);
   }, [project]);
 
   const [newName, setNewName] = useState('');
@@ -108,6 +114,24 @@ export function MeasurementsView({ project, update, selected, onSelect, currentS
                         error={!!err}
                       />
                       {flag && <span className="flag-mark">▴</span>}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+            {derived.map((a) => (
+              <tr key={a.name} className="derived-row" title={`${a.description}: follows ${a.expr} (${a.choice}). Change it under Project → Fit.`}>
+                <td className="sticky">
+                  <code>{a.name}</code>
+                  <span className="tag tag-derived">fit</span>
+                  <div className="muted small">{a.description}</div>
+                </td>
+                <td className="rule small muted">= {a.expr}</td>
+                {project.sizes.map((s) => {
+                  const v = resolved[s.id].values[a.name];
+                  return (
+                    <td key={s.id} className={`cell derived${s.id === currentSizeId ? ' current' : ''}`}>
+                      {v ? fmtNum(roundTo(toDisplay(v.value, units), 2)) : '—'}
                     </td>
                   );
                 })}

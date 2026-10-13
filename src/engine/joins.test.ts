@@ -26,12 +26,12 @@ describe('measuring edges', () => {
     const M = sizeId(p, 'M');
     const m = measureEdge(p, side(back, 'left', 'hem', 'underarm'), M, p.settings.pickUp);
     expect(m.ok).toBe(true);
-    expect(m.rows).toBe(103);
-    expect(m.lengthCm).toBeGreaterThan(103 / 3); // a little longer than straight up: the side is shaped
-    expect(m.lengthCm).toBeLessThan(103 / 3 + 1);
-    expect(m.pickup).toBe(Math.round(103 * 0.75));
+    expect(m.rows).toBe(93); // hem_drop 11.5 + waist_to_underarm 19.5 = 31 cm at 3 rows/cm
+    expect(m.lengthCm).toBeGreaterThan(93 / 3); // a little longer than straight up: the side is shaped
+    expect(m.lengthCm).toBeLessThan(93 / 3 + 1.5);
+    expect(m.pickup).toBe(Math.round(93 * 0.75));
     // Reversed waypoint order is the same edge.
-    expect(measureEdge(p, side(back, 'left', 'underarm', 'hem'), M, p.settings.pickUp).rows).toBe(103);
+    expect(measureEdge(p, side(back, 'left', 'underarm', 'hem'), M, p.settings.pickUp).rows).toBe(93);
   });
 
   it('counts bind-off steps along an armhole as stitches', () => {
@@ -47,7 +47,7 @@ describe('measuring edges', () => {
   it('measures the lower edge and the neckline', () => {
     const { p, back, front } = garment();
     const M = sizeId(p, 'M');
-    expect(measureEdge(p, { panelId: back.id, edge: { kind: 'bottom' } }, M, p.settings.pickUp).stitches).toBe(144);
+    expect(measureEdge(p, { panelId: back.id, edge: { kind: 'bottom' } }, M, p.settings.pickUp).stitches).toBe(140); // high hip 120.5 / 2 + ease 2.5 = 62.75 cm
     const neck = measureEdge(p, { panelId: front.id, edge: { kind: 'neck' } }, M, p.settings.pickUp);
     const c = computePanel(p, front, M);
     expect(neck.stitches).toBe(c.neck!.centreSts);
@@ -60,6 +60,7 @@ describe('measuring edges', () => {
     const M = sizeId(p, 'M');
     const ref = side(back, 'left', 'hem', 'waist');
     back.waypoints = back.waypoints.filter((w) => w.name !== 'waist');
+    back.waypoints.find((w) => w.name === 'underarm')!.height = dim('hem_drop + waist_to_underarm');
     expect(measureEdge(p, ref, M, p.settings.pickUp)).toMatchObject({ ok: false, error: expect.stringMatching(/waypoint/) });
     expect(measureEdge(p, { panelId: 'gone', edge: { kind: 'bottom' } }, M, p.settings.pickUp).ok).toBe(false);
   });
@@ -78,7 +79,7 @@ describe('seam check', () => {
 
   it('flags a mismatch beyond tolerance and suggests where to add rows', () => {
     const { p, back, front } = garment();
-    front.waypoints.find((w) => w.name === 'underarm')!.height = dim('hem_to_waist + waist_to_armhole + 2');
+    front.waypoints.find((w) => w.name === 'underarm')!.height = dim('waist.height + waist_to_underarm + 2');
     const j = join('seam', [side(front, 'left', 'hem', 'underarm')], [side(back, 'right', 'hem', 'underarm')], 'Side seam');
     p.joins = [j];
     const r = joinReport(p, j, sizeId(p, 'M'));
