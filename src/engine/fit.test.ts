@@ -85,7 +85,8 @@ describe('template bindings (new sizing table)', () => {
     const back = bodice('back');
     const front = bodice('front');
     const straight = bodice('back', { shoulderFlare: false });
-    p.panels = [back, front, straight];
+    const straightFront = bodice('front', { shoulderFlare: false });
+    p.panels = [back, front, straight, straightFront];
     const b = at(p, back, 'M');
     const f = at(p, front, 'M');
     const s = at(p, straight, 'M');
@@ -95,6 +96,7 @@ describe('template bindings (new sizing table)', () => {
     expect(f.shoulder.stitches).toBe(b.shoulder.stitches); // shoulder seams match
     expect(b.shoulder.stitches).toBeGreaterThan(b.armhole_end.stitches); // increases above the armhole
     expect(s.shoulder.widthCm).toBe(41);
+    expect(at(p, straightFront, 'M').shoulder.stitches).toBe(s.shoulder.stitches); // the front takes the back's width
     expect(straight.segments.find((x) => x.fromWaypoint === straight.waypoints.find((w) => w.name === 'armhole_end')!.id)!.left.kind).toBe('straight');
   });
 

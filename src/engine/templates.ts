@@ -92,9 +92,10 @@ export function bodice(kind: 'back' | 'front', opts: TemplateOptions = {}): Pane
   const bo = newWaypoint('armhole_bo', 'underarm.height + 2 * row_h', boWidth);
   const endAt = shouldersFirstEarly(direction, opts) ? (front ? 0.75 : 0.6) : front ? 0.6 : 0.45;
   // Armhole decreases end at the cross back (front: cross front); with the flare the edge then widens to the
-  // shoulder width at the shoulder line, front and back alike so the shoulder seams match.
+  // shoulder width at the shoulder line, front and back alike so the shoulder seams match. Without it the front
+  // ends at the back's width, again so the shoulders match.
   const flare = opts.shoulderFlare ?? true;
-  const end = newWaypoint('armhole_end', `underarm.height + armhole_depth * ${endAt}`, front ? 'cross_front + 1' : 'cross_back_w + 1');
+  const end = newWaypoint('armhole_end', `underarm.height + armhole_depth * ${endAt}`, front && flare ? 'cross_front + 1' : 'cross_back_w + 1');
   const shoulder = newWaypoint('shoulder', 'underarm.height + armhole_depth', flare ? 'shoulder_w' : 'armhole_end.width');
   p.waypoints = [hem, waist, underarm, bo, end, shoulder];
   p.segments = [
