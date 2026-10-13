@@ -2,6 +2,7 @@
 // Precedence per size: manual override → table value → grading rule.
 
 import { evaluate, resolveDefinitions, scopeFrom, type Result } from './expr';
+import { fitAliases } from './fit';
 import type { DimExpr, Id, Measurement, Project, ValueSource } from './model';
 
 export interface ResolvedValue {
@@ -60,11 +61,14 @@ export function resolveMeasurements(project: Project, sizeId: Id): ResolvedMeasu
     }
     if (values[m.name]) base[m.name] = values[m.name].value;
   }
+  // Names that follow the project's fit choices (e.g. `bust` = the chosen cup column).
+  const aliases = fitAliases(project);
+  Object.assign(defs, aliases);
 
   const resolved = resolveDefinitions(defs, base);
   for (const name of Object.keys(defs)) {
     if (name in resolved.errors) errors[name] = resolved.errors[name];
-    else values[name] = { value: resolved.values[name], source: 'rule' };
+    else values[name] = { value: resolved.values[name], source: name in aliases ? (values[aliases[name]]?.source ?? 'rule') : 'rule' };
   }
   return { values, errors };
 }

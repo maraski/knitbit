@@ -6,7 +6,7 @@ import type { Gauge } from './gauge';
 import type { Parity } from './rounding';
 import type { Units } from './units';
 
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 export type Id = string;
 
@@ -39,6 +39,14 @@ export interface Measurement {
 
 /** Where a resolved measurement value came from (shown as a subtle indicator). */
 export type ValueSource = 'table' | 'rule' | 'manual';
+
+/** Which bust column of the sizing table `bust` (and `apex_to_apex`, `dart_height`) follow; custom = `bust_custom`. */
+export type CupChoice = 'ab' | 'cd' | 'ef' | 'gh' | 'custom';
+
+/** Project-level choices that pick sizing-table columns for the names templates use. */
+export interface FitChoices {
+  cup: CupChoice;
+}
 
 /** Ease is total circumference ease in cm, split between panels by the expressions that use it. */
 export interface EaseSettings {
@@ -214,7 +222,7 @@ export function defaultBust(): BustShaping {
     width: dim('(bust - upper_chest) * 1.0'),
     length: dim('max(0, (bust - upper_chest) - 0) * 0.5'),
     sideWidth: true,
-    apexHeight: dim('shoulder.height + shoulder_slope - bust_point_depth'),
+    apexHeight: dim('shoulder.height + shoulder_drop - hps_to_apex'),
     apexOffset: dim('apex_to_apex / 2'),
     shortRows: { style: 'german', pairs: null, order: 'shortening', zoneWidth: dim('max(6, bust_l * 2.5)') },
     dart: { placement: 'side', tipGap: dim(2.5) },
@@ -311,6 +319,7 @@ export interface Project {
   baseSizeId: Id;
   measurements: Measurement[];
   ease: EaseSettings;
+  fit: FitChoices;
   panels: Panel[];
   joins?: Join[];
   symbols?: CustomSymbol[];
@@ -391,6 +400,7 @@ export function newProject(name = 'Untitled top'): Project {
     baseSizeId: size.id,
     measurements: [],
     ease: { global: 5, per: {} },
+    fit: { cup: 'cd' },
     panels: [],
     settings: { seamToleranceCm: 1, pickUp: { stitches: 3, rows: 4 } },
     createdAt: now,

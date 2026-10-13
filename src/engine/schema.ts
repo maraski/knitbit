@@ -1,40 +1,48 @@
 // Project JSON: serialization, migration between schema versions, and validation with readable errors.
 
 import { isValidName } from './expr';
+import { migrateV1toV2 } from './legacy';
 import { SCHEMA_VERSION, type Project } from './model';
 
 // ---------- migrations ----------
 
-/** `MIGRATIONS[n]` upgrades a raw project object from schema n to n+1. Add one per schema bump. */
-export type Migration = (raw: any) => any;
-export const MIGRATIONS: Record<number, Migration> = {};
+/**
+ * `MIGRATIONS[n]` upgrades a raw project object from schema n to n+1. Add one per schema bump.
+ * A migration pushes a readable note for every change it makes to `notes`; they are shown to the knitter.
+ */
+export type Migration = (raw: any, notes: string[]) => any;
+export const MIGRATIONS: Record<number, Migration> = {
+  1: migrateV1toV2,
+};
 
 export interface MigrateResult {
   raw: unknown;
   from: number;
   errors: string[];
+  notes: string[]; // what the migrations changed
 }
 
 export function migrate(raw: unknown, migrations: Record<number, Migration> = MIGRATIONS, target = SCHEMA_VERSION): MigrateResult {
-  if (!isObj(raw)) return { raw, from: 0, errors: ['The file does not contain a project object.'] };
+  if (!isObj(raw)) return { raw, from: 0, errors: ['The file does not contain a project object.'], notes: [] };
   const v = raw.schemaVersion;
   if (typeof v !== 'number' || !Number.isInteger(v)) {
-    return { raw, from: 0, errors: ['This file is not a Knitbit project (it has no schemaVersion).'] };
+    return { raw, from: 0, errors: ['This file is not a Knitbit project (it has no schemaVersion).'], notes: [] };
   }
   if (v > target) {
-    return { raw, from: v, errors: [`This project was saved by a newer version of Knitbit (schema ${v}); this app reads up to schema ${target}.`] };
+    return { raw, from: v, errors: [`This project was saved by a newer version of Knitbit (schema ${v}); this app reads up to schema ${target}.`], notes: [] };
   }
   let cur: unknown = raw;
+  const notes: string[] = [];
   for (let n = v; n < target; n++) {
     const m = migrations[n];
-    if (!m) return { raw, from: v, errors: [`No migration from schema ${n} to ${n + 1}.`] };
+    if (!m) return { raw, from: v, errors: [`No migration from schema ${n} to ${n + 1}.`], notes: [] };
     try {
-      cur = { ...(m(structuredClone(cur)) as object), schemaVersion: n + 1 };
+      cur = { ...(m(structuredClone(cur), notes) as object), schemaVersion: n + 1 };
     } catch (e) {
-      return { raw, from: v, errors: [`Migration from schema ${n} to ${n + 1} failed: ${String(e)}`] };
+      return { raw, from: v, errors: [`Migration from schema ${n} to ${n + 1} failed: ${String(e)}`], notes: [] };
     }
   }
-  return { raw: cur, from: v, errors: [] };
+  return { raw: cur, from: v, errors: [], notes };
 }
 
 // ---------- validation ----------
@@ -238,6 +246,7 @@ const project = obj({
     }),
   ),
   ease: obj({ global: num, per: rec(num) }),
+  fit: obj({ cup: oneOf('ab', 'cd', 'ef', 'gh', 'custom') }),
   panels: arr(panel),
   joins: optional(arr(obj({ id: str, name: str, tag: oneOf('seam', 'pickup', 'live', 'bindoff', 'caston', 'free'), edges: arr(edgeRef), partner: arr(edgeRef), ratio: nullable(obj({ stitches: num, rows: num })), note: str }))),
   symbols: optional(arr(obj({ id: str, label: str, abbr: str, color: str, change: num }))),
@@ -304,7 +313,7 @@ export function serializeProject(p: Project): string {
 }
 
 export type LoadResult =
-  | { ok: true; project: Project; warnings: string[]; migratedFrom: number | null }
+  | { ok: true; project: Project; warnings: string[]; migratedFrom: number | null; migrationNotes: string[] }
   | { ok: false; errors: string[] };
 
 const MAX_ERRORS = 25;
@@ -323,5 +332,5 @@ export function loadProject(text: string, migrations: Record<number, Migration> 
     const extra = v.errors.length > MAX_ERRORS ? [`…and ${v.errors.length - MAX_ERRORS} more.`] : [];
     return { ok: false, errors: [...v.errors.slice(0, MAX_ERRORS), ...extra] };
   }
-  return { ok: true, project: m.raw as Project, warnings: v.warnings, migratedFrom: m.from < SCHEMA_VERSION ? m.from : null };
+  return { ok: true, project: m.raw as Project, warnings: v.warnings, migratedFrom: m.from < SCHEMA_VERSION ? m.from : null, migrationNotes: m.notes };
 }

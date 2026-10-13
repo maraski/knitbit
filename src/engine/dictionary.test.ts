@@ -83,8 +83,9 @@ describe('importing the Ysolda table', () => {
     expect(project.measurements.some((x) => x.name === 'source' || x.name.startsWith('legacy_'))).toBe(false);
     const v = resolveMeasurements(project, sizeId(project, 'M')).values;
     expect(v.waist_to_armhole.value).toBeCloseTo(19.5); // 2.75 + 42 − 4.5 − 20.75
-    expect(v.cross_chest_back.value).toBe(40);
-    expect(v.shoulder_width.value).toBe(43.25);
-    expect(project.measurements.find((x) => x.name === 'shoulder_width')?.estimate).toBe(false);
+    expect(v.bust).toEqual({ value: 122, source: 'table' }); // follows the cup choice (C/D)
+    expect(v.apex_to_apex.value).toBe(23.5);
+    expect(v.dart_height.value).toBe(3.75);
+    expect(project.measurements.some((x) => ['bust', 'apex_to_apex', 'cross_chest_back', 'shoulder_width'].includes(x.name))).toBe(false);
   });
 });

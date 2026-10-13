@@ -23,7 +23,7 @@ import { downloadText, pickTextFile, safeFilename } from './fileio';
 import { markerActions } from './markerActions';
 import { panelJoins } from '../engine/joins';
 import { PANEL_SELECTION, type Selection } from './selection';
-import { sampleProject, useProjectStore, type Notice } from './store';
+import { mergeSampleTable, migrationNotice, sampleProject, useProjectStore, type Notice } from './store';
 
 const VIEW_KEY = 'knitbit.view.v1';
 type CenterView = 'schematic' | 'chart' | 'layout' | 'measurements';
@@ -103,7 +103,8 @@ export function App() {
     store.replace(r.project);
     setSizeId(r.project.baseSizeId);
     selectPanel(r.project.panels[0]?.id ?? null);
-    const lines = [...(r.migratedFrom !== null ? [`Upgraded from schema ${r.migratedFrom}.`] : []), ...r.warnings];
+    if (r.migratedFrom !== null) return store.setNotice(migrationNotice(`Opened ${f.name}`, r.migratedFrom, r.migrationNotes, r.warnings));
+    const lines = r.warnings;
     store.setNotice(lines.length ? { kind: 'warning', title: `Opened ${f.name}`, lines } : { kind: 'info', title: `Opened ${f.name}`, lines: [] });
   };
   const newProject = () => {
@@ -201,7 +202,17 @@ export function App() {
         onOpen={open}
         onSave={save}
       />
-      {store.notice && <NoticeBar notice={store.notice} onClose={() => store.setNotice(null)} />}
+      {store.notice && (
+        <NoticeBar
+          notice={store.notice}
+          onClose={() => store.setNotice(null)}
+          onAction={() => {
+            const r = mergeSampleTable(project);
+            store.update(() => r.project);
+            store.setNotice({ kind: 'info', title: 'Merged the Ysolda sizing table (undo to go back)', lines: r.summary });
+          }}
+        />
+      )}
       <div className="main">
         <Sidebar
           project={project}
@@ -406,7 +417,7 @@ function Legend() {
   );
 }
 
-function NoticeBar({ notice, onClose }: { notice: Notice; onClose: () => void }) {
+function NoticeBar({ notice, onClose, onAction }: { notice: Notice; onClose: () => void; onAction: () => void }) {
   return (
     <div className={`notice notice-${notice.kind}`} role={notice.kind === 'error' ? 'alert' : 'status'}>
       <div className="notice-head">
@@ -414,6 +425,7 @@ function NoticeBar({ notice, onClose }: { notice: Notice; onClose: () => void })
         <button onClick={onClose} aria-label="Dismiss">×</button>
       </div>
       {notice.lines.length > 0 && <ul>{notice.lines.map((l, i) => <li key={i}>{l}</li>)}</ul>}
+      {notice.action && <button className="notice-action" onClick={onAction}>{notice.action.label}</button>}
     </div>
   );
 }

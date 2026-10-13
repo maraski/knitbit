@@ -37,21 +37,21 @@ export const TEMPLATES: { id: TemplateId; label: string; description: string; op
 
 /** Measurements each template's expressions rely on that may be missing (seeded estimates). */
 export const TEMPLATE_MEASUREMENTS: Record<TemplateId, string[]> = {
-  top: ['hem_to_waist', 'shoulder_slope', 'neck_width', 'front_neck_depth', 'back_neck_depth', 'waist_shift', 'bust_point_depth', 'apex_to_apex', 'underarm_co'],
-  back: ['hem_to_waist', 'shoulder_slope', 'neck_width', 'back_neck_depth', 'waist_shift', 'underarm_co'],
-  front: ['hem_to_waist', 'shoulder_slope', 'neck_width', 'front_neck_depth', 'back_neck_depth', 'waist_shift', 'bust_point_depth', 'apex_to_apex', 'underarm_co'],
+  top: ['hem_to_waist', 'shoulder_drop', 'back_neck_width', 'front_neck_drop', 'back_neck_drop', 'waist_shift', 'hps_to_apex', 'apex_to_apex', 'underarm_co'],
+  back: ['hem_to_waist', 'shoulder_drop', 'back_neck_width', 'back_neck_drop', 'waist_shift', 'underarm_co'],
+  front: ['hem_to_waist', 'shoulder_drop', 'back_neck_width', 'front_neck_drop', 'back_neck_drop', 'waist_shift', 'hps_to_apex', 'apex_to_apex', 'underarm_co'],
   sleeve: ['cap_height', 'cap_ease'],
   rectangle: [],
-  neckband: ['neck_width', 'front_neck_depth'],
+  neckband: ['back_neck_width', 'front_neck_drop'],
 };
 
 // ---------- bodices ----------
 
 const FRONT_NECKS: Record<NecklineShape, { width: string; depth: string; centre: string; top: string }> = {
-  round: { width: 'neck_width', depth: 'front_neck_depth', centre: 'neck_width * 0.4', top: 'neck_width' },
-  v: { width: 'neck_width', depth: 'front_neck_depth * 2', centre: '0', top: 'neck_width' },
-  square: { width: 'neck_width', depth: 'front_neck_depth + 2', centre: 'neck_width', top: 'neck_width' },
-  boat: { width: 'neck_width + 6', depth: 'back_neck_depth + 1', centre: 'neck_width + 2', top: 'neck_width + 6' },
+  round: { width: 'back_neck_width', depth: 'front_neck_drop', centre: 'back_neck_width * 0.4', top: 'back_neck_width' },
+  v: { width: 'back_neck_width', depth: 'front_neck_drop * 2', centre: '0', top: 'back_neck_width' },
+  square: { width: 'back_neck_width', depth: 'front_neck_drop + 2', centre: 'back_neck_width', top: 'back_neck_width' },
+  boat: { width: 'back_neck_width + 6', depth: 'back_neck_drop + 1', centre: 'back_neck_width + 2', top: 'back_neck_width + 6' },
 };
 
 function shouldersFirstEarly(direction: KnitDirection, opts: TemplateOptions): boolean {
@@ -66,14 +66,14 @@ function shouldersFirstEarly(direction: KnitDirection, opts: TemplateOptions): b
 export function bodice(kind: 'back' | 'front', opts: TemplateOptions = {}): Panel {
   const direction = opts.direction ?? 'bottom-up';
   const shape = opts.neckline ?? 'round';
-  const neck = kind === 'back' ? { width: 'neck_width', depth: 'back_neck_depth', centre: 'neck_width - 2', top: 'neck_width' } : FRONT_NECKS[shape];
+  const neck = kind === 'back' ? { width: 'back_neck_width', depth: 'back_neck_drop', centre: 'back_neck_width - 2', top: 'back_neck_width' } : FRONT_NECKS[shape];
   const p = newPanel(kind === 'back' ? 'Back' : 'Front');
   p.template = kind;
   p.direction = direction;
   p.rounding.parity = 'even'; // keeps both edges shaping in pairs
   const shift = kind === 'back' ? '- waist_shift' : '+ waist_shift';
 
-  const hem = newWaypoint('hem', 0, '(waist + full_hip) / 4 + ease / 2');
+  const hem = newWaypoint('hem', 0, '(waist + hip_seat_straight) / 4 + ease / 2');
   const waist = newWaypoint('waist', 'hem_to_waist', `waist / 2 + ease / 2 ${shift}`);
   const underarm = newWaypoint('underarm', 'hem_to_waist + waist_to_armhole', kind === 'front' ? 'upper_chest / 2 + ease / 2 + bust_side_w' : 'upper_chest / 2 + ease / 2');
   // Underarm bind-off in one go ("bind off X sts at the beginning of the next 2 rows"), then armhole decreases.
@@ -85,7 +85,7 @@ export function bodice(kind: 'back' | 'front', opts: TemplateOptions = {}): Pane
   const boWidth = shouldersFirst ? 'underarm.width - 2 * round(underarm_co / 2 / st_w) * st_w' : `underarm.width - (underarm.width - armhole_end.width) * ${front ? 0.5 : 0.4}`;
   const bo = newWaypoint('armhole_bo', 'underarm.height + 2 * row_h', boWidth);
   const endAt = shouldersFirstEarly(direction, opts) ? (front ? 0.75 : 0.6) : front ? 0.6 : 0.45;
-  const end = newWaypoint('armhole_end', `underarm.height + armhole_depth * ${endAt}`, 'cross_chest_back + 1');
+  const end = newWaypoint('armhole_end', `underarm.height + armhole_depth * ${endAt}`, 'cross_back + 1');
   const shoulder = newWaypoint('shoulder', 'underarm.height + armhole_depth', 'armhole_end.width');
   p.waypoints = [hem, waist, underarm, bo, end, shoulder];
   p.segments = [
@@ -98,7 +98,7 @@ export function bodice(kind: 'back' | 'front', opts: TemplateOptions = {}): Pane
   // Straight shoulders (top-down option): the panel ends at the shoulder line, no slope.
   const sloped = direction !== 'top-down' || (opts.shoulderSlope ?? 'shortrows') === 'shortrows';
   if (sloped) {
-    const top = newWaypoint('neck_side', 'shoulder.height + shoulder_slope', neck.top);
+    const top = newWaypoint('neck_side', 'shoulder.height + shoulder_drop', neck.top);
     p.waypoints.push(top);
     p.segments.push(
       newSegment(
@@ -141,7 +141,7 @@ export function sleeve(type: SleeveType = 'set-in', direction: KnitDirection = '
     // Bell-shaped cap: bind off to match the body's armhole bind-off, decrease fast, then steadily, then fast
     // again, and bind off the top. Decreases may fall on any row: caps are steep.
     const underarm = newWaypoint('underarm', 'arm_length', 'bicep + ease.bicep');
-    const bo = newWaypoint('cap_bo', 'underarm.height + 2 * row_h', 'underarm.width - 0.4 * (upper_chest / 2 + ease / 2 - cross_chest_back - 1)');
+    const bo = newWaypoint('cap_bo', 'underarm.height + 2 * row_h', 'underarm.width - 0.4 * (upper_chest / 2 + ease / 2 - cross_back - 1)');
     const low = newWaypoint('cap_low', 'cap_bo.height + 2', 'cap_bo.width - 5');
     const high = newWaypoint('cap_high', 'cap_top.height - 2', 'cap_top.width + 5');
     // Cap height fitted so both cap edges ≈ armhole_len + cap_ease: half of that per edge, minus the bind-off
@@ -186,7 +186,7 @@ export function rectangle(direction: KnitDirection = 'bottom-up'): Panel {
 export function neckband(): Panel {
   const p = newPanel('Neckband');
   p.template = 'neckband';
-  const length = 'neck_width * 2 + front_neck_depth * 2';
+  const length = 'back_neck_width * 2 + front_neck_drop * 2';
   p.waypoints = [newWaypoint('pick_up', 0, length), newWaypoint('bind_off', 2.5, length)];
   p.segments = [newSegment(p.waypoints[0].id, { kind: 'straight' })];
   p.pattern = { name: '1x1 rib', multiple: 2, offset: 0 };

@@ -5,6 +5,7 @@ import { parseCsv, type CsvTable } from './csv';
 import { dictionaryEntry, isEstimatedSource, isLegacyColumn, SOURCE_COLUMN } from './dictionary';
 import { isValidName } from './expr';
 import { removeSize } from './grading';
+import { resolveMeasurements } from './measurements';
 import { newId, newMeasurement, type Id, type Measurement, type Project } from './model';
 import { STANDARD_COLUMNS } from './seed';
 import { CM_PER_INCH } from './units';
@@ -68,10 +69,15 @@ export type ColumnTarget =
 const SYNONYMS: Record<string, string[]> = {
   size: ['size', 'sizes', 'name', 'size_name'],
   upper_chest: ['upper_chest', 'upper_bust', 'high_bust', 'upper_torso', 'highbust', 'upperchest'],
-  bust: ['bust', 'full_bust', 'chest', 'bust_circumference'],
+  // A single bust column: kept as the custom bust (choose "custom" as the cup to use it).
+  bust_custom: ['bust', 'full_bust', 'chest', 'bust_circumference'],
   waist: ['waist', 'natural_waist', 'waist_circumference'],
-  full_hip: ['full_hip', 'hip', 'hips', 'low_hip', 'fullhip'],
-  cross_chest_back: ['cross_chest_back', 'cross_back', 'back_width', 'cross_chest', 'across_back'],
+  hip_seat_straight: ['full_hip', 'hip', 'hips', 'low_hip', 'fullhip', 'seat'],
+  high_hip: ['high_hip', 'upper_hip', 'highhip'],
+  cross_back: ['cross_chest_back', 'cross_back', 'back_width', 'across_back'],
+  cross_front: ['cross_chest', 'cross_front', 'across_front', 'front_width'],
+  back_shoulder_width: ['shoulder_width', 'shoulder_to_shoulder_width', 'across_shoulders'],
+  back_neck_width: ['neck_width'],
   waist_to_armhole: ['waist_to_armhole', 'waist_to_underarm', 'side_length', 'underarm_to_waist'],
   back_waist_length: ['back_waist_length', 'back_waist', 'nape_to_waist', 'back_length'],
   armhole_depth: ['armhole_depth', 'armhole', 'armscye_depth'],
@@ -264,6 +270,11 @@ export function applyImport(project: Project, table: CsvTable, mapping: ColumnTa
     }
   });
 
+  // New sizes get values only from the table and from rules: say which measurements still have none.
+  for (const s of d.sizes.filter((x) => report.sizesAdded.includes(x.name))) {
+    const missing = Object.keys(resolveMeasurements(d, s.id).errors);
+    if (missing.length) report.warnings.push(`New size ${s.name} has no value for ${missing.join(', ')}; type one in the grid or give ${missing.length > 1 ? 'them' : 'it'} a grading rule.`);
+  }
   return { project: d, report };
 }
 

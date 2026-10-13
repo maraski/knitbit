@@ -15,18 +15,18 @@ describe('measurement resolution', () => {
   it('derives estimates from expression rules', () => {
     const p = fixtureProject();
     const r = resolveMeasurements(p, sizeId(p, 'M'));
-    expect(r.values.shoulder_width).toEqual({ value: 41.5, source: 'rule' }); // 38.25 + 3 → 41.5
-    expect(r.values.neck_width.value).toBe(16.5); // 13 + 3.435 → 16.5
+    expect(r.values.back_shoulder_width).toEqual({ value: 41.5, source: 'rule' }); // 38.25 + 3 → 41.5
+    expect(r.values.back_neck_width.value).toBe(16.5); // 13 + 3.435 → 16.5
     expect(r.values.cap_height.value).toBe(14.5); // 22.5 * .65 = 14.625 → 14.5
   });
 
   it('lets manual overrides win, and flows them into dependent rules', () => {
     const p = fixtureProject();
     const M = sizeId(p, 'M');
-    p.measurements.find((m) => m.name === 'cross_chest_back')!.manual[M] = 40;
+    p.measurements.find((m) => m.name === 'cross_back')!.manual[M] = 40;
     const r = resolveMeasurements(p, M);
-    expect(r.values.cross_chest_back).toEqual({ value: 40, source: 'manual' });
-    expect(r.values.shoulder_width.value).toBe(43);
+    expect(r.values.cross_back).toEqual({ value: 40, source: 'manual' });
+    expect(r.values.back_shoulder_width.value).toBe(43);
   });
 
   it('grades by increments from the base size, with per-size steps', () => {

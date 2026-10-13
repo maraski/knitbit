@@ -17,13 +17,13 @@ export function sizeId(p: Project, name: string): string {
 export function fixtureProject(): Project {
   const { project } = projectFromTable(parseCsv(LEGACY_CSV), 'Fixture top');
   const p = newPanel('Back');
-  const hem = newWaypoint('hem', 0, 'full_hip/2 + ease/4');
+  const hem = newWaypoint('hem', 0, 'hip_seat_straight/2 + ease/4');
   const waist = newWaypoint('waist', 'hem_to_waist', 'waist/2 + ease/4');
   const under = newWaypoint('underarm', 'hem_to_waist + waist_to_armhole', 'upper_chest/2 + ease/4');
-  const shoulder = newWaypoint('shoulder', 'hem_to_waist + back_waist_length - shoulder_slope', 'shoulder_width');
+  const shoulder = newWaypoint('shoulder', 'hem_to_waist + back_waist_length - shoulder_drop', 'back_shoulder_width');
   shoulder.symmetric = false;
-  shoulder.left = dim('shoulder_width/2');
-  shoulder.right = dim('shoulder_width/2 + 0.5', { [sizeId(project, 'M')]: 20 });
+  shoulder.left = dim('back_shoulder_width/2');
+  shoulder.right = dim('back_shoulder_width/2 + 0.5', { [sizeId(project, 'M')]: 20 });
   p.waypoints = [hem, waist, under, shoulder];
   p.segments = [
     newSegment(hem.id),
@@ -31,7 +31,7 @@ export function fixtureProject(): Project {
     { ...newSegment(under.id, { kind: 'steps', steps: [4, 3, 2], maxPerStep: 4 }), right: { kind: 'shortrows', steps: null, maxPerStep: 5, style: 'german' }, mirror: false },
   ];
   p.sections = [{ id: 'sec1', name: 'Hem rib', fromHeight: dim(0), toHeight: dim(5), pattern: { name: '2x2 rib', multiple: 4, offset: 2 } }];
-  p.neckline = { shape: 'round', width: dim('neck_width'), depth: dim('back_neck_depth'), centre: 'hold', centreWidth: dim('neck_width * 0.6'), side: 'rs' };
+  p.neckline = { shape: 'round', width: dim('back_neck_width'), depth: dim('back_neck_drop'), centre: 'hold', centreWidth: dim('back_neck_width * 0.6'), side: 'rs' };
   project.panels = [p, { ...newPanel('Plain'), inTheRound: true }];
   return project;
 }

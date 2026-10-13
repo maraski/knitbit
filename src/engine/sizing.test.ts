@@ -53,9 +53,9 @@ describe('column mapping', () => {
     const m = suggestMapping(r.table, p);
     expect(m).toEqual([
       { kind: 'size' },
-      { kind: 'measurement', name: 'bust' },
+      { kind: 'measurement', name: 'bust_custom' }, // a single bust column: the custom bust
       { kind: 'measurement', name: 'upper_chest' },
-      { kind: 'measurement', name: 'full_hip' },
+      { kind: 'measurement', name: 'hip_seat_straight' },
       { kind: 'measurement', name: 'shoulder_to_shoulder' },
       { kind: 'ignore' },
     ]);
@@ -73,7 +73,7 @@ describe('column mapping', () => {
 describe('applying an import', () => {
   it('merges into matching sizes, adds new sizes and measurements, converts inches', () => {
     const p = fixtureProject();
-    const r = readSizingTable('size,bust,shoulder_to_shoulder\nM,50,16\n5X,75,20');
+    const r = readSizingTable('size,bust_ef_cup,shoulder_to_shoulder\nM,50,16\n5X,75,20');
     if (!r.ok) throw new Error(r.error);
     const { project, report } = applyImport(p, r.table, suggestMapping(r.table, p), { units: 'in', mode: 'merge' });
     expect(report.sizesMatched).toEqual(['M']);
@@ -101,13 +101,13 @@ describe('applying an import', () => {
 
   it('a table value replaces an estimate', () => {
     const p = fixtureProject();
-    const r = readSizingTable('size,shoulder_width\nM,40');
+    const r = readSizingTable('size,back_neck_width\nM,40');
     if (!r.ok) throw new Error(r.error);
     const { project } = applyImport(p, r.table, suggestMapping(r.table, p), { units: 'cm', mode: 'merge' });
-    const m = project.measurements.find((x) => x.name === 'shoulder_width')!;
+    const m = project.measurements.find((x) => x.name === 'back_neck_width')!;
     expect(m.estimate).toBe(false);
-    expect(resolveMeasurements(project, sizeId(project, 'M')).values.shoulder_width).toEqual({ value: 40, source: 'table' });
-    expect(resolveMeasurements(project, sizeId(project, 'S')).values.shoulder_width.source).toBe('rule');
+    expect(resolveMeasurements(project, sizeId(project, 'M')).values.back_neck_width).toEqual({ value: 40, source: 'table' });
+    expect(resolveMeasurements(project, sizeId(project, 'S')).values.back_neck_width.source).toBe('rule');
   });
 
   it('reports non-numeric cells', () => {
@@ -121,17 +121,17 @@ describe('applying an import', () => {
 describe('grading operations', () => {
   it('converts table values to an increment rule that reproduces them exactly', () => {
     const p = fixtureProject();
-    const before = values(p, 'bust');
-    const q = convertToIncrementRule(p, 'bust');
-    const m = q.measurements.find((x) => x.name === 'bust')!;
+    const before = values(p, 'bust_ef_cup');
+    const q = convertToIncrementRule(p, 'bust_ef_cup');
+    const m = q.measurements.find((x) => x.name === 'bust_ef_cup')!;
     expect(m.rule.type).toBe('increment');
     expect(m.table).toEqual({});
-    expect(resolveMeasurements(q, q.baseSizeId).values.bust.source).toBe('rule');
+    expect(resolveMeasurements(q, q.baseSizeId).values.bust.source).toBe('rule'); // the alias follows its column
     values(q, 'bust').forEach((v, i) => expect(v).toBeCloseTo(before[i]!, 6));
   });
 
   it('keeps values when the base size changes', () => {
-    const q = convertToIncrementRule(fixtureProject(), 'bust');
+    const q = convertToIncrementRule(fixtureProject(), 'bust_ef_cup');
     const before = values(q, 'bust');
     const r = setBaseSize(q, sizeId(q, '2X'));
     values(r, 'bust').forEach((v, i) => expect(v).toBeCloseTo(before[i]!, 6));
@@ -165,13 +165,13 @@ describe('grading operations', () => {
 
   it('renames a measurement everywhere it is used', () => {
     const p = fixtureProject();
-    p.ease.per.bust = 8;
-    p.panels[0].waypoints[2].width = dim('bust/2 + ease.bust/2 + bust_point_depth*0');
-    const q = renameMeasurement(p, 'bust', 'full_bust');
-    expect(q.measurements.some((m) => m.name === 'full_bust')).toBe(true);
-    expect(q.panels[0].waypoints[2].width.expr).toBe('full_bust/2 + ease.full_bust/2 + bust_point_depth*0');
-    expect(q.measurements.find((m) => m.name === 'apex_to_apex')!.rule).toEqual({ type: 'expression', expr: 'round(14 + full_bust * 0.04, 0.5)' });
-    expect(q.ease.per).toEqual({ full_bust: 8 });
+    p.ease.per.upper_chest = 8;
+    p.panels[0].waypoints[2].width = dim('upper_chest/2 + ease.upper_chest/2 + hps_to_apex*0');
+    const q = renameMeasurement(p, 'upper_chest', 'high_bust');
+    expect(q.measurements.some((m) => m.name === 'high_bust')).toBe(true);
+    expect(q.panels[0].waypoints[2].width.expr).toBe('high_bust/2 + ease.high_bust/2 + hps_to_apex*0');
+    expect(q.measurements.find((m) => m.name === 'back_neck_width')!.rule).toEqual({ type: 'expression', expr: 'round(13 + high_bust * 0.03, 0.5)' });
+    expect(q.ease.per).toEqual({ high_bust: 8 });
     expect(resolveMeasurements(q, q.baseSizeId).errors).toEqual({});
   });
 
@@ -179,17 +179,17 @@ describe('grading operations', () => {
     const p = fixtureProject();
     expect(measurementUsage(p, 'upper_chest')).toContain('Back › underarm width');
     expect(measurementUsage(p, 'bust')).toContain('measurement apex_to_apex');
-    expect(validateNewName(p, 'bust')).toMatch(/already exists/);
-    expect(validateNewName(p, 'bust', 'bust')).toBeNull();
+    expect(validateNewName(p, 'waist')).toMatch(/already exists/);
+    expect(validateNewName(p, 'waist', 'waist')).toBeNull();
     expect(validateNewName(p, 'a.b')).toMatch(/dots/);
   });
 
   it('flags values that go against the size trend', () => {
     const p = fixtureProject();
     expect(trendFlags(p, 'waist_to_armhole')).toEqual([]); // rises then falls: a grading shape, not a zigzag
-    expect(trendFlags(p, 'bust')).toEqual([]);
-    p.measurements.find((m) => m.name === 'bust')!.manual[sizeId(p, 'M')] = 110;
-    const flags = trendFlags(p, 'bust');
+    expect(trendFlags(p, 'bust_ef_cup')).toEqual([]);
+    p.measurements.find((m) => m.name === 'bust_ef_cup')!.manual[sizeId(p, 'M')] = 110;
+    const flags = trendFlags(p, 'bust_ef_cup');
     expect(flags.map((f) => p.sizes.find((s) => s.id === f.sizeId)!.name)).toEqual(['M']);
     expect(flags[0].message).toMatch(/Smaller than S/);
   });

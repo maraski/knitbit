@@ -385,13 +385,13 @@ Measurements missing from the sizing table are seeded as **estimates** with expr
 per-measurement value that falls back to the global one. Expressions decide how it is split, e.g. a back panel
 using `upper_chest/2 + ease/2` takes half.
 
-## Project JSON (schema version 1)
+## Project JSON (schema version 2)
 
 Saved files are `*.knitbit.json`. All lengths are in cm, whatever the display units. Top level:
 
 ```jsonc
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "id": "project_…", "name": "My top",
   "units": "metric" | "imperial",              // display only
   "gauge": { "stitches": 22, "rows": 30, "basis": "10cm" | "4in" },
@@ -407,6 +407,7 @@ Saved files are `*.knitbit.json`. All lengths are in cm, whatever the display un
     "estimate": true, "note": "…"               // optional
   }],
   "ease": { "global": 5, "per": { "bust": 8 } },
+  "fit": { "cup": "cd" },              // which bust column `bust` follows: ab | cd | ef | gh | custom (bust_custom)
   "panels": [Panel],
   "joins": [Join],                             // optional
   "symbols": [{ "id": "custom_…", "label": "Twisted decrease", "abbr": "tw",
@@ -474,7 +475,37 @@ change the schema version; incompatible changes bump `schemaVersion` and add a m
 `loadProject` parses the JSON, checks `schemaVersion`, runs `MIGRATIONS[n]` (n → n+1) step by step up to the current
 version, then validates. Errors name the exact field, e.g.
 `project.panels[0].waypoints[1].height.expr: expected text, got number 42`. Files from a newer version are
-refused, not guessed at.
+refused, not guessed at. Each migration reports every change it makes; the app shows the list when it opens an old
+file or restores an old auto-save.
+
+**Schema 1 → 2** (the Ysolda sizing table, `src/engine/legacy.ts`):
+
+| Old name | New name |
+|---|---|
+| `full_hip` | `hip_seat_straight` |
+| `cross_chest_back` | `cross_back` |
+| `shoulder_width` | `back_shoulder_width` |
+| `neck_width` | `back_neck_width` |
+| `back_neck_depth` | `back_neck_drop` |
+| `front_neck_depth` | `front_neck_drop` |
+| `shoulder_slope` | `shoulder_drop` |
+| `bust_point_depth` | `hps_to_apex` |
+| `bust` | the closest cup column, e.g. `bust_ef_cup` (see below) |
+
+- References in every expression (panels, bust, princess and shaping lines, measurement rules, `ease.<name>`) follow
+  the rename, and renamed measurements take the dictionary label. Values, manual values and overrides are unchanged.
+- `bust`: the cup is the one whose typical bust − upper chest (A/B 5, C/D 7.5, E/F 10, G/H 12.5 cm) is closest to the
+  project's average; the project's cup choice (`fit.cup`) is set to it, and the report says which cup was picked and
+  lists sizes whose own difference points to another cup. Expressions keep saying `bust`, which now follows the cup
+  choice.
+- `waist`, `upper_chest`, `bicep`, `wrist`, `arm_length`, `armhole_depth` and `back_waist_length` keep their names;
+  `waist_to_armhole` stays as a custom measurement.
+- If the new name is already taken: an old measurement that only copied the new one (`= back_shoulder_width`) is
+  removed; one with its own values is kept as `<new name>_old`.
+- After an upgrade the app offers **Merge the Ysolda sizing table by size name** (an ordinary, undoable merge import).
+  Old tables imported or seeded with a single `bust` column go through the same mapping.
+
+The tests in `src/engine/legacy.test.ts` load `src/engine/fixtures/project_v1.json`, a real schema-1 project.
 
 ### Auto-save
 
