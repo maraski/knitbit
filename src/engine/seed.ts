@@ -31,7 +31,8 @@ export const ESTIMATED_MEASUREMENTS: { name: string; label: string; expr: string
   { name: 'hem_to_waist', label: 'Hem to waist', expr: '15', note: 'Length of the body below the natural waist.' },
   { name: 'bust_point_depth', label: 'Shoulder to bust point', expr: 'round(20 + bust * 0.07, 0.5)', note: 'High point of shoulder down to the bust apex.' },
   { name: 'apex_to_apex', label: 'Apex to apex', expr: 'round(14 + bust * 0.04, 0.5)', note: 'Horizontal distance between bust points.' },
-  { name: 'cap_height', label: 'Sleeve cap height', expr: 'round(armhole_depth * 0.65, 0.5)', note: 'Set-in sleeve cap height.' },
+  { name: 'cap_height', label: 'Sleeve cap height', expr: 'round(armhole_depth * 0.65, 0.5)', note: 'Set-in sleeve cap height (not used by the set-in template, which fits the cap to the armhole).' },
+  { name: 'cap_ease', label: 'Sleeve cap ease', expr: '1.5', note: 'How much longer the cap edge is than the armhole it is sewn into (cm, both sides together).' },
   {
     name: 'waist_shift',
     label: 'Waist shift (back → front)',

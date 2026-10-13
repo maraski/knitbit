@@ -34,6 +34,7 @@ export const FUNCTIONS: Record<string, FnDef> = {
   min: { arity: [1, Infinity], impl: Math.min, doc: 'min(a, b, …) smallest value' },
   max: { arity: [1, Infinity], impl: Math.max, doc: 'max(a, b, …) largest value' },
   abs: { arity: [1, 1], impl: Math.abs, doc: 'abs(x) absolute value' },
+  sqrt: { arity: [1, 1], impl: (x) => Math.sqrt(Math.max(0, x)), doc: 'sqrt(x) square root (of 0 for negatives)' },
   floor: { arity: [1, 2], impl: (x, s = 1) => Math.floor(x / s) * s, doc: 'floor(x[, step]) round down (to a step)' },
   ceil: { arity: [1, 2], impl: (x, s = 1) => Math.ceil(x / s) * s, doc: 'ceil(x[, step]) round up (to a step)' },
   round: { arity: [1, 2], impl: (x, s = 1) => Math.round(x / s) * s, doc: 'round(x[, step]) round to nearest (step)' },

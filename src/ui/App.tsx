@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { Id } from '../engine/model';
 import { buildScope } from '../engine/measurements';
-import { computePanel, resolvePanelDims } from '../engine/panel';
+import { computePanel, resolvePanelDims, type ComputedPanel } from '../engine/panel';
+import type { AlignRef } from '../engine/layout';
+import { LayoutView } from './components/LayoutView';
+import { SizeModeBar, type SizeMode } from './components/SizeModeBar';
 import { loadProject, serializeProject } from '../engine/schema';
 import { CheckPanel } from './components/CheckPanel';
 import { ImportDialog } from './components/ImportDialog';
@@ -19,9 +22,9 @@ import { PANEL_SELECTION, type Selection } from './selection';
 import { sampleProject, useProjectStore, type Notice } from './store';
 
 const VIEW_KEY = 'knitbit.view.v1';
-type CenterView = 'schematic' | 'measurements';
+type CenterView = 'schematic' | 'layout' | 'measurements';
 
-function readView(): { sizeId?: Id; panelId?: Id; center?: CenterView } {
+function readView(): { sizeId?: Id; panelId?: Id; center?: CenterView; mode?: SizeMode; compare?: Id[]; align?: AlignRef } {
   try {
     return JSON.parse(localStorage.getItem(VIEW_KEY) ?? '{}');
   } catch {
@@ -37,6 +40,10 @@ export function App() {
   const [panelId, setPanelId] = useState<Id | null>(view.panelId ?? project.panels[0]?.id ?? null);
   const [selection, setSelection] = useState<Selection>(PANEL_SELECTION);
   const [center, setCenter] = useState<CenterView>(view.center ?? 'schematic');
+  const [sizeMode, setSizeMode] = useState<SizeMode>(view.mode ?? 'single');
+  const [compareRaw, setCompare] = useState<Id[] | null>(view.compare ?? null); // null = all sizes
+  const [align, setAlign] = useState<AlignRef>(view.align ?? 'hem');
+  const compare = (compareRaw ?? project.sizes.map((s) => s.id)).filter((id) => project.sizes.some((s) => s.id === id));
   const [measSel, setMeasSel] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
 
@@ -46,13 +53,26 @@ export function App() {
 
   useEffect(() => {
     try {
-      localStorage.setItem(VIEW_KEY, JSON.stringify({ sizeId: size?.id, panelId: panel?.id, center }));
+      localStorage.setItem(VIEW_KEY, JSON.stringify({ sizeId: size?.id, panelId: panel?.id, center, mode: sizeMode, compare: compareRaw, align }));
     } catch {
       /* ignore */
     }
-  }, [size?.id, panel?.id, center]);
+  }, [size?.id, panel?.id, center, sizeMode, compareRaw, align]);
 
-  const allSizes = useMemo(() => (panel ? project.sizes.map((s) => computePanel(project, panel, s.id)) : []), [project, panel]);
+  // One cache of computed panels per project version, shared by every view.
+  const computedFor = useMemo(() => {
+    const cache = new Map<string, ComputedPanel>();
+    return (panelId: Id, sid: Id) => {
+      const key = `${panelId}|${sid}`;
+      let c = cache.get(key);
+      if (!c) {
+        c = computePanel(project, project.panels.find((p) => p.id === panelId)!, sid);
+        cache.set(key, c);
+      }
+      return c;
+    };
+  }, [project]);
+  const allSizes = useMemo(() => (panel ? project.sizes.map((s) => computedFor(panel.id, s.id)) : []), [project, panel, computedFor]);
   const computed = allSizes.find((c) => c.sizeId === size?.id) ?? null;
   const fitOutlines = useMemo(() => allSizes.filter((c) => c.ok).map((c) => c.outline), [allSizes]);
   const scope = useMemo(() => {
@@ -167,8 +187,18 @@ export function App() {
           <div className="canvas-title">
             <div className="segmented">
               <button className={center === 'schematic' ? 'active' : ''} onClick={() => setCenter('schematic')}>Schematic</button>
+              <button className={center === 'layout' ? 'active' : ''} onClick={() => setCenter('layout')}>Layout</button>
               <button className={center === 'measurements' ? 'active' : ''} onClick={() => setCenter('measurements')}>Measurements</button>
             </div>
+            {center !== 'measurements' && (
+              <SizeModeBar project={project} mode={sizeMode} setMode={setSizeMode} compare={compare} setCompare={setCompare} align={align} setAlign={setAlign} />
+            )}
+            {center === 'layout' && (
+              <>
+                <span className="spacer" />
+                <button onClick={() => window.dispatchEvent(new Event('knitbit:fit'))} title="Fit (F)">Fit</button>
+              </>
+            )}
             {center === 'schematic' && panel && (
               <>
                 <strong>{panel.name}</strong>
@@ -178,12 +208,28 @@ export function App() {
                   {panel.inTheRound ? ' · in the round' : panel.joinAt ? ' · round below ' + (panel.waypoints.find((w) => w.id === panel.joinAt)?.name ?? '?') : ''}
                 </span>
                 <span className="spacer" />
-                <Legend />
+                {sizeMode === 'single' && <Legend />}
                 <button onClick={() => window.dispatchEvent(new Event('knitbit:fit'))} title="Fit (F)">Fit</button>
               </>
             )}
           </div>
-          {center === 'measurements' ? (
+          {center === 'layout' ? (
+            <LayoutView
+              project={project}
+              update={update}
+              sizeId={size?.id ?? ''}
+              mode={sizeMode}
+              compare={compare}
+              align={align}
+              computed={computedFor}
+              selectedPanel={panel?.id ?? null}
+              onSelectPanel={(id) => {
+                setPanelId(id);
+                setSelection(PANEL_SELECTION);
+              }}
+              onSelectJoin={(id) => setSelection({ kind: 'join', id })}
+            />
+          ) : center === 'measurements' ? (
             <MeasurementsView
               project={project}
               update={update}
@@ -204,6 +250,10 @@ export function App() {
               fitOutlines={fitOutlines}
               markers={markers}
               joins={panelJoins(project, panel.id)}
+              mode={sizeMode}
+              compare={compare.map((sid) => computedFor(panel.id, sid))}
+              align={align}
+              project={project}
             />
           ) : (
             <div className="canvas-empty">
@@ -223,7 +273,7 @@ export function App() {
           />
         </section>
         <aside className="sidebar right">
-          {selection.kind === 'join' && center === 'schematic' ? (
+          {selection.kind === 'join' && center !== 'measurements' ? (
             <JoinProps project={project} joinId={selection.id} sizeId={size?.id ?? ''} units={project.units} update={update} onDone={() => setSelection(PANEL_SELECTION)} />
           ) : center === 'measurements' ? (
             measSel ? (

@@ -16,6 +16,7 @@ import type { Id, ManualEvent, Panel, Project, Segment, SegmentMethod } from './
 import { defaultAutoMethod } from './model';
 import { roundNearest, roundRows, roundStitches, type RoundingResult } from './rounding';
 import { bustValues, computeBust, type ComputedBust } from './bust';
+import { sideEdgeLength } from './edges';
 import { defaultSymbol } from './symbols';
 
 export type Edge = 'left' | 'right';
@@ -185,7 +186,77 @@ export function waypointDefinitions(panel: Panel, sizeId: Id): Record<string, st
 /** Evaluate all waypoint dimensions of a panel for one size. */
 export function resolvePanelDims(project: Project, panel: Panel, sizeId: Id) {
   const base = buildScope(project, sizeId);
-  return resolveDefinitions(waypointDefinitions(panel, sizeId), { ...base, ...bustValues(panel, sizeId, base) });
+  const extra: Record<string, number> = {};
+  if (usesName(panel, 'armhole_len')) {
+    const a = armholeLength(project, panel, sizeId);
+    if ('value' in a) extra.armhole_len = a.value;
+  }
+  return resolveDefinitions(waypointDefinitions(panel, sizeId), { ...base, ...bustValues(panel, sizeId, base), ...extra });
+}
+
+function usesName(panel: Panel, name: string): boolean {
+  const re = new RegExp(`(^|[^A-Za-z0-9_.])${name}(?![A-Za-z0-9_])`);
+  const exprs = [
+    ...panel.waypoints.flatMap((w) => [w.height.expr, w.width.expr, w.left.expr, w.right.expr]),
+    ...panel.sections.flatMap((x) => [x.fromHeight.expr, x.toHeight.expr]),
+  ];
+  return exprs.some((e) => re.test(e));
+}
+
+// Panels being computed while resolving armhole_len, to stop a panel measuring itself (directly or in a loop).
+const measuring = new Set<string>();
+
+/**
+ * The armhole a sleeve is sewn into, for `armhole_len` (cm, measured along the edges).
+ * Uses the seam join that contains one of this panel's edges, if any (the other side's side edges);
+ * otherwise the Front + Back panels' armholes (left edge, underarm → shoulder).
+ */
+export function armholeLength(project: Project, panel: Panel, sizeId: Id): { value: number; source: string } | { error: string } {
+  const key = `${panel.id}|${sizeId}`;
+  if (measuring.has(key)) return { error: 'armhole_len refers back to this panel.' };
+  measuring.add(key);
+  try {
+    const measure = (panelId: Id, side: Edge, from: Id, to: Id): number | null => {
+      const other = project.panels.find((p) => p.id === panelId);
+      if (!other || other.id === panel.id || measuring.has(`${other.id}|${sizeId}`)) return null;
+      const c = computePanel(project, other, sizeId);
+      return c.ok ? sideEdgeLength(c, side, from, to)?.lengthCm ?? null : null;
+    };
+    for (const j of project.joins ?? []) {
+      if (j.tag !== 'seam') continue;
+      const mine = j.edges.some((e) => e.panelId === panel.id) ? j.partner : j.partner.some((e) => e.panelId === panel.id) ? j.edges : null;
+      if (!mine || !mine.length) continue;
+      let total = 0;
+      for (const ref of mine) {
+        if (ref.edge.kind !== 'side') return { error: `The seam "${j.name}" has a non-side edge; armhole_len needs side edges.` };
+        const v = measure(ref.panelId, ref.edge.side, ref.edge.from, ref.edge.to);
+        if (v === null) return { error: `Could not measure an edge of the seam "${j.name}".` };
+        total += v;
+      }
+      return { value: total, source: `seam "${j.name}"` };
+    }
+    let total = 0;
+    const names: string[] = [];
+    for (const tpl of ['front', 'back']) {
+      const body = project.panels.find((p) => p.template === tpl);
+      const u = body?.waypoints.find((w) => waypointKey(w.name) === 'underarm');
+      const sh = body?.waypoints.find((w) => waypointKey(w.name) === 'shoulder');
+      if (!body || !u || !sh) {
+        // No body to measure: estimate from the measurements (armhole depth plus its horizontal shaping, both sides).
+        const m = buildScope(project, sizeId);
+        if (m.armhole_depth === undefined) return { error: 'No seam join, no Front and Back panels, and no armhole_depth to estimate from.' };
+        const across = Math.max(0, ((m.upper_chest ?? 0) / 2 + (m.ease ?? 0) / 2 - (m.cross_chest_back ?? 0)) / 2);
+        return { value: 2 * Math.hypot(m.armhole_depth, across) + 2 * across * 0.4, source: 'an estimate (no Front and Back panels to measure)' };
+      }
+      const v = measure(body.id, 'left', u.id, sh.id);
+      if (v === null) return { error: `Could not measure the ${body.name} armhole.` };
+      total += v;
+      names.push(body.name);
+    }
+    return { value: total, source: `${names.join(' + ')} armholes` };
+  } finally {
+    measuring.delete(key);
+  }
 }
 
 function emptyPanel(panel: Panel, sizeId: Id, spc: number, rpc: number, issues: Issue[]): ComputedPanel {
@@ -233,6 +304,14 @@ export function computePanel(project: Project, panel: Panel, sizeId: Id): Comput
   });
 
   // ---- evaluate expressions ----
+  if (usesName(panel, 'armhole_len')) {
+    const a = armholeLength(project, panel, sizeId);
+    issues.push(
+      'value' in a
+        ? { severity: 'info', message: `armhole_len = ${a.value.toFixed(1)} cm, from ${a.source}.`, ref: { kind: 'panel' } }
+        : { severity: 'error', message: `armhole_len: ${a.error}`, ref: { kind: 'panel' } },
+    );
+  }
   const { values, errors } = resolvePanelDims(project, panel, sizeId);
   let failed = false;
   panel.waypoints.forEach((wp, i) => {

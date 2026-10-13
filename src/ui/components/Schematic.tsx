@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { JOIN_TAGS } from '../../engine/joins';
+import { edgePaths } from '../edgePaths';
+import { alignShift, localOutline, toLocal, type AlignRef } from '../../engine/layout';
+import { sizeColor } from '../sizeColors';
+import { SizeGrid, SizeLegend } from './LayoutView';
+import type { SizeMode } from './SizeModeBar';
+import type { Project } from '../../engine/model';
 import type { EdgeKey, Join, KnitDirection } from '../../engine/model';
 import type { ComputedPanel, ComputedSegment, Edge, Marker, ShapeEvent } from '../../engine/panel';
 import { SYMBOLS, type SymbolId } from '../../engine/symbols';
@@ -22,6 +28,11 @@ interface Props {
   markers?: MarkerActions;
   /** Joins touching this panel, drawn along their edges. */
   joins?: { join: Join; edge: EdgeKey }[];
+  /** Overlay / grid of several sizes (computed panels in size order). */
+  mode?: SizeMode;
+  compare?: ComputedPanel[];
+  align?: AlignRef;
+  project?: Project;
 }
 
 interface View {
@@ -50,7 +61,7 @@ interface MarkerDrag {
 
 const isStepLike = (e: ShapeEvent) => e.kind === 'bindoff' || e.kind === 'caston' || e.kind === 'turn';
 
-export function Schematic({ computed: c, direction, units, selection, onSelect, fitKey, fitOutlines, markers, joins = [] }: Props) {
+export function Schematic({ computed: c, direction, units, selection, onSelect, fitKey, fitOutlines, markers, joins = [], mode = 'single', compare = [], align = 'hem', project }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ w: 800, h: 600 });
   const [view, setView] = useState<View | null>(null);
@@ -196,33 +207,7 @@ export function Schematic({ computed: c, direction, units, selection, onSelect, 
   };
 
   /** Screen paths for an edge (one or more pieces). */
-  const joinEdgePts = (edge: EdgeKey): Pt[][] => {
-    if (edge.kind === 'side') {
-      const a = c.waypoints.find((w) => w.id === edge.from);
-      const b = c.waypoints.find((w) => w.id === edge.to);
-      if (!a || !b) return [];
-      return [edgePts(edge.side === 'left' ? c.leftEdge : c.rightEdge, Math.min(a.row, b.row) + 1, Math.max(a.row, b.row))];
-    }
-    if (edge.kind === 'bottom' || edge.kind === 'top') {
-      const r = (edge.kind === 'bottom') === !c.topDown ? 0 : top;
-      if (c.neckLeft[r] !== null && c.neck) {
-        return [
-          [S(c.leftEdge[r], r), S(c.neckLeft[r]!, r)],
-          [S(c.neckRight[r]!, r), S(c.rightEdge[r], r)],
-        ];
-      }
-      return [[S(c.leftEdge[r], r), S(c.rightEdge[r], r)]];
-    }
-    if (!c.neck) return [];
-    const rows = [];
-    for (let r = 0; r <= top; r++) if (c.neckLeft[r] !== null) rows.push(r);
-    const line = c.neck.splitRow - 1;
-    const left = rows.map((r) => S(c.neckLeft[r]!, r));
-    const right = rows.map((r) => S(c.neckRight[r]!, r));
-    const cl = S(c.neck.centreX - c.neck.centreSts / 2, line);
-    const cr = S(c.neck.centreX + c.neck.centreSts / 2, line);
-    return c.neck.atStart ? [[...left, cl, cr, ...right.reverse()]] : [[...left.reverse(), cl, cr, ...right]];
-  };
+  const joinEdgePts = (edge: EdgeKey): Pt[][] => edgePaths(c, edge).map((piece) => piece.map((p) => S(p.x, p.y)));
 
   const onPointerDown = (e: React.PointerEvent) => {
     if (e.button !== 0) return;
@@ -296,6 +281,60 @@ export function Schematic({ computed: c, direction, units, selection, onSelect, 
   const hem = gw[0];
   const topWp = gw[gw.length - 1];
   const finishedCm = (n: number, selvedge: number) => (n - selvedge) / spc;
+
+  // ---- several sizes at once ----
+  if (mode === 'grid' && project) {
+    const cells = compare.filter((x) => x.ok).map((x) => ({
+      sid: x.sizeId,
+      name: project.sizes.find((z) => z.id === x.sizeId)?.name ?? '',
+      shapes: [localOutline(x)],
+      caption: `${x.counts[x.topDown ? x.totalRows : 0]} sts · ${x.totalRows} rows`,
+    }));
+    return (
+      <div className="canvas" ref={wrapRef}>
+        <SizeGrid cells={cells} size={size} project={project} />
+        <div className="canvas-hint">Grid: every size at the same scale</div>
+      </div>
+    );
+  }
+  if (mode === 'overlay' && project && direction !== 'side-to-side') {
+    const L = (p: Pt) => ({ x: v.ox + p.x * v.scale, y: v.oy - p.y * v.scale });
+    const sizeIdx = (sid: string) => project.sizes.findIndex((z) => z.id === sid);
+    const shown = compare.filter((x) => x.ok).sort((a, b) => sizeIdx(b.sizeId) - sizeIdx(a.sizeId));
+    return (
+      <div className="canvas" ref={wrapRef} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp}>
+        <svg width={size.w} height={size.h} className="schematic">
+          {shown.map((x) => {
+            const shift = alignShift(x, c, align);
+            const color = sizeColor(sizeIdx(x.sizeId), project.sizes.length);
+            const pts = localOutline(x).map((p) => L({ x: p.x, y: p.y + shift }));
+            const bust = x.bust;
+            return (
+              <g key={x.sizeId} style={{ color }}>
+                <path d={path(pts, true)} className={`overlay-outline${x.sizeId === c.sizeId ? ' current' : ''}`} style={{ stroke: color }} />
+                {bust?.shortRows && (() => {
+                  const sr = bust.shortRows;
+                  const order = [...sr.pairs].sort((a, b) => a.leftUnworked - b.leftUnworked);
+                  const dir = x.topDown ? -1 : 1;
+                  const at = (xs: number, row: number) => { const q = toLocal(x, { x: xs, y: row }); return L({ x: q.x, y: q.y + shift }); };
+                  const ptsL = order.flatMap((pr, k) => [at(pr.leftX, sr.afterRow + dir * 2 * k), at(pr.leftX, sr.afterRow + dir * 2 * (k + 1))]);
+                  const ptsR = order.flatMap((pr, k) => [at(pr.rightX, sr.afterRow + dir * 2 * k), at(pr.rightX, sr.afterRow + dir * 2 * (k + 1))]);
+                  return <path d={path([...ptsL, ...ptsR.reverse()], true)} className="overlay-wedge" style={{ stroke: color, fill: color }} />;
+                })()}
+                {bust && [bust.apex.leftX, bust.apex.rightX].map((ax, k) => {
+                  const q = toLocal(x, { x: ax, y: bust.apex.row });
+                  const sp = L({ x: q.x, y: q.y + shift });
+                  return <circle key={k} cx={sp.x} cy={sp.y} r={3} className="overlay-apex" style={{ stroke: color }} />;
+                })}
+              </g>
+            );
+          })}
+        </svg>
+        <SizeLegend project={project} sizes={compare.map((x) => x.sizeId)} current={c.sizeId} align={align} />
+        <div className="canvas-hint">Overlay: outlines aligned at the {align}{c.bust ? ' · bust points and short-row wedges per size' : ''}</div>
+      </div>
+    );
+  }
 
   return (
     <div

@@ -35,7 +35,8 @@ npm run typecheck
   - `manual.ts`: hand-editing shaping markers (move, add, remove, retype, reset).
   - `checks.ts`: project-wide checks for the check panel.
   - `bust.ts`: bust shaping (formulas with numbers plugged in, short-row wedges, horizontal and vertical darts).
-  - `joins.ts`: measuring tagged edges, seam comparison, pick-up suggestions.
+  - `joins.ts`: measuring tagged edges, seam comparison, pick-up suggestions. `edges.ts`: edge length along the outline.
+  - `layout.ts`: garment layout geometry (local cm frame, rotation, placement), size alignment, T-shape auto-arrange.
 - `src/ui/`: React views.
 - `samples/`: sample sizing tables (`sizing_table_cm.csv`, `sizing_table_cm.json`, same data).
 
@@ -51,7 +52,8 @@ Waypoint dimensions and custom measurements are expressions. They evaluate to **
 | Gauge | `row_h` (height of one row), `st_w` (width of one stitch), e.g. `underarm.height + 2 * row_h` |
 | Dotted names | `ease.bust` |
 | Operators | `+ - * / ^` and parentheses; `^` is right-associative; unary minus binds looser than `^` (`-2^2 = -4`) |
-| Functions | `min(a, b, …)`, `max(a, b, …)`, `abs(x)`, `round(x[, step])`, `floor(x[, step])`, `ceil(x[, step])`, `clamp(x, lo, hi)` |
+| Functions | `min(a, b, …)`, `max(a, b, …)`, `abs(x)`, `sqrt(x)`, `round(x[, step])`, `floor(x[, step])`, `ceil(x[, step])`, `clamp(x, lo, hi)` |
+| Armhole | `armhole_len`: the armhole a sleeve is sewn into (see Templates) |
 
 Examples:
 
@@ -114,11 +116,18 @@ duplicate (⧉) or delete (×) any panel there. Options: knitting direction, nec
 |---|---|---|
 | **Back** | hem `(waist + full_hip)/4 + ease/2` → waist `waist/2 + ease/2 − waist_shift` → underarm `upper_chest/2 + ease/2` → armhole_bo at `underarm.height + 2 * row_h` (40 % of the armhole width change bound off in one go: the beginning of the next 2 rows) → armhole_end `cross_chest_back + 1` at `armhole_depth × 0.45` → shoulder at `underarm.height + armhole_depth` → neck_side `neck_width` (shoulder slope in bind-off steps) | Round back neck, `back_neck_depth`, centre `neck_width − 2` |
 | **Front** | as the back, waist `+ waist_shift` | Round: depth `front_neck_depth`, centre `neck_width × 0.4`. V: depth `front_neck_depth × 2`, no centre. Square: depth `front_neck_depth + 2`, whole width at once. Boat: `neck_width + 6` wide, `back_neck_depth + 1` deep |
-| **Sleeve, set-in** | cuff `wrist + ease.wrist` → underarm `bicep + ease.bicep` at `arm_length` → cap_bo 2 rows up (bind-off matching the body's, in one go) → cap_low → cap_high → cap_top `max(8, bicep × 0.22)` at `underarm.height + cap_height` | Bell cap: fast, steady, fast; cap decreases may fall on any row. 2x2 rib cuff section (5 cm) |
+| **Sleeve, set-in** | cuff `wrist + ease.wrist` → underarm `bicep + ease.bicep` at `arm_length` → cap_bo 2 rows up (bind-off matching the body's, in one go) → cap_low → cap_high → cap_top `max(8, bicep × 0.22)`, its height **fitted to the armhole** | Bell cap: fast, steady, fast; cap decreases may fall on any row. 2x2 rib cuff section (5 cm) |
 | **Sleeve, drop shoulder** | cuff → top `armhole_depth × 2` at `arm_length` | Ribbed cuff |
 | **Sleeve, straight** | cuff = top `bicep + ease.bicep` | Rounded to the rib multiple so the count stays constant |
 | **Plain rectangle** | bottom → top, 20 × 30 cm | |
 | **Neckband strip** | `neck_width × 2 + front_neck_depth × 2` long, 2.5 cm deep, 1x1 rib | Length is an estimate until the pick-up helper |
+
+**Set-in cap height follows the armhole.** `armhole_len` is the armhole the sleeve is sewn into, measured along the
+edges: the other side of a seam join that contains one of the sleeve's edges, or else the Front + Back panels' left
+armholes (underarm → shoulder), or, with no bodies at all, an estimate from `armhole_depth` (noted in the checks). The
+cap top height solves `both cap edges ≈ armhole_len + cap_ease` (`cap_ease`, default 1.5 cm, is a graded measurement):
+`cap_bo.height + sqrt(((armhole_len + cap_ease)/2 × 0.966 − bind-off run)² − horizontal run²)`; 0.966 allows for the
+bell's curve. In the sample sizes the cap comes out 1.0–2.4 cm longer than the armhole; the seam check shows the exact figure.
 
 **Top-down** bodices start at the shoulder line: both shoulders are cast on either side of the neck, the shoulder
 slope is worked in short rows, the neck edges increase, and the centre is cast on to join.
@@ -194,6 +203,23 @@ gives the extra length and the % of ease.
 **Pick-up helper.** For a pick-up join: rows × ratio (default 3 sts per 4 rows, editable per join and project-wide)
 plus 1 stitch per bound-off, cast-on or held stitch. Shows each edge, the combined total, and the total rounded to
 multiples of 2 and 4, for every size.
+
+## Layout and size display
+
+The centre view has three tabs: **Schematic** (one panel), **Layout** (all panels) and **Measurements**.
+
+**Layout** draws every panel at one scale (cm, y up). Panels keep their position and rotation (`panel.layout`, cm,
+rotation 0/90/180/270 anticlockwise about the panel's centre line at its lower edge). Until a panel has been placed,
+the layout shows an automatic **T-shape**: back and front side by side on a common lower edge, a sleeve either side
+with its cap pointing at the body at underarm height, everything else underneath. Spacing leaves room for the largest
+size. Drag a panel to move it (snaps to 0.5 cm; one undo step per drag), ⟲ / ⟳ rotate the selected panel,
+**Auto-arrange (T)** re-applies the T-shape. Join edges are drawn in their tag colour and each seam's two sides are
+linked by a dashed line; click either to open the join.
+
+**Size display** (Schematic and Layout): **One size**, **Overlay** (selected sizes as nested outlines in a sequential
+light-to-dark ramp with a legend, aligned at the lower edge, waist, underarm, shoulder or top; the schematic overlay
+also shows each size's bust points and short-row wedges), or **Grid** (each selected size side by side at the same
+scale; in Layout, the whole arrangement per size). Choose the sizes with *Sizes ▾*. These are view settings, not undoable.
 
 ## Pattern sections
 

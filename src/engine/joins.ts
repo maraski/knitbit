@@ -1,6 +1,7 @@
 // Joins: measuring tagged edges, comparing seam sides, and suggesting pick-up counts.
 // Display only: nothing here changes a panel.
 
+import { sideEdgeLength } from './edges';
 import type { EdgeKey, EdgeRef, Id, Join, JoinTag, Project } from './model';
 import { computePanel, type ComputedPanel } from './panel';
 import { roundNearest } from './rounding';
@@ -83,40 +84,11 @@ export function measureEdge(
   const garmentTop = c.topDown ? 0 : c.totalRows;
 
   if (e.kind === 'side') {
-    const a = c.waypoints.find((w) => w.id === e.from);
-    const b = c.waypoints.find((w) => w.id === e.to);
-    if (!a || !b) return blankMeasure(label, 'A waypoint of this edge no longer exists.');
-    const r0 = Math.min(a.row, b.row);
-    const r1 = Math.max(a.row, b.row);
-    const pos = e.side === 'left' ? c.leftEdge : c.rightEdge;
-    // Horizontal steps (bind-off / cast-on / short-row turns) on this side within the range.
-    const steps = new Map<number, number>();
-    for (const seg of c.segments) {
-      for (const ev of seg[e.side].events) {
-        if (ev.row > r0 && ev.row <= r1 && (ev.kind === 'bindoff' || ev.kind === 'caston' || ev.kind === 'turn')) {
-          steps.set(ev.row, (steps.get(ev.row) ?? 0) + Math.abs(ev.delta));
-        }
-      }
-    }
-    // Length along the edge as drawn: slopes between shaping points, steps as horizontal runs.
-    const pts: [number, number][] = [[pos[r0], r0]];
-    let stepSts = 0;
-    for (let r = r0 + 1; r <= r1; r++) {
-      const step = steps.get(r) ?? 0;
-      if (step) {
-        stepSts += step;
-        pts.push([pos[r - 1], r - 1], [pos[r], r - 1]);
-      } else if (Math.abs(pos[r] - pos[r - 1]) > 1e-9) {
-        pts.push([pos[r], r]);
-      }
-    }
-    pts.push([pos[r1], r1]);
-    let length = 0;
-    for (let i = 1; i < pts.length; i++) length += Math.hypot((pts[i][0] - pts[i - 1][0]) / spc, (pts[i][1] - pts[i - 1][1]) / rpc);
-    const rows = r1 - r0;
-    const parts = [`${rows} rows`];
-    if (stepSts) parts.push(`${stepSts} sts bound off / cast on in steps`);
-    return { ok: true, label, rows, stitches: stepSts, lengthCm: length, pickup: roundNearest(rows * perRow) + stepSts, parts, rowRange: [r0, r1] };
+    const m = sideEdgeLength(c, e.side, e.from, e.to);
+    if (!m) return blankMeasure(label, 'A waypoint of this edge no longer exists.');
+    const parts = [`${m.rows} rows`];
+    if (m.stepStitches) parts.push(`${m.stepStitches} sts bound off / cast on in steps`);
+    return { ok: true, label, rows: m.rows, stitches: m.stepStitches, lengthCm: m.lengthCm, pickup: roundNearest(m.rows * perRow) + m.stepStitches, parts, rowRange: m.rowRange };
   }
 
   if (e.kind === 'bottom' || e.kind === 'top') {
@@ -225,11 +197,11 @@ export function joinReport(project: Project, join: Join, sizeId: Id, cache: Pane
   if (b && a.ok && b.ok && (Math.abs(diffCm) >= 0.3 || diffRows !== 0)) {
     const longer = diffCm >= 0 ? 'the first side' : 'the second side';
     const shorterRefs = diffCm >= 0 ? join.partner : join.edges;
-    // Row-for-row seams (e.g. side seams) get a rows suggestion; seams across differently shaped edges
-    // (a sleeve cap into an armhole) are compared by length.
+    // Row-for-row seams (one edge each side, e.g. side seams) get a rows suggestion; seams across differently
+    // shaped edges (a sleeve cap into an armhole) are compared by length.
     const allSides = [...join.edges, ...join.partner].every((r) => r.edge.kind === 'side');
     const rows = Math.abs(diffRows);
-    const rowForRow = allSides && rows > 0 && rows <= 0.1 * Math.max(a.rows, b.rows);
+    const rowForRow = allSides && a.measures.length === 1 && b.measures.length === 1 && rows > 0 && rows <= 0.1 * Math.max(a.rows, b.rows);
     if (rowForRow) {
       const stretch = shorterRefs.map((r) => ({ r, s: straightStretch(project, r, sizeId, cache) })).find((x) => x.s);
       const where = stretch?.s ? ` in its straight stretch between ${stretch.s.between} (rows ${stretch.s.from}–${stretch.s.to})` : '';

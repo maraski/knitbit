@@ -1,9 +1,9 @@
 # Knitbit: handoff
 
-_Last updated 2026-10-13. Git: initial commit `b99db67` on `main` (milestones 1–8). 148 tests passing; typecheck and build clean._
+_Last updated 2026-10-13. Git `main`: `b99db67` (milestones 1–8), `d1e84e3` (this handoff); milestone 9 and the
+fitted sleeve cap are in the working tree (uncommitted at the time of writing). 159 tests passing; typecheck and build clean._
 
-> **Milestone count:** the plan has **12 milestones**. **1–8 are complete**; **9–12 remain**. This document covers all
-> of them (the request said "3 completed / 3 remaining"; the real numbers are 8 and 4).
+> **Milestone count:** the plan has **12 milestones**. **1–9 are complete**; **10–12 remain** (stitch chart, export, polish).
 
 ---
 
@@ -45,8 +45,9 @@ computePanel(project, panel, sizeId)  → ComputedPanel   (engine/panel.ts)
   ├─ neckline, bust (engine/bust.ts), held short-row stitches
   └─ per-row edge positions, live stitch counts, outline polygon, markers, issues
   ▼
-React views: Schematic (SVG), MeasurementsView (grid), property panels, CheckPanel
-Cross-panel: projectChecks() (engine/checks.ts), joinReport() (engine/joins.ts)
+React views: Schematic (SVG), LayoutView (all panels), MeasurementsView (grid), property panels, CheckPanel
+Cross-panel: projectChecks() (engine/checks.ts), joinReport() (engine/joins.ts), arrangeT() (engine/layout.ts)
+App.tsx keeps one memoised computePanel cache per project version (computedFor) shared by every view.
 ```
 
 **Coordinate system (engine/panel.ts):** x in stitches from the panel centre line (negative = left edge as seen from
@@ -55,7 +56,7 @@ flagged `topDown`; the renderer flips them so every panel is drawn **upright**.
 
 ---
 
-## 2. Completed milestones (1–8)
+## 2. Completed milestones (1–9)
 
 | # | Milestone | Delivered |
 |---|---|---|
@@ -67,6 +68,8 @@ flagged `topDown`; the renderer flips them so every panel is drawn **upright**.
 | 6 | **Templates, join, sections** | Templates: back, front (round/V/square/boat), sleeve (set-in bell cap / drop / straight), rectangle, neckband; bottom-up or top-down. **In the round below a waypoint** (`panel.joinAt`): rounds, no selvedges, RS parity from first flat row, joined-panel round-count check. Pattern **sections** (rib bands) that round waypoints to their multiple, hatched on the schematic. Insert waypoint above/below. |
 | 7 | **Bust shaping helper** | `bust.ts`: agreed formulas shown with numbers plugged in, per-size overrides; `bust_w`, `bust_l`, `bust_side_w` names for waypoint expressions; methods: short-row wedge, horizontal dart (as short rows), vertical darts (fisheye), none; editable turns / dart rows per size; asymmetry, crowding and fit warnings; all-sizes table. Short-row **segments** keep stitches live (top-down short-row shoulders). Post-M7 fix: **underarm bind-off in one go** (`armhole_bo` 2 rows above underarm; at an in-the-round join both sides on the dividing round). New expression names `row_h`, `st_w`. |
 | 8 | **Joins (annotation only)** | `joins.ts`: tags (seam, pick up, live/held, bound off, cast on, free), edges (side between two waypoints, lower, upper, neckline), seam comparison (rows + length along edge, tolerance, suggestion), pick-up helper (ratio + 1:1 for horizontal stitches, totals, ×2/×4 rounding), notes; Joins sidebar tab, join editor, quick "Tag … edge" from properties, coloured join edges on the schematic, join checks. |
+| — | **Sleeve cap fitted to the armhole** (after M8) | `armhole_len` (from the sleeve's seam join, else Front + Back armholes, else an estimate); `cap_ease` estimate (1.5 cm); set-in `cap_top` height solved from it; `sqrt()` in expressions; `engine/edges.ts` shared edge-length measure. Cap now 1.0–2.4 cm longer than the armhole in all sizes, both directions (was 10–20 cm short). |
+| 9 | **Garment layout + size display modes** | `engine/layout.ts` (local cm frame, rotation/placement, `refHeight`/`alignShift`, T-shape `arrangeT` spaced for every size); **Layout** view: all panels at one scale, drag (one undo per drag), rotate ⟲/⟳, Auto-arrange, join-coloured edges, dashed seam links; **One size / Overlay / Grid** for Schematic and Layout with a sequential colour ramp, legend, size picker and alignment reference (lower edge, waist, underarm, shoulder, top); schematic overlay shows each size's bust points and short-row wedges. |
 
 ---
 
@@ -96,6 +99,12 @@ All confirmed with the user unless marked _(my call)_.
 - Vertical darts close above the bust inside the armhole area (`underarm.height + armhole_depth × 0.5`) because the bust point is only ~3 cm below the underarm in this sizing table; fall back to every-row shaping when RS rows run out.
 - Short-row turn zone `max(6, bust_l × 2.5)` cm so turns stay ≥ ~2 sts apart.
 - Set-in cap is a bell (fast/steady/fast, any-row decreases) with bind-off matching the body's.
+- **Cap height follows the armhole length** (user confirmed after M8): solved in closed form inside the waypoint
+  expression; the 0.966 factor was calibrated on the sample table so the bell's curved edge lands near `cap_ease`.
+- **Layout (my calls):** an unplaced project shows an on-the-fly T-shape that is only saved on the first drag or
+  Auto-arrange (opening a view never edits the project); T-shape spacing uses the union of all sizes so overlays don't
+  collide; rotation is in 90° steps about the panel's centre line at its lower edge; drags snap to 0.5 cm.
+- **Size display state** (mode, chosen sizes, alignment) is view state: saved in `knitbit.view.v1`, not undoable.
 
 **UI / tooling**
 - **Imperial shown as decimals**, not fractions. cm shown to 2 decimals (the table uses quarter cm).
@@ -132,18 +141,24 @@ All confirmed with the user unless marked _(my call)_.
     │   ├── symbols.ts, manual.ts  stitch symbols + hand-placed markers
     │   ├── bust.ts                bust helper
     │   ├── joins.ts               edge measuring, seam reports, pick-ups
+    │   ├── edges.ts               sideEdgeLength() along the drawn outline (shared by joins + armhole_len)
+    │   ├── layout.ts              local cm frame, rotate/place, refHeight/alignShift, arrangeT, isUnarranged
     │   ├── checks.ts              projectChecks, groupChecks
     │   ├── testFixtures.ts        fixtureProject() from the sample CSV, sizeId()
-    │   └── *.test.ts              148 tests
+    │   └── *.test.ts              159 tests (incl. armhole.test.ts, layout.test.ts)
     └── ui/
         ├── App.tsx                layout, view state (size, panel, centre view, selection), shortcuts, wiring
         ├── store.ts               useProjectStore (history + autosave), sampleProject()
         ├── edit.ts                produce(), editPanel/editWaypoint/editSegment
         ├── markerActions.ts       marker edits → undoable updates
+        ├── edgePaths.ts           edge polylines in stitch/row space (schematic + layout), edgeMidpoint
+        ├── sizeColors.ts          sequential size colour ramp
         ├── selection.ts           Selection union
         ├── format.ts, fileio.ts, app.css
         └── components/
-            ├── Schematic.tsx      ★ SVG renderer, zoom/pan, labels, markers, handles, bust, joins
+            ├── Schematic.tsx      ★ SVG renderer, zoom/pan, labels, markers, handles, bust, joins, overlay/grid modes
+            ├── LayoutView.tsx     all panels, drag/rotate/arrange, seam links, overlay; SizeGrid + SizeLegend
+            ├── SizeModeBar.tsx    One size / Overlay / Grid, size picker, align-at
             ├── Properties.tsx     ★ panel / waypoint / segment / neckline props, TagEdge, IssueList
             ├── BustProps.tsx, JoinProps.tsx, MeasurementProps.tsx (measurement + sizes)
             ├── MeasurementsView.tsx (grid), ImportDialog.tsx, CheckPanel.tsx
@@ -158,6 +173,9 @@ All confirmed with the user unless marked _(my call)_.
   (auto / steps / shortrows / straight / manual) simulating `leftEdge`/`rightEdge` per row, computes the neckline
   (bottom-up at the top, top-down at the cast-on), bust shaping (darts widen the edges), held short-row stitches,
   counts, outline, markers and issues. Waypoints can reference each other: `underarm.width`, `cap_top.height`.
+- **`armholeLength()` in `engine/panel.ts`**: resolves `armhole_len` for panels whose expressions use it, by computing
+  other panels (seam join partner, or Front/Back by template). A module-level `measuring` set guards against a panel
+  measuring itself. Every computation of a sleeve therefore also computes the body panels it measures.
 - **`engine/model.ts`**: change data shapes here first, then `schema.ts` validators, then README's JSON section.
 - **`ui/components/Schematic.tsx`**: all drawing is in screen pixels computed from world cm (`S(xSts, row)`), so text
   and strokes stay a constant size while zooming.
@@ -166,13 +184,15 @@ All confirmed with the user unless marked _(my call)_.
 - **Side-to-side panels**: geometry is rotated, but dimension labels, waypoint labels, hover readout, the bust overlay
   and section bands are only drawn for vertical panels (`vertical` flag in Schematic).
 - **`panel.shapingInset`** (2 sts in) is stored and editable but not used anywhere yet (intended for the chart).
-- **`panel.layout` {x, y, rotation}** is stored (default 0) but unused until the garment layout (M9).
+- **Layout**: no snapping to other panels, no free rotation (90° steps only), no lock/hide per panel.
 - **Short-row bust shaping is not drawn into the outline**: the extra centre-front length is shown as an overlay wedge
   with a label; the outline and all row numbers are counted at the side edges. The chart (M10) must insert the short
   rows (labelled SR1…SRn after `bust.shortRows.afterRow`).
-- **Overlay of bust shaping across sizes**: only a per-size table for now (overlay view is M9).
-- **Set-in sleeve cap is too short for the armhole** (see §5). Fix planned: derive cap height from armhole length.
-- **Sleeve template's `cap_height`** is a seeded estimate `armhole_depth × 0.65`; no link yet to the body panels.
+- **Overlay mode** in the schematic shows outlines, bust points and short-row wedges only: no dimension labels,
+  markers, handles or vertical-dart shapes. Side-to-side panels fall back to the single-size drawing.
+- **Fit in overlay** frames the unshifted outlines; with a non-hem alignment some sizes can extend past the edge (zoom out / pan).
+- **`cap_height`** (estimate `armhole_depth × 0.65`) is still seeded but no longer used by the set-in template.
+- **Drop-shoulder sleeve** top width (`armhole_depth × 2`) does not follow the body; only the set-in cap does.
 - **Joins don't auto-suggest** anything (by design); there is no "common joins" helper.
 
 ---
@@ -180,8 +200,10 @@ All confirmed with the user unless marked _(my call)_.
 ## 5. Known bugs, gotchas and workarounds
 
 **Template / design issues (visible in the check panel or join reports)**
-- **Sleeve cap edge ≈ 20–30 % shorter than front + back armhole** (M: 50 vs 61 cm; 4X: 64 vs 83 cm). Workaround: raise
-  `cap_height` per size or in its rule. Planned fix in §7.
+- **Sleeves added before the cap fix** keep `underarm.height + cap_height` (too short). Re-add the sleeve, or change
+  `cap_top`'s height to the fitted expression from the template.
+- **`armhole_len` picks Front/Back by `panel.template`** (`'front'`, `'back'`). Panels built from scratch or renamed
+  templates need a seam join containing the sleeve's edges instead. The source used is shown as a note per size.
 - **Front wider at the waist than at the underarm** when bust method is *none* or *vertical darts* (front waist gets
   `+ waist_shift`, the underarm only gets `bust_side_w` for short rows/horizontal dart). Expected with this table; looks odd.
 - **Panels added from templates before a fix keep the old shape** (e.g. the staircase armhole bind-off pre-M7 fix).
@@ -209,6 +231,9 @@ All confirmed with the user unless marked _(my call)_.
   migration was needed. An incompatible change must bump `SCHEMA_VERSION` and add `MIGRATIONS[1]`.
 
 **UI gotchas**
+- **Layout positions are absolute cm per panel** (not per size). Changing sizes doesn't move panels; very different
+  sizes can overlap a hand-made arrangement (Auto-arrange spaces for all sizes).
+- **The first drag in an unplaced layout saves every panel's T position** (so the others don't jump to the origin).
 - **Every edit recomputes every panel × size** (Checks bar, fit outlines, size tables). Fine at current size; the
   stitch chart may need memoisation per panel/size or a worker.
 - **History stores whole-project snapshots** (`structuredClone`, limit 200). Coalescing: same key within 1 s; keys
@@ -219,6 +244,8 @@ All confirmed with the user unless marked _(my call)_.
 - **Window confirm dialogs** are used for deletes and New (simple, but they block automated browser testing).
 - **Circular import** `BustProps.tsx` ↔ `Properties.tsx` (types + IssueList); harmless with ESM but don't add
   top-level side effects to either.
+
+- **Checks bar "notes"** now include one `armhole_len = … cm, from …` note per sleeve per size (notes are hidden by default).
 
 **Tooling**
 - Very new toolchain: **TypeScript 7** (`tsc -b`), **Vite 8**, **Vitest 5**, **React 19**, Node 24. `@types/node` is
@@ -259,26 +286,7 @@ All confirmed with the user unless marked _(my call)_.
 
 ## 7. Remaining milestones and next steps
 
-Also open from M8 (awaiting the user's answer): **make the set-in cap height follow the armhole length** (recommended).
-Concretely: in `templates.sleeve('set-in')` replace `cap_height` with a solver, or add an engine helper that, given the
-joined armhole edges (via a seam join), finds the cap height whose cap edge length ≈ armhole length + chosen ease.
-Simplest: expose a project-level computed name (e.g. `armhole_len` from the front+back armhole, evaluated outside the
-sleeve panel to avoid cycles) and a closed-form cap height from the cap's horizontal run.
-
-### M9: Garment layout view + size display modes
-1. Add a third centre view **Layout** (`App.tsx` `CenterView`). New `ui/components/LayoutView.tsx`.
-2. Draw every panel's `outline` at one shared scale (px per cm), translated by `panel.layout.x/y` (cm) and
-   `rotation`; draggable (pointer events → `update(…, 'drag:layout…')`), selecting a panel on click.
-3. **Auto-arrange "T-shape"**: back and front side by side at the same baseline, sleeves to the sides at underarm
-   height (rotate 90°), bands below. Write it as a pure function in a new `engine/layout.ts` (tested), writing `panel.layout`.
-4. Colour edges by join tag (reuse `JOIN_TAGS`, `panelJoins`), and draw **seam pair links** (dashed connector between
-   the midpoints of each seam's two sides; midpoints from the same edge path logic as `Schematic.joinEdgePts`; move that
-   logic into a shared helper, e.g. `ui/edgePaths.ts`).
-5. **Size display modes** for Schematic and Layout: *single* (current), *overlay* (selected sizes as nested outlines,
-   sequential colour ramp + legend, aligned at a chosen reference: hem / underarm / shoulder / waypoint name),
-   *side-by-side grid* (same scale). Add a size multi-select in the toolbar. For overlay use `allSizes` already computed in `App.tsx`.
-6. Overlay bust wedges/darts per size (brief requirement).
-7. Tests: layout arrange function; alignment offsets per reference.
+Done since the first handoff: the set-in cap follows the armhole (user confirmed) and M9 (layout + size display modes).
 
 ### M10: Stitch chart + symbols & legend
 1. New engine module `engine/chart.ts`: from `ComputedPanel` build a row-by-row model: for each knit row, the live
@@ -291,23 +299,28 @@ sleeve panel to avoid cycles) and a closed-form cap height from the cap's horizo
 3. Draw all symbols as SVG glyphs (`symbols.ts` has ids/labels/abbr; add glyph paths), custom symbol support (label +
    colour stored in project, e.g. `project.symbols`), **legend generated from symbols actually used**.
 4. Manual marker editing from the chart (reuse `markerActions`).
-5. Tests: chart row counts equal `computePanel` counts; short rows inserted where `bust.shortRows.afterRow` says; RS/WS
+5. Size display: offer One size / Grid for charts (overlay rarely makes sense for charts); reuse `SizeModeBar`.
+6. Tests: chart row counts equal `computePanel` counts; short rows inserted where `bust.shortRows.afterRow` says; RS/WS
    reading direction; in-the-round numbering; symbol legend contents.
 
 ### M11: Export (PDF + PNG)
 1. Add `jspdf` + `svg2pdf.js` (exact versions pinned).
 2. Export current view or **all sizes**: multi-page PDF with title, gauge, units, size, legend; **1:1 scale** (cm on
    paper) or fit-to-page; PNG at chosen resolution (serialize SVG → canvas → blob).
-3. Make Schematic/Chart/Layout renderable off-screen with explicit size and no interactive layers (handles, hover).
+3. Make Schematic/Chart/Layout renderable off-screen with explicit size and no interactive layers (handles, hover);
+   LayoutView/SizeGrid already compute everything from props, so they are the easiest to reuse.
 4. Use `fileio.downloadText` pattern for binary downloads.
 
 ### M12: Polish
-1. Sleeve cap height from armhole length (if not done earlier).
+1. Drop-shoulder sleeve top width from the body's armhole depth / armhole length (like the set-in cap).
 2. Waypoint rename propagation (like `renameMeasurement`, using `renameReferences` on `<old>.*` names) and dangling
    reference cleanup on waypoint delete (joins, `joinAt`).
 3. Side-to-side panels: labels/dimensions for rotated drawing.
-4. Keyboard shortcuts overview, confirm dialogs → in-app modals, empty states, performance (memoise per panel/size).
-5. Demo project; final README/JSON schema pass.
+4. Keyboard shortcuts overview, confirm dialogs → in-app modals, empty states, performance (App's `computedFor`
+   cache is per project version; the Checks bar and some property tables still call `computePanel` directly).
+5. Overlay mode: optional dimension labels for the current size; fit to the shifted outlines.
+6. Layout: snapping, lock/hide panels, labels with key widths.
+7. Demo project; final README/JSON schema pass.
 
 ---
 

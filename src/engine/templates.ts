@@ -26,7 +26,7 @@ export const TEMPLATES: { id: TemplateId; label: string; description: string; op
 export const TEMPLATE_MEASUREMENTS: Record<TemplateId, string[]> = {
   back: ['hem_to_waist', 'shoulder_slope', 'neck_width', 'back_neck_depth', 'waist_shift'],
   front: ['hem_to_waist', 'shoulder_slope', 'neck_width', 'front_neck_depth', 'back_neck_depth', 'waist_shift', 'bust_point_depth', 'apex_to_apex'],
-  sleeve: ['cap_height'],
+  sleeve: ['cap_height', 'cap_ease'],
   rectangle: [],
   neckband: ['neck_width', 'front_neck_depth'],
 };
@@ -110,7 +110,14 @@ export function sleeve(type: SleeveType = 'set-in', direction: KnitDirection = '
     const bo = newWaypoint('cap_bo', 'underarm.height + 2 * row_h', 'underarm.width - 0.4 * (upper_chest / 2 + ease / 2 - cross_chest_back - 1)');
     const low = newWaypoint('cap_low', 'cap_bo.height + 2', 'cap_bo.width - 5');
     const high = newWaypoint('cap_high', 'cap_top.height - 2', 'cap_top.width + 5');
-    const top = newWaypoint('cap_top', 'underarm.height + cap_height', 'max(8, bicep * 0.22)');
+    // Cap height fitted so both cap edges ≈ armhole_len + cap_ease: half of that per edge, minus the bind-off
+    // run, is the slope from cap_bo to cap_top (Pythagoras over its horizontal run). The bell's curved path is
+    // about 3.4 % longer than that straight slope, hence 0.966.
+    const top = newWaypoint(
+      'cap_top',
+      'cap_bo.height + sqrt(((armhole_len + cap_ease) / 2 * 0.966 - (underarm.width - cap_bo.width) / 2) ^ 2 - ((cap_bo.width - cap_top.width) / 2) ^ 2)',
+      'max(8, bicep * 0.22)',
+    );
     p.waypoints = [cuff, underarm, bo, low, high, top];
     const anyRow = { ...defaultAutoMethod(), side: 'any' as const };
     p.segments = [
