@@ -15,6 +15,7 @@ export type Id = string;
 export interface Size {
   id: Id;
   name: string; // e.g. "3XS", "M", "2X"
+  estimated?: boolean; // the sizing-table row is an estimate (its source column says "estimated")
 }
 
 /** How a measurement gets values for sizes that have neither a table value nor a manual override. */

@@ -4,6 +4,9 @@ A local-only visualizer for knitted panel shaping in women's tops: schematics, s
 shaping placement, bust shaping and stitch charts. It does not write pattern text and does not decide
 how panels are joined.
 
+**Sizing data credit:** Body measurements adapted from Ysolda Teague's designer size chart, ysolda.com/designer-size-chart.
+The adapted table (`samples/sizing_table_ysolda_cm.csv`) is for personal use and should not be redistributed as a chart.
+
 ## Running
 
 Requires Node 20+.
@@ -490,14 +493,21 @@ On the canvas: scroll to zoom, drag to pan, hover for row/stitch count, click an
 ### Import format
 
 One row per size, one column per measurement, plus one column with the size names. Values in cm or inches
-(chosen on import). Size order in the file becomes the grading order.
+(chosen on import). Size order in the file becomes the grading order. An optional `source` column says where a row
+came from (`table` or `estimated`); estimated rows get a subtle *est* mark on the size name.
+
+The sample table, `samples/sizing_table_ysolda_cm.csv` (and the same data as `.json`), has 11 sizes (4XS to 4X) of
+body measurements in cm, adapted from Ysolda Teague's designer size chart (2026, 5 cm grade version, pairs of grade
+columns averaged; 4XS estimated). Every column is described in the measurement dictionary
+(`src/engine/dictionary.ts`), which supplies the labels and the tooltips shown in the app. `legacy_…` columns are
+from an older table, kept for reference only and never used in calculations.
 
 **CSV** (comma, semicolon or tab separated; quoted fields allowed; a header row is required):
 
 ```csv
-size,upper_chest,bust,waist,full_hip,cross_chest_back,waist_to_armhole,back_waist_length,armhole_depth,bicep,wrist,arm_length
-3XS,73.5,78.75,71,84,29.5,18,34.75,16.75,25.75,14.75,44.5
-M,114.5,124.5,114.5,132,38.25,19.25,42,22.5,41.25,17,47
+size,source,upper_chest,bust_ab_cup,bust_cd_cup,…,waist,high_hip,…
+4XS,estimated,63.5,68.5,71,…,58.5,70,…
+M,table,114.5,119.5,122,…,109.25,120.5,…
 ```
 
 **JSON**, in any of these shapes:
@@ -510,9 +520,13 @@ M,114.5,124.5,114.5,132,38.25,19.25,42,22.5,41.25,17,47
 
 ### Column mapping
 
-The importer suggests a target for each column: the size column, an existing measurement (by name, label or a
-common synonym such as *hips → full_hip*, *high bust → upper_chest*, *cross back → cross_chest_back*), a new
-measurement named after the header, or *ignore* (for columns with no numbers). Every choice can be changed.
+The importer suggests a target for each column, and every choice can be changed:
+
+1. the size column, and the `source` column (*Row source*);
+2. `legacy_…` columns: *ignore*;
+3. **exact header names** from the measurement dictionary or the project's measurements;
+4. otherwise an existing measurement by label or a common synonym (*hips → full_hip*, *high bust → upper_chest*), a
+   new measurement named after the header, or *ignore* (for columns with no numbers).
 
 - **Update matching sizes, add new ones** (merge): sizes are matched by name, ignoring case. Values in the file replace
   table values for those sizes; blank cells leave existing values alone.

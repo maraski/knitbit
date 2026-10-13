@@ -17,13 +17,13 @@ import { dim } from './model';
 import { computePanel } from './panel';
 import { applyImport, readSizingTable, suggestMapping, validateMapping } from './sizing';
 import { backBodice } from './templates';
-import { fixtureProject, SAMPLE_CSV, sizeId } from './testFixtures';
+import { fixtureProject, LEGACY_CSV, sizeId } from './testFixtures';
 
 const values = (p: ReturnType<typeof fixtureProject>, name: string) => p.sizes.map((s) => resolveMeasurements(p, s.id).values[name]?.value);
 
 describe('reading sizing tables', () => {
   it('reads the sample CSV', () => {
-    const r = readSizingTable(SAMPLE_CSV, 'sizing_table_cm.csv');
+    const r = readSizingTable(LEGACY_CSV, 'sizing_table_cm.csv');
     expect(r.ok && r.format).toBe('csv');
     expect(r.ok && r.table.rows).toHaveLength(10);
   });

@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
+import { EstMark } from './EstMark';
+import { measurementTooltip } from '../../engine/dictionary';
 import { trendFlags, validateNewName, addMeasurement } from '../../engine/grading';
 import { resolveMeasurements, type ResolvedMeasurements } from '../../engine/measurements';
 import type { Id, Measurement, Project } from '../../engine/model';
@@ -77,6 +79,7 @@ export function MeasurementsView({ project, update, selected, onSelect, currentS
               {project.sizes.map((s) => (
                 <th key={s.id} className={`sz${s.id === currentSizeId ? ' current' : ''}`} onClick={() => onSize(s.id)} title="Show this size">
                   {s.name}
+                  <EstMark size={s} />
                   {s.id === project.baseSizeId && <span className="base-mark" title="Base size">●</span>}
                 </th>
               ))}
@@ -86,9 +89,9 @@ export function MeasurementsView({ project, update, selected, onSelect, currentS
             {project.measurements.map((m) => (
               <tr key={m.name} className={selected === m.name ? 'selected' : ''} onClick={() => onSelect(m.name)}>
                 <td className="sticky">
-                  <code>{m.name}</code>
+                  <code title={measurementTooltip(m)}>{m.name}</code>
                   {m.estimate && <span className="tag">est.</span>}
-                  <div className="muted small">{m.label}</div>
+                  <div className="muted small" title={measurementTooltip(m)}>{m.label}</div>
                 </td>
                 <td className="rule small muted">{ruleText(m, units)}</td>
                 {project.sizes.map((s) => {

@@ -7,7 +7,7 @@ import { canRedo, canUndo, commit, createHistory, redo, undo, type History } fro
 import type { Project } from '../engine/model';
 import { projectFromTable } from '../engine/seed';
 import { bodice, sleeve } from '../engine/templates';
-import sampleCsv from '../../samples/sizing_table_cm.csv?raw';
+import sampleCsv from '../../samples/sizing_table_ysolda_cm.csv?raw';
 
 export function sampleProject(): Project {
   const p = projectFromTable(parseCsv(sampleCsv), 'My top').project;

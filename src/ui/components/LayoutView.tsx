@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { EstMark } from './EstMark';
 import { JOIN_TAGS } from '../../engine/joins';
 import { alignShift, arrangeT, bbox, isUnarranged, localOutline, place, toLocal, type AlignRef, type Placement, type Rotation } from '../../engine/layout';
 import type { Id, Project } from '../../engine/model';
@@ -288,6 +289,7 @@ export function SizeLegend({ project, sizes, current, align }: { project: Projec
           <span key={s.id} className={s.id === current ? 'current' : ''}>
             <i style={{ background: sizeColor(i, project.sizes.length) }} />
             {s.name}
+            <EstMark size={s} />
           </span>
         ))}
     </div>

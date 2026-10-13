@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { EstMark } from './EstMark';
 import type { AlignRef } from '../../engine/layout';
 import type { Id, Project } from '../../engine/model';
 import { sizeColor } from '../sizeColors';
@@ -56,6 +57,7 @@ export function SizeModeBar({ project, mode, setMode, compare, setCompare, align
                   />
                   <i className="swatch" style={{ background: sizeColor(i, project.sizes.length) }} />
                   {s.name}
+                  <EstMark size={s} />
                 </label>
               ))}
             </div>

@@ -1,10 +1,11 @@
 // Seeding a project from a sizing table, plus estimated measurements the table doesn't have.
 
 import type { CsvTable } from './csv';
+import { DICTIONARY, isEstimatedSource, isLegacyColumn, SOURCE_COLUMN } from './dictionary';
 import { newId, newMeasurement, newProject, type Measurement, type Project, type Size } from './model';
 
-/** Labels and kinds for the standard sizing-table columns. */
-export const STANDARD_COLUMNS: Record<string, { label: string; kind: Measurement['kind'] }> = {
+/** Labels and kinds for the old (pre-Ysolda) sizing-table columns, still found in older projects and tables. */
+const OLD_COLUMNS: Record<string, { label: string; kind: Measurement['kind'] }> = {
   upper_chest: { label: 'Upper chest', kind: 'circumference' },
   bust: { label: 'Bust', kind: 'circumference' },
   waist: { label: 'Waist', kind: 'circumference' },
@@ -16,6 +17,34 @@ export const STANDARD_COLUMNS: Record<string, { label: string; kind: Measurement
   bicep: { label: 'Bicep', kind: 'circumference' },
   wrist: { label: 'Wrist', kind: 'circumference' },
   arm_length: { label: 'Arm length', kind: 'length' },
+};
+
+/** Labels and kinds for the standard sizing-table columns: the measurement dictionary plus the old names. */
+export const STANDARD_COLUMNS: Record<string, { label: string; kind: Measurement['kind'] }> = {
+  ...OLD_COLUMNS,
+  ...Object.fromEntries(DICTIONARY.map((d) => [d.name, { label: d.label, kind: d.kind }])),
+};
+
+/**
+ * Old measurement names the templates still use, derived from the new (Ysolda) columns when a table has them.
+ * Seeded only when every column they need is in the table and the old name is not.
+ */
+export const DERIVED_FROM_NEW: Record<string, { expr: string; needs: string[] }> = {
+  bust: { expr: 'bust_cd_cup', needs: ['bust_cd_cup'] },
+  full_hip: { expr: 'hip_seat_straight', needs: ['hip_seat_straight'] },
+  cross_chest_back: { expr: 'cross_back', needs: ['cross_back'] },
+  waist_to_armhole: {
+    expr: 'back_neck_drop + back_waist_length - shoulder_drop - armhole_depth',
+    needs: ['back_neck_drop', 'back_waist_length', 'shoulder_drop', 'armhole_depth'],
+  },
+  shoulder_width: { expr: 'back_shoulder_width', needs: ['back_shoulder_width'] },
+  neck_width: { expr: 'back_neck_width', needs: ['back_neck_width'] },
+  back_neck_depth: { expr: 'back_neck_drop', needs: ['back_neck_drop'] },
+  front_neck_depth: { expr: 'front_neck_drop', needs: ['front_neck_drop'] },
+  shoulder_slope: { expr: 'shoulder_drop', needs: ['shoulder_drop'] },
+  bust_point_depth: { expr: 'hps_to_apex', needs: ['hps_to_apex'] },
+  apex_to_apex: { expr: 'apex_to_apex_d', needs: ['apex_to_apex_d'] },
+  hem_to_waist: { expr: 'waist_to_high_hip', needs: ['waist_to_high_hip'] },
 };
 
 /**
@@ -73,14 +102,15 @@ export function projectFromTable(table: CsvTable, name = 'Untitled top', baseSiz
   const project = newProject(name);
   const sizeCol = table.headers.findIndex((h) => h.toLowerCase() === 'size');
   const col = sizeCol >= 0 ? sizeCol : 0;
+  const sourceCol = table.headers.findIndex((h, i) => i !== col && h.toLowerCase() === SOURCE_COLUMN);
 
-  const sizes: Size[] = table.rows.map((r) => ({ id: newId('size'), name: r[col] }));
+  const sizes: Size[] = table.rows.map((r) => ({ id: newId('size'), name: r[col], ...(sourceCol >= 0 && isEstimatedSource(r[sourceCol] ?? '') ? { estimated: true } : {}) }));
   project.sizes = sizes;
   project.baseSizeId = (sizes.find((s) => s.name === baseSizeName) ?? sizes[Math.floor(sizes.length / 2)])?.id ?? '';
 
   project.measurements = table.headers
     .map((h, i) => [h, i] as const)
-    .filter(([, i]) => i !== col)
+    .filter(([h, i]) => i !== col && i !== sourceCol && !isLegacyColumn(h))
     .map(([h, i]) => {
       const std = STANDARD_COLUMNS[h];
       const m = newMeasurement(h, std?.label ?? h, std?.kind ?? 'length');
@@ -94,6 +124,22 @@ export function projectFromTable(table: CsvTable, name = 'Untitled top', baseSiz
     });
 
   const existing = new Set(project.measurements.map((m) => m.name));
-  project.measurements.push(...estimatedMeasurements().filter((m) => !existing.has(m.name)));
+  const derive = (n: string) => {
+    const d = DERIVED_FROM_NEW[n];
+    return d && !existing.has(n) && d.needs.every((x) => existing.has(x)) ? d : null;
+  };
+  // Old names the templates use, from the new columns.
+  for (const n of ['bust', 'full_hip', 'cross_chest_back', 'waist_to_armhole']) {
+    const d = derive(n);
+    if (!d) continue;
+    const std = STANDARD_COLUMNS[n];
+    project.measurements.push({ ...newMeasurement(n, std.label, std.kind), rule: { type: 'expression', expr: d.expr }, note: `Derived from the sizing table: ${d.expr}.` });
+  }
+  const have = new Set(project.measurements.map((m) => m.name));
+  for (const e of estimatedMeasurements()) {
+    if (have.has(e.name)) continue;
+    const d = derive(e.name);
+    project.measurements.push(d ? { ...e, rule: { type: 'expression', expr: d.expr }, estimate: false, note: `Derived from the sizing table: ${d.expr}.` } : e);
+  }
   return { project, warnings };
 }

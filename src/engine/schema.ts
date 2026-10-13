@@ -219,7 +219,7 @@ const project = obj({
   name: str,
   units: oneOf('metric', 'imperial'),
   gauge: obj({ stitches: num, rows: num, basis: oneOf('10cm', '4in') }),
-  sizes: arr(obj({ id: str, name: str })),
+  sizes: arr(obj({ id: str, name: str, estimated: optional(bool) })),
   baseSizeId: str,
   measurements: arr(
     obj({

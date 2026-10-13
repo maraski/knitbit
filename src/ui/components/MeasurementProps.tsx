@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { EstMark } from './EstMark';
+import { CATEGORY_LABELS, dictionaryEntry } from '../../engine/dictionary';
 import { evaluate } from '../../engine/expr';
 import {
   addSize,
@@ -61,6 +63,7 @@ export function MeasurementProps({ ctx, name }: { ctx: Ctx; name: string }) {
   if (!m) return <SizesProps ctx={ctx} />;
 
   const units = project.units;
+  const dict = dictionaryEntry(m.name);
   const set = (fn: (mm: Measurement) => void, key: string | null = null) => update((p) => updateMeasurement(p, name, fn), key);
   const nameError = nameText !== name ? validateNewName(project, nameText, name) : null;
   const commitName = () => {
@@ -90,6 +93,12 @@ export function MeasurementProps({ ctx, name }: { ctx: Ctx; name: string }) {
   return (
     <div className="props">
       <h3>Measurement</h3>
+      {dict && (
+        <p className="small muted dict-def" title={dict.tooltip}>
+          <strong>{CATEGORY_LABELS[dict.category]}</strong> · {dict.tooltip}
+          {dict.legacy && <span className="tag">reference only</span>}
+        </p>
+      )}
       <div className="field">
         <label>Name (used in expressions)</label>
         <input value={nameText} onChange={(e) => setNameText(e.target.value.trim())} onBlur={commitName} onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()} />
@@ -258,7 +267,7 @@ function RuleSteps({ ctx, m, baseName }: { ctx: Ctx; m: Measurement; baseName: s
         <tbody>
           {project.sizes.map((s, i) => (
             <tr key={s.id}>
-              <td>{s.name}{s.id === project.baseSizeId ? ' ●' : ''}</td>
+              <td>{s.name}<EstMark size={s} />{s.id === project.baseSizeId ? ' ●' : ''}</td>
               <td>
                 {i === 0 ? (
                   <span className="muted">—</span>
@@ -312,6 +321,7 @@ export function SizesProps({ ctx }: { ctx: Ctx }) {
               title="Base size"
             />
             <input className="size-name" value={s.name} onChange={(e) => update((p) => renameSize(p, s.id, e.target.value), `size.${s.id}.name`)} />
+            <EstMark size={s} />
             <button className="icon" disabled={i === 0} onClick={() => update((p) => moveSize(p, s.id, -1))} title="Move up">↑</button>
             <button className="icon" disabled={i === project.sizes.length - 1} onClick={() => update((p) => moveSize(p, s.id, 1))} title="Move down">↓</button>
             <button
