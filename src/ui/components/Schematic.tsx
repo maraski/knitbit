@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { regionTransitions } from '../../engine/regionShaping';
+import { sizeText } from './EstMark';
 import { JOIN_TAGS } from '../../engine/joins';
 import { edgePaths } from '../edgePaths';
 import { alignShift, localOutline, toLocal, type AlignRef } from '../../engine/layout';
@@ -195,6 +197,8 @@ export function Schematic({ computed: c, direction, units, selection, onSelect, 
   const path = (pts: Pt[], close = false) => pts.map((p, i) => `${i ? 'L' : 'M'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join('') + (close ? 'Z' : '');
 
   const vertical = direction !== 'side-to-side';
+  const panelDef = project?.panels.find((p) => p.id === c.panelId);
+  const transitions = project && panelDef && mode === 'single' ? regionTransitions(project, panelDef, c) : [];
   const top = c.totalRows;
   // Waypoints from the garment's bottom to its top, whatever the knitting direction.
   const gw = c.topDown ? [...c.waypoints].reverse() : c.waypoints;
@@ -383,7 +387,7 @@ export function Schematic({ computed: c, direction, units, selection, onSelect, 
   if (mode === 'grid' && project) {
     const cells = compare.filter((x) => x.ok).map((x) => ({
       sid: x.sizeId,
-      name: project.sizes.find((z) => z.id === x.sizeId)?.name ?? '',
+      name: (() => { const s = project.sizes.find((z) => z.id === x.sizeId); return s ? sizeText(s, project) : ''; })(),
       shapes: [localOutline(x)],
       caption: `${x.counts[x.topDown ? x.totalRows : 0]} sts · ${x.totalRows} rows`,
     }));
@@ -488,6 +492,23 @@ export function Schematic({ computed: c, direction, units, selection, onSelect, 
                 <rect x={a.x} y={y0} width={b.x - a.x} height={h} fill="url(#section-hatch)" clipPath="url(#panel-clip)" />
                 <text x={(a.x + b.x) / 2} y={y0 + h / 2 + 4} textAnchor="middle" className="section-label">
                   {sec.name} · {sec.patternName} ({sec.multiple}{sec.offset ? ` + ${sec.offset}` : ''})
+                </text>
+              </g>
+            );
+          })}
+
+        {/* region sizing: segments running between regions that follow different sizes */}
+        {vertical &&
+          transitions.map((t) => {
+            const a = S(minX, t.lower.row);
+            const b = S(maxX, t.upper.row);
+            const y0 = Math.min(a.y, b.y);
+            const h = Math.max(2, Math.abs(b.y - a.y));
+            return (
+              <g key={t.lower.waypointId} className="region-band" pointerEvents="none">
+                <rect x={a.x} y={y0} width={b.x - a.x} height={h} clipPath="url(#panel-clip)" className="region-fill" />
+                <text x={(a.x + b.x) / 2} y={y0 + h / 2 + 4} textAnchor="middle" className="region-label">
+                  {t.label}
                 </text>
               </g>
             );

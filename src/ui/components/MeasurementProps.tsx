@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
-import { EstMark } from './EstMark';
+import { EstMark, sizeText } from './EstMark';
+import { REGIONS, regionOf } from '../../engine/regions';
 import { CATEGORY_LABELS, dictionaryEntry } from '../../engine/dictionary';
 import { evaluate } from '../../engine/expr';
 import {
+  addCustomSize,
   addSize,
   convertToIncrementRule,
   measurementUsage,
@@ -27,6 +29,7 @@ interface Ctx {
   update: (fn: (p: Project) => Project, key?: string | null) => void;
   sizeId: Id;
   onSelect: (name: string | null) => void;
+  onSize?: (id: Id) => void;
 }
 
 /** Number input in display units that stores cm. Local text so partial typing works. */
@@ -116,6 +119,12 @@ export function MeasurementProps({ ctx, name }: { ctx: Ctx; name: string }) {
             <option value="length">Length / width</option>
           </select>
         </div>
+      </div>
+      <div className="field">
+        <label>Body region (region sizing)</label>
+        <select value={regionOf(m)} onChange={(e) => set((mm) => void (mm.region = e.target.value === (dict?.region ?? 'upper') ? undefined : (e.target.value as Measurement['region'])))}>
+          {REGIONS.map((r) => <option key={r.id} value={r.id}>{r.label}{r.id === (dict?.region ?? 'upper') ? ' (default)' : ''}</option>)}
+        </select>
       </div>
       <label className="check">
         <input type="checkbox" checked={!!m.estimate} onChange={(e) => set((mm) => void (mm.estimate = e.target.checked))} />
@@ -349,6 +358,44 @@ export function SizesProps({ ctx }: { ctx: Ctx }) {
       </div>
       {dupe && <p className="err small">That size already exists.</p>}
       <p className="hint">New sizes get values from grading rules until you import or type them.</p>
+      <CustomSize ctx={ctx} />
     </div>
+  );
+}
+
+/** A one-off size ("me") seeded from a table row: its values become manual values you can edit in the grid. */
+function CustomSize({ ctx }: { ctx: Ctx }) {
+  const { project, update } = ctx;
+  const [name, setName] = useState('me');
+  const rows = project.sizes.filter((s) => !s.custom);
+  const [seed, setSeed] = useState<Id>(ctx.sizeId);
+  const seedId = project.sizes.some((s) => s.id === seed) ? seed : (rows[0]?.id ?? '');
+  const dupe = project.sizes.some((s) => s.name.toLowerCase() === name.trim().toLowerCase());
+  return (
+    <>
+      <h4>Custom size</h4>
+      <div className="inline">
+        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="me" style={{ width: 70 }} />
+        <span className="small muted">from</span>
+        <select value={seedId} onChange={(e) => setSeed(e.target.value)}>
+          {project.sizes.map((s) => <option key={s.id} value={s.id}>{sizeText(s)}</option>)}
+        </select>
+        <button
+          disabled={!name.trim() || dupe || !seedId}
+          onClick={() => {
+            const r = addCustomSize(project, name.trim(), seedId);
+            update(() => r.project);
+            ctx.onSize?.(r.size.id);
+          }}
+        >
+          Add
+        </button>
+      </div>
+      {dupe && <p className="err small">That size already exists.</p>}
+      <p className="hint">
+        Your own measurements: the row’s values are copied as manual values for the new size (type over them in the grid), with its
+        per-size panel overrides. Formulas recompute. Custom sizes are left out of the zigzag check and count as their row for size gaps.
+      </p>
+    </>
   );
 }

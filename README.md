@@ -376,6 +376,34 @@ not pattern text.
 A section is a band of rows in a different stitch pattern (hem rib, cuff, lace band) with its own stitch multiple.
 Waypoints inside a section round to that multiple (e.g. 2x2 rib: multiple of 4 + 2). Sections are hatched on the schematic.
 
+## Region sizing (upper body, lower body, sleeves)
+
+Off by default. Turn it on under Project → *Region sizing*; the toolbar then shows **Upper body / Lower body /
+Sleeves** pickers for the current size. Each region of each size follows the size itself until you pick another one
+(e.g. size M with the lower body from L). Turning region sizing off keeps the choices for later.
+
+- Regions come from the measurement dictionary. **Upper body**: upper chest, bust, cross back/front, shoulders, neck,
+  armhole, scye, HPS to apex, bust darts, and back waist length. **Lower body**: waist, high hip, hip/seat, waist to
+  hip lengths. **Sleeves**: bicep, wrist, arm length. Any measurement's region can be changed in its properties (custom
+  measurements default to upper body). Fit names follow their column (`hem_circ` is lower body).
+- A size's own manual values still win. Otherwise each measurement comes from its region's size (manual, table or rule
+  there); formula measurements such as `waist_shift` are worked out over the mixed values. Grid cells taken from
+  another size have a blue corner and say so on hover.
+- **Shaping between regions** is ordinary waypoint shaping: the waypoints' widths come from different sizes, so the
+  segment between them increases or decreases the difference. The schematic shades every segment that runs between
+  regions with different sizes and labels it in knitting order, e.g. *lower body L → upper body M: decrease 2 sts each
+  side* (bottom-up, size M in the sample) or *upper body M → lower body 1X: increase … sts each side* (top-down). A waypoint's region is the
+  region of the measurements in its width (through other waypoints' widths; formula measurements only count when
+  nothing else does), so the waist (`waist / 2 + ease / 2 − waist_shift`) is lower body and the sleeve cap's lower part,
+  sized from the body's armhole, is upper body + sleeves.
+- Sizes are labelled with their mix everywhere: *M · lower L* in the toolbar, overlay legend, grid and layout.
+- The zigzag check uses each size's own values.
+
+**Custom sizes** (Measurements → Sizes → *Custom size*): a one-off size such as "me", seeded from any table row. The
+row's values become **manual values** of the new size (the existing per-size overrides, so you type over them in the
+grid), its per-size panel overrides are copied, and formulas recompute. Custom sizes are marked *custom*, are left out
+of the zigzag check, count as their row when comparing sizes, and can use region sizing like any size.
+
 ## Measurements
 
 Each measurement resolves per size with this precedence (shown as a coloured dot in the UI):

@@ -3,11 +3,14 @@
 
 import { evaluate, resolveDefinitions, scopeFrom, type Result } from './expr';
 import { fitAliases } from './fit';
+import { regionOf, regionSources } from './regions';
 import type { DimExpr, Id, Measurement, Project, ValueSource } from './model';
 
 export interface ResolvedValue {
   value: number;
   source: ValueSource;
+  /** Region sizing: the size the value was taken from, when it isn't the size being resolved. */
+  from?: Id;
 }
 
 export interface ResolvedMeasurements {
@@ -47,13 +50,19 @@ export function resolveMeasurements(project: Project, sizeId: Id): ResolvedMeasu
   const base: Record<string, number> = easeScope(project);
   const defs: Record<string, string> = {};
 
+  // Region sizing: each measurement may come from another size (its region's source). This size's own manual
+  // value still wins; expression rules are evaluated over the mixed values.
+  const sources = regionSources(project, sizeId);
   for (const m of project.measurements) {
+    const src = sources[regionOf(m)];
+    const from = src !== sizeId ? { from: src } : {};
     if (sizeId in m.manual) values[m.name] = { value: m.manual[sizeId], source: 'manual' };
-    else if (sizeId in m.table) values[m.name] = { value: m.table[sizeId], source: 'table' };
+    else if (src in m.manual) values[m.name] = { value: m.manual[src], source: 'manual', ...from };
+    else if (src in m.table) values[m.name] = { value: m.table[src], source: 'table', ...from };
     else if (m.rule.type === 'increment') {
-      const v = incrementValue(project, m, sizeId);
+      const v = incrementValue(project, m, src);
       if (v === undefined) errors[m.name] = 'Base size not found';
-      else values[m.name] = { value: v, source: 'rule' };
+      else values[m.name] = { value: v, source: 'rule', ...from };
     } else if (m.rule.type === 'expression') {
       defs[m.name] = m.rule.expr;
     } else {
@@ -68,7 +77,10 @@ export function resolveMeasurements(project: Project, sizeId: Id): ResolvedMeasu
   const resolved = resolveDefinitions(defs, base);
   for (const name of Object.keys(defs)) {
     if (name in resolved.errors) errors[name] = resolved.errors[name];
-    else values[name] = { value: resolved.values[name], source: name in aliases ? (values[aliases[name]]?.source ?? 'rule') : 'rule' };
+    else if (name in aliases) {
+      const t = values[aliases[name]];
+      values[name] = { value: resolved.values[name], source: t?.source ?? 'rule', ...(t?.from ? { from: t.from } : {}) };
+    } else values[name] = { value: resolved.values[name], source: 'rule' };
   }
   return { values, errors };
 }

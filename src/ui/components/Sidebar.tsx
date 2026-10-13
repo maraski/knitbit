@@ -276,6 +276,19 @@ function ProjectSettings({ project, update }: Props) {
         </div>
       </div>
       <FitSettings project={project} update={update} />
+      <h4>Region sizing</h4>
+      <label className="check">
+        <input
+          type="checkbox"
+          checked={!!project.settings.regionSizing}
+          onChange={(e) => update((p) => ({ ...p, settings: { ...p.settings, regionSizing: e.target.checked } }))}
+        />
+        Upper body, lower body and sleeves sized separately
+      </label>
+      <p className="hint">
+        Each size gets Upper body / Lower body / Sleeves pickers (in the toolbar), all following the size itself until you change them.
+        The shaping between regions follows from the waypoints and is labelled on the schematic. Turning this off keeps your choices.
+      </p>
       <h4>Ease</h4>
       <div className="field">
         <label>Total circumference ease (cm)</label>

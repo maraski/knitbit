@@ -12,10 +12,19 @@ export type Id = string;
 
 // ---------- sizes & measurements ----------
 
+export type BodyRegion = 'upper' | 'lower' | 'sleeves';
+
 export interface Size {
   id: Id;
   name: string; // e.g. "3XS", "M", "2X"
   estimated?: boolean; // the sizing-table row is an estimate (its source column says "estimated")
+  /**
+   * Region sizing (when the project turns it on): which size each body region takes its measurements from.
+   * A missing region follows this size.
+   */
+  regions?: Partial<Record<BodyRegion, Id>>;
+  /** A one-off size (e.g. "me") with its own measurements, seeded from a table row (by size name). */
+  custom?: { seededFrom: string };
 }
 
 /** How a measurement gets values for sizes that have neither a table value nor a manual override. */
@@ -35,6 +44,8 @@ export interface Measurement {
   manual: Record<Id, number>; // per-size manual overrides (win over everything)
   estimate?: boolean; // seeded estimate the user should check
   note?: string;
+  /** Body region for region sizing; default from the measurement dictionary, else upper body. */
+  region?: BodyRegion;
 }
 
 /** Where a resolved measurement value came from (shown as a subtle indicator). */
@@ -304,6 +315,8 @@ export interface Join {
 export interface ProjectSettings {
   seamToleranceCm: number;
   pickUp: { stitches: number; rows: number }; // default 3 sts per 4 rows
+  /** Upper body, lower body and sleeves may take their measurements from different sizes (per size). Off by default. */
+  regionSizing?: boolean;
 }
 
 /** A stitch symbol the knitter defines (drawn as a coloured cell with its abbreviation). */

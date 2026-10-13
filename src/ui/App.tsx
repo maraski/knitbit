@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { sizeText } from './components/EstMark';
 import type { Id } from '../engine/model';
 import { buildScope } from '../engine/measurements';
 import { computePanel, resolvePanelDims, type ComputedPanel } from '../engine/panel';
@@ -258,7 +259,7 @@ export function App() {
               <>
                 <strong>{panel.name}</strong>
                 <span className="muted">
-                  · size {size?.name} · {panel.direction === 'top-down' ? 'row 1 at top' : 'row 1 at bottom'}
+                  · size {size ? sizeText(size, project) : ''} · {panel.direction === 'top-down' ? 'row 1 at top' : 'row 1 at bottom'}
                   {panel.direction === 'side-to-side' ? ' · worked side to side (chart in knitting orientation)' : ''}
                 </span>
               </>
@@ -267,7 +268,7 @@ export function App() {
               <>
                 <strong>{panel.name}</strong>
                 <span className="muted">
-                  · size {size?.name} · {panel.direction}
+                  · size {size ? sizeText(size, project) : ''} · {panel.direction}
                   {panel.direction === 'top-down' ? ' (row 1 at top)' : panel.direction === 'bottom-up' ? ' (row 1 at bottom)' : ''}
                   {panel.inTheRound ? ' · in the round' : panel.joinAt ? ' · round below ' + (panel.waypoints.find((w) => w.id === panel.joinAt)?.name ?? '?') : ''}
                 </span>
@@ -307,7 +308,7 @@ export function App() {
               onSelect={setSelection}
               markers={markers}
               update={update}
-              grid={sizeMode === 'grid' ? compare.map((sid) => ({ computed: computedFor(panel.id, sid), name: project.sizes.find((s) => s.id === sid)?.name ?? '' })) : undefined}
+              grid={sizeMode === 'grid' ? compare.map((sid) => ({ computed: computedFor(panel.id, sid), name: (() => { const s = project.sizes.find((z) => z.id === sid); return s ? sizeText(s, project) : ''; })() })) : undefined}
             />
           ) : center === 'measurements' ? (
             <MeasurementsView
@@ -380,9 +381,9 @@ export function App() {
             <JoinProps project={project} joinId={selection.id} sizeId={size?.id ?? ''} units={project.units} update={update} onDone={() => setSelection(PANEL_SELECTION)} />
           ) : center === 'measurements' ? (
             measSel ? (
-              <MeasurementProps ctx={{ project, update, sizeId: size?.id ?? '', onSelect: setMeasSel }} name={measSel} />
+              <MeasurementProps ctx={{ project, update, sizeId: size?.id ?? '', onSelect: setMeasSel, onSize: setSizeId }} name={measSel} />
             ) : (
-              <SizesProps ctx={{ project, update, sizeId: size?.id ?? '', onSelect: setMeasSel }} />
+              <SizesProps ctx={{ project, update, sizeId: size?.id ?? '', onSelect: setMeasSel, onSize: setSizeId }} />
             )
           ) : ctx ? (
             <Properties ctx={ctx} selection={selection} />

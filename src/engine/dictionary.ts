@@ -1,10 +1,10 @@
 // The measurement dictionary: every body measurement of the sizing table with its category, body region,
 // a short definition and the tooltip text shown in the UI. All values are body measurements in cm.
 
-import type { Measurement } from './model';
+import type { BodyRegion, Measurement } from './model';
 
+export type { BodyRegion };
 export type MeasurementCategory = 'circumference' | 'width' | 'length' | 'bust' | 'legacy';
-export type BodyRegion = 'upper' | 'lower' | 'sleeves';
 
 export interface MeasurementDef {
   name: string;

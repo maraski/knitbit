@@ -227,7 +227,7 @@ const project = obj({
   name: str,
   units: oneOf('metric', 'imperial'),
   gauge: obj({ stitches: num, rows: num, basis: oneOf('10cm', '4in') }),
-  sizes: arr(obj({ id: str, name: str, estimated: optional(bool) })),
+  sizes: arr(obj({ id: str, name: str, estimated: optional(bool), regions: optional(rec(str)), custom: optional(obj({ seededFrom: str })) })),
   baseSizeId: str,
   measurements: arr(
     obj({
@@ -243,6 +243,7 @@ const project = obj({
       manual: rec(num),
       estimate: optional(bool),
       note: optional(str),
+      region: optional(oneOf('upper', 'lower', 'sleeves')),
     }),
   ),
   ease: obj({ global: num, per: rec(num) }),
@@ -250,7 +251,7 @@ const project = obj({
   panels: arr(panel),
   joins: optional(arr(obj({ id: str, name: str, tag: oneOf('seam', 'pickup', 'live', 'bindoff', 'caston', 'free'), edges: arr(edgeRef), partner: arr(edgeRef), ratio: nullable(obj({ stitches: num, rows: num })), note: str }))),
   symbols: optional(arr(obj({ id: str, label: str, abbr: str, color: str, change: num }))),
-  settings: obj({ seamToleranceCm: num, pickUp: obj({ stitches: num, rows: num }) }),
+  settings: obj({ seamToleranceCm: num, pickUp: obj({ stitches: num, rows: num }), regionSizing: optional(bool) }),
   createdAt: str,
   updatedAt: str,
 });

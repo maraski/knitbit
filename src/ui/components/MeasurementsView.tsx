@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { fitAliases, fitAliasList } from '../../engine/fit';
-import { EstMark } from './EstMark';
+import { SizeName } from './EstMark';
 import { measurementTooltip } from '../../engine/dictionary';
 import { trendFlags, validateNewName, addMeasurement } from '../../engine/grading';
 import { resolveMeasurements, type ResolvedMeasurements } from '../../engine/measurements';
@@ -84,8 +84,7 @@ export function MeasurementsView({ project, update, selected, onSelect, currentS
               <th>Rule</th>
               {project.sizes.map((s) => (
                 <th key={s.id} className={`sz${s.id === currentSizeId ? ' current' : ''}`} onClick={() => onSize(s.id)} title="Show this size">
-                  {s.name}
-                  <EstMark size={s} />
+                  <SizeName project={project} size={s} />
                   {s.id === project.baseSizeId && <span className="base-mark" title="Base size">●</span>}
                 </th>
               ))}
@@ -105,7 +104,11 @@ export function MeasurementsView({ project, update, selected, onSelect, currentS
                   const err = resolved[s.id].errors[m.name];
                   const flag = flags[m.name]?.[s.id];
                   return (
-                    <td key={s.id} className={`cell${v ? ` src-${v.source}` : ''}${s.id === currentSizeId ? ' current' : ''}`} title={err ?? flag ?? (v ? `From ${v.source}` : '')}>
+                    <td
+                      key={s.id}
+                      className={`cell${v ? ` src-${v.source}` : ''}${v?.from ? ' from-other' : ''}${s.id === currentSizeId ? ' current' : ''}`}
+                      title={err ?? flag ?? (v ? `From ${v.source}${v.from ? ` of size ${project.sizes.find((z) => z.id === v.from)?.name} (region sizing; typing here sets this size's own value)` : ''}` : '')}
+                    >
                       <Cell
                         value={v ? v.value : null}
                         manual={v?.source === 'manual'}
