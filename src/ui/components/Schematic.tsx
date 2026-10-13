@@ -9,6 +9,7 @@ import type { Project } from '../../engine/model';
 import type { EdgeKey, Join, KnitDirection } from '../../engine/model';
 import type { ComputedPanel, ComputedSegment, Edge, Marker, ShapeEvent } from '../../engine/panel';
 import { SYMBOLS, type SymbolId } from '../../engine/symbols';
+import { wedgeBands } from '../../engine/bust';
 import type { MarkerActions } from '../markerActions';
 import type { Units } from '../../engine/units';
 import { len, rows as rowsText, sts } from '../format';
@@ -209,6 +210,14 @@ export function Schematic({ computed: c, direction, units, selection, onSelect, 
   /** Screen paths for an edge (one or more pieces). */
   const joinEdgePts = (edge: EdgeKey): Pt[][] => edgePaths(c, edge).map((piece) => piece.map((p) => S(p.x, p.y)));
 
+  /** Where a segment's shaping on this row is drawn: the side edge, or the princess line for incs/decs. */
+  const shapeX = (seg: ComputedSegment, edge: Edge, row: number, kind: ShapeEvent['kind']) => {
+    if (seg.placement !== 'edge' && c.princess && (kind === 'dec' || kind === 'inc')) {
+      return (c.leftEdge[row] + c.rightEdge[row]) / 2 + (edge === 'left' ? -1 : 1) * c.princess.offset;
+    }
+    return edge === 'left' ? c.leftEdge[row] : c.rightEdge[row];
+  };
+
   const onPointerDown = (e: React.PointerEvent) => {
     if (e.button !== 0) return;
     drag.current = { x: e.clientX, y: e.clientY, ox: v.ox, oy: v.oy, moved: false };
@@ -313,12 +322,10 @@ export function Schematic({ computed: c, direction, units, selection, onSelect, 
               <g key={x.sizeId} style={{ color }}>
                 <path d={path(pts, true)} className={`overlay-outline${x.sizeId === c.sizeId ? ' current' : ''}`} style={{ stroke: color }} />
                 {bust?.shortRows && (() => {
-                  const sr = bust.shortRows;
-                  const order = [...sr.pairs].sort((a, b) => a.leftUnworked - b.leftUnworked);
-                  const dir = x.topDown ? -1 : 1;
+                  const bands = wedgeBands(bust);
                   const at = (xs: number, row: number) => { const q = toLocal(x, { x: xs, y: row }); return L({ x: q.x, y: q.y + shift }); };
-                  const ptsL = order.flatMap((pr, k) => [at(pr.leftX, sr.afterRow + dir * 2 * k), at(pr.leftX, sr.afterRow + dir * 2 * (k + 1))]);
-                  const ptsR = order.flatMap((pr, k) => [at(pr.rightX, sr.afterRow + dir * 2 * k), at(pr.rightX, sr.afterRow + dir * 2 * (k + 1))]);
+                  const ptsL = bands.flatMap((w) => [at(w.leftX, w.from), at(w.leftX, w.to)]);
+                  const ptsR = bands.flatMap((w) => [at(w.rightX, w.from), at(w.rightX, w.to)]);
                   return <path d={path([...ptsL, ...ptsR.reverse()], true)} className="overlay-wedge" style={{ stroke: color, fill: color }} />;
                 })()}
                 {bust && [bust.apex.leftX, bust.apex.rightX].map((ax, k) => {
@@ -570,6 +577,18 @@ export function Schematic({ computed: c, direction, units, selection, onSelect, 
           </g>
         )}
 
+        {/* princess lines */}
+        {c.princess &&
+          c.segments
+            .filter((seg) => seg.placement !== 'edge')
+            .map((seg) =>
+              (['left', 'right'] as const).map((edge) => {
+                const pts: Pt[] = [];
+                for (let r = Math.max(0, seg.rowFrom - 1); r <= seg.rowTo; r++) pts.push(S(shapeX(seg, edge, r, 'dec'), r));
+                return <path key={`pl-${seg.fromWaypoint}-${edge}`} d={path(pts)} className="princess-line" />;
+              }),
+            )}
+
         {/* shaping markers */}
         <g className="markers">
           {c.markers.map((m, i) => (
@@ -584,16 +603,12 @@ export function Schematic({ computed: c, direction, units, selection, onSelect, 
           const parts: React.ReactNode[] = [];
           const sr = b.shortRows;
           if (sr && sr.pairs.length) {
-            // Extra rows exist between each pair's turns: a stepped wedge, 2 rows per pair.
-            const order = [...sr.pairs].sort((a, c2) => a.leftUnworked - c2.leftUnworked); // outermost first
+            // Extra rows exist between each pair's turns: a stepped wedge, 2 rows per pair, in working order
+            // (drawn over the rows that follow in knitting order).
+            const bands = wedgeBands(b);
             const base = sr.afterRow;
-            const dir = c.topDown ? -1 : 1;
-            const ptsL: Pt[] = [];
-            const ptsR: Pt[] = [];
-            order.forEach((pr, k) => {
-              ptsL.push(S(pr.leftX, base + dir * 2 * k), S(pr.leftX, base + dir * 2 * (k + 1)));
-              ptsR.push(S(pr.rightX, base + dir * 2 * k), S(pr.rightX, base + dir * 2 * (k + 1)));
-            });
+            const ptsL: Pt[] = bands.flatMap((w) => [S(w.leftX, w.from), S(w.leftX, w.to)]);
+            const ptsR: Pt[] = bands.flatMap((w) => [S(w.rightX, w.from), S(w.rightX, w.to)]);
             const poly = [...ptsL, ...[...ptsR].reverse()];
             parts.push(<path key="wedge" d={path(poly, true)} className={`bust-wedge${sr.kind === 'dart' ? ' dart' : ''}`} />);
             if (sr.kind === 'dart') {
@@ -602,16 +617,16 @@ export function Schematic({ computed: c, direction, units, selection, onSelect, 
                 const edgeX = side < 0 ? c.leftEdge[base] : c.rightEdge[base];
                 const tipX = (c.leftEdge[base] + c.rightEdge[base]) / 2 + side * sr.tipX;
                 const a = S(edgeX, base);
-                const t = S(tipX, base + dir * sr.extraRows / 2);
-                const z = S(edgeX, base + dir * sr.extraRows);
+                const t = S(tipX, base + sr.extraRows / 2);
+                const z = S(edgeX, base + sr.extraRows);
                 parts.push(<path key={`leg${side}`} d={`M${a.x},${a.y} L${t.x},${t.y} L${z.x},${z.y}`} className="dart-legs" />);
               }
             }
             if (sel) {
-              sr.pairs.forEach((pr) => {
-                const k = order.indexOf(pr);
-                const pl = S(pr.leftX, base + dir * (2 * k + 1));
-                const pr2 = S(pr.rightX, base + dir * (2 * k + 1));
+              bands.forEach((w, k) => {
+                const pr = sr.pairs[k];
+                const pl = S(w.leftX, w.from + 1);
+                const pr2 = S(w.rightX, w.from + 1);
                 parts.push(
                   <text key={`l${pr.index}`} x={pl.x - 4} y={pl.y + 3} textAnchor="end" className="turn-label">
                     SR{2 * pr.index - 1} · {pr.rsWorked}
@@ -622,7 +637,7 @@ export function Schematic({ computed: c, direction, units, selection, onSelect, 
                 );
               });
             }
-            const top = S((c.leftEdge[base] + c.rightEdge[base]) / 2, base + dir * sr.extraRows);
+            const top = S((c.leftEdge[base] + c.rightEdge[base]) / 2, c.topDown ? base : base + sr.extraRows);
             parts.push(
               <text key="srlabel" x={top.x} y={top.y - 4} textAnchor="middle" className="bust-label">
                 +{sr.extraRows} short rows after row {sr.afterRow} · +{len(sr.extraRows / rpc, units)} at centre front
@@ -667,11 +682,10 @@ export function Schematic({ computed: c, direction, units, selection, onSelect, 
           const seg = c.segments.find((s) => s.fromWaypoint === selection.fromWaypoint);
           if (!seg) return null;
           const editable: Edge = seg.mirror ? 'left' : selection.edge ?? 'left';
-          const pos = editable === 'left' ? c.leftEdge : c.rightEdge;
           return (
             <g className="handles">
               {seg[editable].events.map((ev, i) => {
-                const p = S(pos[ev.row], isStepLike(ev) ? ev.row - 1 : ev.row);
+                const p = S(shapeX(seg, editable, ev.row, ev.kind), isStepLike(ev) ? ev.row - 1 : ev.row);
                 const sel = selection.marker === i && selection.edge === editable;
                 const sym = SYMBOLS[ev.symbol as SymbolId];
                 return (
@@ -708,8 +722,7 @@ export function Schematic({ computed: c, direction, units, selection, onSelect, 
         {/* drag readout */}
         {dragRow !== null && markerDrag.current && (() => {
           const md = markerDrag.current;
-          const pos = md.edge === 'left' ? c.leftEdge : c.rightEdge;
-          const p = S(pos[dragRow], md.stepLike ? dragRow - 1 : dragRow);
+          const p = S(shapeX(md.seg, md.edge, dragRow, md.stepLike ? 'bindoff' : 'dec'), md.stepLike ? dragRow - 1 : dragRow);
           return (
             <text x={p.x + (md.edge === 'left' ? -12 : 12)} y={p.y - 8} className="drag-label" textAnchor={md.edge === 'left' ? 'end' : 'start'}>
               row {dragRow} · {sts(c.counts[dragRow])}

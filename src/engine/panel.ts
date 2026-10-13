@@ -12,8 +12,8 @@ import { distributeAuto, distributeFixed, distributeMixed, describeSchedule, eli
 import { resolveDefinitions } from './expr';
 import { rowsPerCm, stitchesPerCm } from './gauge';
 import { buildScope, evaluateDim } from './measurements';
-import type { Id, ManualEvent, Panel, Project, Segment, SegmentMethod } from './model';
-import { defaultAutoMethod } from './model';
+import type { Id, ManualEvent, Panel, Project, Segment, SegmentMethod, ShapingPlacement } from './model';
+import { defaultAutoMethod, defaultPrincess } from './model';
 import { roundNearest, roundRows, roundStitches, type RoundingResult } from './rounding';
 import { bustValues, computeBust, type ComputedBust } from './bust';
 import { sideEdgeLength } from './edges';
@@ -89,6 +89,8 @@ export interface ComputedSegment {
   rowTo: number; // last row (the upper waypoint's row)
   mirror: boolean;
   implicit: boolean; // no stored segment: default auto shaping was used
+  /** Where increases/decreases are worked; 'both' = 1 st at the edge, the rest at the princess line. */
+  placement: ShapingPlacement;
   left: EdgeShaping;
   right: EdgeShaping;
 }
@@ -138,6 +140,8 @@ export interface ComputedPanel {
   firstFlatRow: number;
   sections: ComputedSection[];
   bust: ComputedBust | null;
+  /** Princess lines, when any segment shapes at them: distance of each line from the row's centre (sts). */
+  princess: { offset: number; sides: 'both' | 'one' } | null;
   /** Stitches held (live but not worked) by short-row segments, per knit row. */
   held: number[];
   leftEdge: number[]; // x of the left edge at the end of each row (index = row; 0 = cast-on)
@@ -273,6 +277,7 @@ function emptyPanel(panel: Panel, sizeId: Id, spc: number, rpc: number, issues: 
     totalRows: 0,
     roundRows: null,
     firstFlatRow: 1,
+    princess: null,
     sections: [],
     bust: null,
     held: [],
@@ -457,6 +462,16 @@ export function computePanel(project: Project, panel: Panel, sizeId: Id): Comput
   const segments: ComputedSegment[] = [];
   const markers: Marker[] = [];
 
+  // Princess lines (only evaluated when a segment shapes at them).
+  const usesPrincess = panel.segments.some((x) => x.placement === 'princess' || x.placement === 'both');
+  let princessOut: ComputedPanel['princess'] = null;
+  if (usesPrincess) {
+    const pr = panel.princess ?? defaultPrincess();
+    const pv = evaluateDim(pr.position, sizeId, scope);
+    if (!pv.ok) issues.push({ severity: 'error', message: `Princess line position: ${pv.error}. Shaping stays at the side edges.`, ref: { kind: 'panel' } });
+    else princessOut = { offset: pv.value.value * spc, sides: pr.sides };
+  }
+
   for (let i = 0; i < wps.length - 1; i++) {
     const lo = wps[i]; // in knitting order
     const hi = wps[i + 1];
@@ -502,8 +517,17 @@ export function computePanel(project: Project, panel: Panel, sizeId: Id): Comput
     const manual = seg.manual[sizeId];
     const leftManual = manual?.left;
     const rightManual = manual?.right ?? (seg.mirror && leftManual ? mirrorManual(leftManual, seg.left, rc, span.from, Math.max(0, span.to - span.from + 1)) : undefined);
-    const leftMethod = seg.left;
-    const rightMethod = seg.mirror ? seg.left : seg.right;
+    // Princess placement: each line takes 2 sts per shaping row (both sides of the marker) or 1, plus 1 at the
+    // edge for 'both'. Only increases/decreases move; bind-off/cast-on/short-row steps stay at the edges.
+    const wanted: ShapingPlacement = princessOut ? (seg.placement ?? 'edge') : 'edge';
+    const pointsAt = (m: SegmentMethod) => (wanted === 'edge' || m.kind !== 'auto' ? 1 : (princessOut!.sides === 'both' ? 2 : 1) + (wanted === 'both' ? 1 : 0));
+    const atLine = (m: SegmentMethod): SegmentMethod => (m.kind === 'auto' && pointsAt(m) > 1 ? { ...m, perSide: m.perSide * pointsAt(m) } : m);
+    const placement: ShapingPlacement = wanted !== 'edge' && (seg.left.kind === 'auto' || seg.left.kind === 'straight' || leftManual) ? wanted : 'edge';
+    if (wanted !== 'edge' && placement === 'edge') {
+      issues.push({ severity: 'info', message: `${label}: princess lines only take increases/decreases; these steps stay at the side edges.`, ref });
+    }
+    const leftMethod = placement === 'edge' ? seg.left : atLine(seg.left);
+    const rightMethod = placement === 'edge' ? (seg.mirror ? seg.left : seg.right) : atLine(seg.mirror ? seg.left : seg.right);
 
     let left: EdgeShaping;
     let right: EdgeShaping;
@@ -514,8 +538,20 @@ export function computePanel(project: Project, panel: Panel, sizeId: Id): Comput
       right = rightManual ? manualEdge(rightManual, dR, span, issues, { ...ref, edge: 'right' }) : edgeShaping(rightMethod, dR, span, 'right', rc, issues, { ...ref, edge: 'right' }, label);
     }
 
-    for (const e of left.events) e.symbol ??= defaultSymbol(e.kind, 'left', e.delta);
-    for (const e of right.events) e.symbol ??= defaultSymbol(e.kind, 'right', e.delta);
+    // At a princess line the stored symbol is the stitch on the marker's outer side (towards the side edge),
+    // so the left line's outer stitch leans like a right edge's, and the other way round.
+    const lineSide = (edge: Edge): Edge => (placement === 'edge' ? edge : edge === 'left' ? 'right' : 'left');
+    // At a line each stitch is shaped singly (ssk / k2tog, not sk2p), whatever the marker's total.
+    const symDelta = (d: number) => (placement === 'edge' ? d : Math.sign(d));
+    for (const e of left.events) e.symbol ??= defaultSymbol(e.kind, lineSide('left'), symDelta(e.delta));
+    for (const e of right.events) e.symbol ??= defaultSymbol(e.kind, lineSide('right'), symDelta(e.delta));
+    if (placement !== 'edge') {
+      const full = princessOut!.sides === 'both' ? 2 + (placement === 'both' ? 1 : 0) : 1 + (placement === 'both' ? 1 : 0);
+      const odd = [...left.events, ...right.events].filter((e) => (e.kind === 'dec' || e.kind === 'inc') && Math.abs(e.delta) < full && full > 1);
+      if (odd.length) {
+        issues.push({ severity: 'info', message: `${label}: the stitch count doesn't divide evenly over the shaping points; row ${odd.map((e) => e.row).filter((r, i, a) => a.indexOf(r) === i).join(', ')} shapes one side of the marker only.`, ref });
+      }
+    }
 
     // Simulate the rows of this segment.
     const byRow = (evs: ShapeEvent[]) => {
@@ -531,8 +567,11 @@ export function computePanel(project: Project, panel: Panel, sizeId: Id): Comput
       leftEdge[r] = L;
       rightEdge[r] = R;
     }
-    for (const e of left.events) markers.push({ edge: 'left', row: e.row, x: leftEdge[e.row], delta: e.delta, kind: e.kind, segment: i });
-    for (const e of right.events) markers.push({ edge: 'right', row: e.row, x: rightEdge[e.row], delta: e.delta, kind: e.kind, segment: i });
+    const lineX = (edge: Edge, r: number) => (leftEdge[r] + rightEdge[r]) / 2 + (edge === 'left' ? -1 : 1) * princessOut!.offset;
+    const markX = (edge: Edge, e: ShapeEvent) =>
+      placement !== 'edge' && (e.kind === 'dec' || e.kind === 'inc') ? lineX(edge, e.row) : edge === 'left' ? leftEdge[e.row] : rightEdge[e.row];
+    for (const e of left.events) markers.push({ edge: 'left', row: e.row, x: markX('left', e), delta: e.delta, kind: e.kind, segment: i });
+    for (const e of right.events) markers.push({ edge: 'right', row: e.row, x: markX('right', e), delta: e.delta, kind: e.kind, segment: i });
 
     hi.actualStitches = R - L;
     if (hi.actualStitches !== hi.stitches) {
@@ -542,7 +581,17 @@ export function computePanel(project: Project, panel: Panel, sizeId: Id): Comput
         ref: { kind: 'waypoint', id: hi.id },
       });
     }
-    segments.push({ fromWaypoint: gLower.id, toWaypoint: gUpper.id, index: i, rowFrom: span.from, rowTo: span.to, mirror: seg.mirror, implicit: !stored, left, right });
+    segments.push({ fromWaypoint: gLower.id, toWaypoint: gUpper.id, index: i, rowFrom: span.from, rowTo: span.to, mirror: seg.mirror, implicit: !stored, placement, left, right });
+  }
+
+  if (princessOut) {
+    for (const seg of segments) {
+      if (seg.placement === 'edge') continue;
+      const narrowest = Math.min(...Array.from({ length: Math.max(1, seg.rowTo - seg.rowFrom + 1) }, (_, k) => (rightEdge[seg.rowFrom + k] - leftEdge[seg.rowFrom + k]) / 2));
+      if (princessOut.offset < 2 || princessOut.offset > narrowest - 3) {
+        issues.push({ severity: 'warning', message: `Princess lines are ${roundNearest(princessOut.offset)} sts from the centre, too close to the ${princessOut.offset < 2 ? 'centre' : 'side edges'} (half width ${roundNearest(narrowest)} sts).`, ref: { kind: 'segment', fromWaypoint: seg.fromWaypoint } });
+      }
+    }
   }
 
   // ---- neckline ----
@@ -698,6 +747,7 @@ export function computePanel(project: Project, panel: Panel, sizeId: Id): Comput
     firstFlatRow,
     sections,
     bust,
+    princess: princessOut,
     held,
     leftEdge,
     rightEdge,

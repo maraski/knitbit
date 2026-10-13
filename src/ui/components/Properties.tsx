@@ -1,5 +1,5 @@
 import type { DimExpr, Id, Panel, Project, SegmentMethod, Waypoint } from '../../engine/model';
-import { defaultAutoMethod, defaultBust, dim, newId, newWaypoint } from '../../engine/model';
+import { defaultAutoMethod, defaultBust, defaultPrincess, dim, newId, newWaypoint, type ShapingPlacement } from '../../engine/model';
 import { BustProps } from './BustProps';
 import { JOIN_TAGS, sameEdge } from '../../engine/joins';
 import type { EdgeKey, JoinTag } from '../../engine/model';
@@ -605,6 +605,7 @@ function EditableEvents({ ctx, seg, edge }: { ctx: PropsContext; seg: ComputedSe
               <td>
                 <select value={e.symbol ?? ''} onChange={(ev) => m.setSymbol(seg.fromWaypoint, edge, i, ev.target.value)}>
                   {MARKER_SYMBOLS.map((id) => <option key={id} value={id}>{SYMBOLS[id].abbr} – {SYMBOLS[id].label}</option>)}
+                  {(ctx.project.symbols ?? []).map((cs) => <option key={cs.id} value={cs.id}>{cs.abbr} – {cs.label} ({signed(cs.change)})</option>)}
                 </select>
               </td>
               <td>
@@ -630,6 +631,69 @@ function EditableEvents({ ctx, seg, edge }: { ctx: PropsContext; seg: ComputedSe
 
 function sameEvents(a: EdgeShaping, b: EdgeShaping): boolean {
   return a.events.length === b.events.length && a.events.every((e, i) => e.row === b.events[i].row && e.delta === b.events[i].delta);
+}
+
+const PLACEMENTS: Record<ShapingPlacement, string> = {
+  edge: 'Side edges',
+  princess: 'Princess lines',
+  both: 'Side edges + princess lines',
+};
+
+/** Where this segment's increases/decreases go, and the panel's princess lines. */
+function PlacementEditor({ ctx, seg }: { ctx: PropsContext; seg: ComputedSegment }) {
+  const { panel, update } = ctx;
+  const stored = panel.segments.find((s) => s.fromWaypoint === seg.fromWaypoint);
+  const placement = stored?.placement ?? 'edge';
+  const pr = panel.princess ?? defaultPrincess();
+  const common = { sizeId: ctx.sizeId, sizeName: ctx.sizeName, scope: ctx.scope, units: ctx.units };
+  const setPr = (fn: (x: NonNullable<Panel['princess']>) => void, key: string | null = null) =>
+    update((p) => editPanel(p, panel.id, (pn) => {
+      pn.princess ??= defaultPrincess();
+      fn(pn.princess);
+    }), key);
+  const off = ctx.computed.princess?.offset;
+  return (
+    <>
+      <div className="field">
+        <label>Shape at</label>
+        <select
+          value={placement}
+          onChange={(e) =>
+            update((p) =>
+              editPanel(editSegment(p, panel.id, seg.fromWaypoint, (s) => void (s.placement = e.target.value as ShapingPlacement)), panel.id, (pn) => {
+                pn.princess ??= defaultPrincess();
+              }),
+            )
+          }
+        >
+          {(Object.keys(PLACEMENTS) as ShapingPlacement[]).map((k) => <option key={k} value={k}>{PLACEMENTS[k]}</option>)}
+        </select>
+      </div>
+      {placement !== 'edge' && (
+        <div className="subtle-box">
+          <ExprField
+            label="Princess lines: distance from centre (each side)"
+            value={pr.position}
+            onChange={(d, k) => setPr((x) => void (x.position = d), `princess.${panel.id}.${k}`)}
+            fieldKey="princess"
+            {...common}
+            detail={off !== undefined && <>→ {Math.round(off * 10) / 10} sts from centre</>}
+          />
+          <div className="field">
+            <label>At each line</label>
+            <select value={pr.sides} onChange={(e) => setPr((x) => void (x.sides = e.target.value as 'both' | 'one'))}>
+              <option value="both">Both sides of the marker (2 sts per row)</option>
+              <option value="one">One side (1 st per row)</option>
+            </select>
+          </div>
+          <p className="hint">
+            Shared by every segment of {panel.name} shaped at princess lines. The side edges stay straight in the fabric; the schematic still shows the
+            finished width. An odd stitch is worked on one side of the marker only.{stored && Object.keys(stored.manual).length ? ' Hand-placed markers keep their stitch counts: reset them after changing this.' : ''}
+          </p>
+        </div>
+      )}
+    </>
+  );
 }
 
 function SegmentProps({ ctx, seg }: { ctx: PropsContext; seg: ComputedSegment }) {
@@ -663,6 +727,7 @@ function SegmentProps({ ctx, seg }: { ctx: PropsContext; seg: ComputedSegment })
         />
         Same on both edges
       </label>
+      <PlacementEditor ctx={ctx} seg={seg} />
       {hasManual ? (
         <p className="notice-inline">
           Hand-placed markers for {ctx.sizeName}.{' '}

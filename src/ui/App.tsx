@@ -5,6 +5,7 @@ import { computePanel, resolvePanelDims, type ComputedPanel } from '../engine/pa
 import type { AlignRef } from '../engine/layout';
 import { LayoutView } from './components/LayoutView';
 import { SizeModeBar, type SizeMode } from './components/SizeModeBar';
+import { ChartView } from './components/ChartView';
 import { loadProject, serializeProject } from '../engine/schema';
 import { CheckPanel } from './components/CheckPanel';
 import { ImportDialog } from './components/ImportDialog';
@@ -22,7 +23,7 @@ import { PANEL_SELECTION, type Selection } from './selection';
 import { sampleProject, useProjectStore, type Notice } from './store';
 
 const VIEW_KEY = 'knitbit.view.v1';
-type CenterView = 'schematic' | 'layout' | 'measurements';
+type CenterView = 'schematic' | 'chart' | 'layout' | 'measurements';
 
 function readView(): { sizeId?: Id; panelId?: Id; center?: CenterView; mode?: SizeMode; compare?: Id[]; align?: AlignRef } {
   try {
@@ -85,7 +86,7 @@ export function App() {
   const selectPanel = (id: Id | null) => {
     setPanelId(id);
     setSelection(PANEL_SELECTION);
-    setCenter('schematic');
+    setCenter((v) => (v === 'chart' ? 'chart' : 'schematic'));
   };
 
   const save = () => downloadText(`${safeFilename(project.name)}.knitbit.json`, serializeProject(project));
@@ -187,16 +188,35 @@ export function App() {
           <div className="canvas-title">
             <div className="segmented">
               <button className={center === 'schematic' ? 'active' : ''} onClick={() => setCenter('schematic')}>Schematic</button>
+              <button className={center === 'chart' ? 'active' : ''} onClick={() => setCenter('chart')}>Chart</button>
               <button className={center === 'layout' ? 'active' : ''} onClick={() => setCenter('layout')}>Layout</button>
               <button className={center === 'measurements' ? 'active' : ''} onClick={() => setCenter('measurements')}>Measurements</button>
             </div>
             {center !== 'measurements' && (
-              <SizeModeBar project={project} mode={sizeMode} setMode={setSizeMode} compare={compare} setCompare={setCompare} align={align} setAlign={setAlign} />
+              <SizeModeBar
+                project={project}
+                mode={center === 'chart' && sizeMode === 'overlay' ? 'single' : sizeMode}
+                setMode={setSizeMode}
+                compare={compare}
+                setCompare={setCompare}
+                align={align}
+                setAlign={setAlign}
+                modes={center === 'chart' ? ['single', 'grid'] : undefined}
+              />
             )}
             {center === 'layout' && (
               <>
                 <span className="spacer" />
                 <button onClick={() => window.dispatchEvent(new Event('knitbit:fit'))} title="Fit (F)">Fit</button>
+              </>
+            )}
+            {center === 'chart' && panel && (
+              <>
+                <strong>{panel.name}</strong>
+                <span className="muted">
+                  · size {size?.name} · {panel.direction === 'top-down' ? 'row 1 at top' : 'row 1 at bottom'}
+                  {panel.direction === 'side-to-side' ? ' · worked side to side (chart in knitting orientation)' : ''}
+                </span>
               </>
             )}
             {center === 'schematic' && panel && (
@@ -228,6 +248,17 @@ export function App() {
                 setSelection(PANEL_SELECTION);
               }}
               onSelectJoin={(id) => setSelection({ kind: 'join', id })}
+            />
+          ) : center === 'chart' && panel && computed ? (
+            <ChartView
+              project={project}
+              panel={panel}
+              computed={computed}
+              selection={selection}
+              onSelect={setSelection}
+              markers={markers}
+              update={update}
+              grid={sizeMode === 'grid' ? compare.map((sid) => ({ computed: computedFor(panel.id, sid), name: project.sizes.find((s) => s.id === sid)?.name ?? '' })) : undefined}
             />
           ) : center === 'measurements' ? (
             <MeasurementsView

@@ -1,9 +1,10 @@
 # Knitbit: handoff
 
-_Last updated 2026-10-13. Git `main`: `b99db67` (milestones 1–8), `d1e84e3` (this handoff); milestone 9 and the
-fitted sleeve cap are in the working tree (uncommitted at the time of writing). 159 tests passing; typecheck and build clean._
+_Last updated 2026-10-13. Git `main`: `b99db67` (milestones 1–8), `d1e84e3` (first handoff), `ea7908c` (fitted cap +
+M9); milestone 10 and the two shaping options below are in the working tree (uncommitted at the time of writing).
+180 tests passing; typecheck and build clean._
 
-> **Milestone count:** the plan has **12 milestones**. **1–9 are complete**; **10–12 remain** (stitch chart, export, polish).
+> **Milestone count:** the plan has **12 milestones**. **1–10 are complete**; **11–12 remain** (export, polish).
 
 ---
 
@@ -56,7 +57,7 @@ flagged `topDown`; the renderer flips them so every panel is drawn **upright**.
 
 ---
 
-## 2. Completed milestones (1–9)
+## 2. Completed milestones (1–10)
 
 | # | Milestone | Delivered |
 |---|---|---|
@@ -70,6 +71,8 @@ flagged `topDown`; the renderer flips them so every panel is drawn **upright**.
 | 8 | **Joins (annotation only)** | `joins.ts`: tags (seam, pick up, live/held, bound off, cast on, free), edges (side between two waypoints, lower, upper, neckline), seam comparison (rows + length along edge, tolerance, suggestion), pick-up helper (ratio + 1:1 for horizontal stitches, totals, ×2/×4 rounding), notes; Joins sidebar tab, join editor, quick "Tag … edge" from properties, coloured join edges on the schematic, join checks. |
 | — | **Sleeve cap fitted to the armhole** (after M8) | `armhole_len` (from the sleeve's seam join, else Front + Back armholes, else an estimate); `cap_ease` estimate (1.5 cm); set-in `cap_top` height solved from it; `sqrt()` in expressions; `engine/edges.ts` shared edge-length measure. Cap now 1.0–2.4 cm longer than the armhole in all sizes, both directions (was 10–20 cm short). |
 | 9 | **Garment layout + size display modes** | `engine/layout.ts` (local cm frame, rotation/placement, `refHeight`/`alignShift`, T-shape `arrangeT` spaced for every size); **Layout** view: all panels at one scale, drag (one undo per drag), rotate ⟲/⟳, Auto-arrange, join-coloured edges, dashed seam links; **One size / Overlay / Grid** for Schematic and Layout with a sequential colour ramp, legend, size picker and alignment reference (lower edge, waist, underarm, shoulder, top); schematic overlay shows each size's bust points and short-row wedges. |
+| — | **Shaping options** (after M10, user request) | **Bust short rows bust point → side seam** (`bust.shortRows.span = 'apex-to-side'`, `start = 'apex'`; turns at the apex then every `step` = floor(side sts ÷ turns per side) sts outwards, per the starcrossed knits method; top-down lengthening / bottom-up shortening mirror; preset button; error when step < 1). `wedgeBands()` draws the wedge in working order. **Princess-seam shaping** (`Segment.placement` edge/princess/both, `Panel.princess` {position Dim, default `apex_to_apex / 2`, sides both/one}); `computePanel` multiplies auto `perSide` by the shaping points, puts markers on the lines (`ComputedPanel.princess.offset`), odd stitch one-sided with an info note; `manual.shapingPoints` scales hand-placed marker deltas; chart draws stitch + mirror either side of each line. Tests in `shapingOptions.test.ts`. |
+| 10 | **Stitch chart + symbols & legend** | `engine/chart.ts` (`buildChart`: per knit row a cell array, `''` outside / `'k'` plain / `'h'` held / symbol id; bind-offs and cast-ons drawn in their row; shaping at `shapingInset`; neck split + mirrored neck shaping; vertical-dart symbols at the dart lines; **bust short rows inserted after `afterRow`** as SR1…SRn with turns and held stitches; RS/WS/round reading direction; worked + live counts; repeats from sections; legend of used symbols; `collapseColumns`). `ui/glyphs.tsx` (CYC-style SVG glyphs in a unit square, cell tints, low-zoom band colours, legend swatch). **Chart** tab (`ChartView.tsx`): upright like the schematic, row-virtualised, plain stitches drawn as runs over an SVG grid pattern, ⌘-scroll zoom, Fit, collapse plain middle, row/stitch numbers, count column, hover readout; select/drag/double-click-add/Delete markers via `markerActions`; One size / Grid (shared scale). **Custom symbols** (`project.symbols`: label, abbr, colour, stitch change) editable in the legend, offered in the marker Stitch menu, `markerDelta` honours them. |
 
 ---
 
@@ -109,6 +112,15 @@ All confirmed with the user unless marked _(my call)_.
 **UI / tooling**
 - **Imperial shown as decimals**, not fractions. cm shown to 2 decimals (the table uses quarter cm).
 - **Undo covers project edits only**, not view state (size, panel, zoom). Units toggle *is* a project edit.
+- **Bust short rows, bust point → side seam** (user's usual top-down method, from the starcrossed knits article):
+  optional, not the default; first turn exactly at the bust point (not ½" outside); bottom-up mirror included.
+- **Princess lines** run through the bust points by default (`apex_to_apex / 2` from centre) on every panel; an odd
+  stitch is worked one-sided on one row rather than rounding the waist width (user chose this).
+- **Chart conventions (M10)**: a row shows the stitches on the needle at the *end* of the row; bound-off stitches
+  appear in the row that binds them off; increases/decreases sit `shapingInset` sts in from the edge; chart drawn
+  upright (same orientation as the schematic, matching the M3 "keep it upright" decision); bust short rows are extra
+  chart rows (SRn) that don't take a knit-row number; stitches numbered from the right. Overlay is not offered for
+  charts (One size / Grid only). Custom symbols carry their own stitch change so they can be shaping markers.
 - **Size overlay colours: sequential ramp** (for M9). **Stitch chart: full chart with option to collapse plain middle** (M10). **Target browser: Chrome.** **Laptop screens only.**
 - Few dependencies: React only at runtime; jsPDF + svg2pdf.js allowed for export (M11).
 
@@ -143,9 +155,10 @@ All confirmed with the user unless marked _(my call)_.
     │   ├── joins.ts               edge measuring, seam reports, pick-ups
     │   ├── edges.ts               sideEdgeLength() along the drawn outline (shared by joins + armhole_len)
     │   ├── layout.ts              local cm frame, rotate/place, refHeight/alignShift, arrangeT, isUnarranged
+    │   ├── chart.ts               buildChart (cells per row, SR rows, refs to markers, repeats, legend), collapseColumns
     │   ├── checks.ts              projectChecks, groupChecks
     │   ├── testFixtures.ts        fixtureProject() from the sample CSV, sizeId()
-    │   └── *.test.ts              159 tests (incl. armhole.test.ts, layout.test.ts)
+    │   └── *.test.ts              180 tests (incl. armhole, layout, chart, shapingOptions)
     └── ui/
         ├── App.tsx                layout, view state (size, panel, centre view, selection), shortcuts, wiring
         ├── store.ts               useProjectStore (history + autosave), sampleProject()
@@ -153,10 +166,12 @@ All confirmed with the user unless marked _(my call)_.
         ├── markerActions.ts       marker edits → undoable updates
         ├── edgePaths.ts           edge polylines in stitch/row space (schematic + layout), edgeMidpoint
         ├── sizeColors.ts          sequential size colour ramp
+        ├── glyphs.tsx             chart symbol glyphs (unit square), cell tints, band colours, legend Swatch
         ├── selection.ts           Selection union
         ├── format.ts, fileio.ts, app.css
         └── components/
             ├── Schematic.tsx      ★ SVG renderer, zoom/pan, labels, markers, handles, bust, joins, overlay/grid modes
+            ├── ChartView.tsx      stitch chart: virtualised rows, zoom, collapse, marker editing, grid of sizes, legend + My symbols
             ├── LayoutView.tsx     all panels, drag/rotate/arrange, seam links, overlay; SizeGrid + SizeLegend
             ├── SizeModeBar.tsx    One size / Overlay / Grid, size picker, align-at
             ├── Properties.tsx     ★ panel / waypoint / segment / neckline props, TagEdge, IssueList
@@ -183,11 +198,23 @@ All confirmed with the user unless marked _(my call)_.
 ### Half-finished / not yet built
 - **Side-to-side panels**: geometry is rotated, but dimension labels, waypoint labels, hover readout, the bust overlay
   and section bands are only drawn for vertical panels (`vertical` flag in Schematic).
-- **`panel.shapingInset`** (2 sts in) is stored and editable but not used anywhere yet (intended for the chart).
+- **Chart limits**: short-row *segments* (e.g. top-down shoulders) are shown by their held stitches and turn
+  symbols in the ordinary knit rows (they are knit rows already), not as extra SR rows. Neck-edge symbols use the
+  default ssk/k2tog (the neck's events don't carry a per-side symbol). Vertical-dart symbol positions are
+  approximate (the dart line from `bust.darts.leftX/rightX`, shifted with the row's centre). Cables (C4F/C4B) are
+  single-cell glyphs; there is no multi-cell cable drawing or stitch-pattern (texture) charting. Repeat lines start
+  from the section's first-row left edge. Only rows are virtualised (columns are drawn as runs, cheap enough).
+- **Princess shaping limits**: one line position per panel (all its princess segments share it); the line is
+  `offset` sts from each row's centre, so it follows a symmetric outline; side-edge joins still measure the drawn
+  (sloped) outline although the fabric edge is straight; changing *Shape at* doesn't rescale existing hand-placed
+  markers (reset them). Combining short-row and vertical bust darts (as the article mentions) isn't supported:
+  bust methods are exclusive.
+- **Chart virtualisation** relies on the scroll element's `scroll` events; programmatic `scrollTop` changes in a
+  hidden/throttled browser pane may not re-render until a real scroll.
 - **Layout**: no snapping to other panels, no free rotation (90° steps only), no lock/hide per panel.
-- **Short-row bust shaping is not drawn into the outline**: the extra centre-front length is shown as an overlay wedge
-  with a label; the outline and all row numbers are counted at the side edges. The chart (M10) must insert the short
-  rows (labelled SR1…SRn after `bust.shortRows.afterRow`).
+- **Short-row bust shaping is not drawn into the schematic outline**: the extra centre-front length is shown as an
+  overlay wedge with a label; the outline and all row numbers are counted at the side edges. The chart inserts the
+  short rows (SR1…SRn after `bust.shortRows.afterRow`).
 - **Overlay mode** in the schematic shows outlines, bust points and short-row wedges only: no dimension labels,
   markers, handles or vertical-dart shapes. Side-to-side panels fall back to the single-size drawing.
 - **Fit in overlay** frames the unshifted outlines; with a non-hem alignment some sizes can extend past the edge (zoom out / pan).
@@ -277,6 +304,8 @@ All confirmed with the user unless marked _(my call)_.
   `sizeId(p, 'M')`. Template tests require **zero errors and warnings in all 10 sizes**; keep it that way.
 - **Styling**: one stylesheet `ui/app.css`, CSS variables on `:root`, calm tool-like palette; schematic classes are
   prefixed by element (`.wp-line`, `.mk-dec`, `.join-edge`, `.bust-wedge`).
+- **Chart cells**: string codes (`''`, `PLAIN='k'`, `HELD='h'`, `HOLD='hold'`, else a symbol id incl. `custom_…`);
+  legend entries via `cellInfo()`; glyphs drawn in a unit square and scaled, strokes `vector-effect: non-scaling-stroke`.
 - **Libraries**: React only at runtime so far. No state library, no math library, no CSV library.
 - **Commits**: end messages with `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
 - **Process with the user**: one milestone at a time; run tests + app; report what to look at; wait for the go-ahead.
@@ -286,29 +315,17 @@ All confirmed with the user unless marked _(my call)_.
 
 ## 7. Remaining milestones and next steps
 
-Done since the first handoff: the set-in cap follows the armhole (user confirmed) and M9 (layout + size display modes).
-
-### M10: Stitch chart + symbols & legend
-1. New engine module `engine/chart.ts`: from `ComputedPanel` build a row-by-row model: for each knit row, the live
-   stitch cells (with `shapingInset` positions for decreases/increases using event symbols), no-stitch cells outside
-   the outline, bind-off/cast-on cells, neck split, held stitches, **inserted short rows** (bust and short-row
-   segments) with turn symbols, worked-stitch counts and running count. Row numbering: flat (alternating
-   direction, RS odd from `firstFlatRow`) vs in the round (all right-to-left); repeat brackets from `pattern`/sections.
-2. `ui/components/ChartView.tsx`: SVG grid, **virtualised** (render only visible rows/cols; simplify to bands at low
-   zoom), zoom/pan, row/stitch number guides, "collapse plain middle" toggle (agreed default: full chart with option).
-3. Draw all symbols as SVG glyphs (`symbols.ts` has ids/labels/abbr; add glyph paths), custom symbol support (label +
-   colour stored in project, e.g. `project.symbols`), **legend generated from symbols actually used**.
-4. Manual marker editing from the chart (reuse `markerActions`).
-5. Size display: offer One size / Grid for charts (overlay rarely makes sense for charts); reuse `SizeModeBar`.
-6. Tests: chart row counts equal `computePanel` counts; short rows inserted where `bust.shortRows.afterRow` says; RS/WS
-   reading direction; in-the-round numbering; symbol legend contents.
+Done since the first handoff: the set-in cap follows the armhole (user confirmed), M9 (layout + size display modes)
+and M10 (stitch chart, glyphs, legend, custom symbols).
 
 ### M11: Export (PDF + PNG)
 1. Add `jspdf` + `svg2pdf.js` (exact versions pinned).
 2. Export current view or **all sizes**: multi-page PDF with title, gauge, units, size, legend; **1:1 scale** (cm on
    paper) or fit-to-page; PNG at chosen resolution (serialize SVG → canvas → blob).
 3. Make Schematic/Chart/Layout renderable off-screen with explicit size and no interactive layers (handles, hover);
-   LayoutView/SizeGrid already compute everything from props, so they are the easiest to reuse.
+   LayoutView/SizeGrid already compute everything from props, so they are the easiest to reuse. For the chart,
+   render from `buildChart` without virtualisation (all rows), page-split long charts by rows, and include the
+   legend (`chart.legend` + `Swatch`); glyphs use CSS variables/classes, so inline computed styles before export.
 4. Use `fileio.downloadText` pattern for binary downloads.
 
 ### M12: Polish

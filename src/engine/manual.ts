@@ -3,9 +3,9 @@
 // Rows in ManualEvent are relative to the segment's first row (1-based). Pure: returns a new project.
 
 import type { Id, ManualEvent, Project, Segment } from './model';
-import { defaultAutoMethod } from './model';
+import { defaultAutoMethod, defaultPrincess } from './model';
 import { computePanel, type Edge } from './panel';
-import { markerDelta } from './symbols';
+import { isCountSymbol, markerDelta } from './symbols';
 
 export interface MarkerRef {
   panelId: Id;
@@ -77,6 +77,23 @@ export function segmentRows(p: Project, ref: MarkerRef): number {
   return cs ? Math.max(0, cs.rowTo - cs.rowFrom + 1) : 0;
 }
 
+/**
+ * Stitches one increase/decrease marker stands for in this segment: 1 at a side edge; at princess lines 2 (both
+ * sides of the marker) or 1, plus 1 more when the edge is shaped too.
+ */
+export function shapingPoints(p: Project, ref: Pick<MarkerRef, 'panelId' | 'fromWaypoint'>): number {
+  const panel = p.panels.find((x) => x.id === ref.panelId);
+  const seg = panel?.segments.find((s) => s.fromWaypoint === ref.fromWaypoint);
+  const placement = seg?.placement ?? 'edge';
+  if (placement === 'edge') return 1;
+  return ((panel!.princess ?? defaultPrincess()).sides === 'both' ? 2 : 1) + (placement === 'both' ? 1 : 0);
+}
+
+function deltaFor(p: Project, ref: MarkerRef, symbol: string, count: number): number {
+  const d = markerDelta(symbol, count, p.symbols);
+  return isCountSymbol(symbol) ? d : d * shapingPoints(p, ref);
+}
+
 const clampRow = (row: number, rows: number) => Math.max(1, Math.min(Math.max(1, rows), Math.round(row)));
 
 /** Move the marker at `index` (in the editable edge's sorted list) to a segment row. Returns the new index too. */
@@ -88,7 +105,7 @@ export function moveMarker(p: Project, ref: MarkerRef, index: number, row: numbe
 
 export function addMarker(p: Project, ref: MarkerRef, row: number, symbol: string, count = 1): Project {
   return editList(p, ref, (list, rows) => {
-    list.push({ row: clampRow(row, rows), delta: markerDelta(symbol, count), symbol });
+    list.push({ row: clampRow(row, rows), delta: deltaFor(p, ref, symbol, count), symbol });
   });
 }
 
@@ -104,7 +121,11 @@ export function setMarkerSymbol(p: Project, ref: MarkerRef, index: number, symbo
     const e = list[index];
     if (!e) return;
     const n = count ?? Math.max(1, Math.abs(e.delta));
-    list[index] = { ...e, symbol, delta: markerDelta(symbol, n) };
+    let delta = deltaFor(p, ref, symbol, n);
+    // A one-sided princess marker (the odd stitch) stays one-sided when its stitch is changed.
+    const full = isCountSymbol(e.symbol) ? 0 : Math.abs(deltaFor(p, ref, e.symbol, n));
+    if (shapingPoints(p, ref) > 1 && !isCountSymbol(symbol) && full > 0 && Math.abs(e.delta) < full) delta = Math.sign(delta) * Math.min(Math.abs(e.delta), Math.abs(delta));
+    list[index] = { ...e, symbol, delta };
   });
 }
 

@@ -81,8 +81,46 @@ export function BustProps({ ctx }: { ctx: PropsContext }) {
           {b.method === 'shortrows' && (
             <>
               <h4>Short rows</h4>
+              <div className="button-row">
+                <button
+                  title="Turns from the bust point out to the side seam, starting at the bust point, German short rows"
+                  onClick={() =>
+                    set((x) => {
+                      x.shortRows.span = 'apex-to-side';
+                      x.shortRows.start = 'apex';
+                      x.shortRows.order = panel.direction === 'top-down' ? 'lengthening' : 'shortening';
+                      x.shortRows.style = 'german';
+                    })
+                  }
+                >
+                  Preset: bust point → side seam ({panel.direction === 'top-down' ? 'top-down' : 'bottom-up'})
+                </button>
+              </div>
               <ShortRowSettings b={b} set={set} />
-              <ExprField label="Turn zone width (centred on the bust point)" value={b.shortRows.zoneWidth} onChange={setDim((x, d) => void (x.shortRows.zoneWidth = d), 'z')} fieldKey="z" {...common} />
+              <div className="row2">
+                <div className="field">
+                  <label>Turns span</label>
+                  <select value={b.shortRows.span ?? 'zone'} onChange={(e) => set((x) => void (x.shortRows.span = e.target.value as 'zone' | 'apex-to-side'))}>
+                    <option value="zone">Around the bust point</option>
+                    <option value="apex-to-side">Bust point → side seam</option>
+                  </select>
+                </div>
+                <div className="field">
+                  <label>Start</label>
+                  <select value={b.shortRows.start ?? 'centred'} onChange={(e) => set((x) => void (x.shortRows.start = e.target.value as 'centred' | 'apex'))}>
+                    <option value="centred">Centred on the bust point</option>
+                    <option value="apex">At the bust point</option>
+                  </select>
+                </div>
+              </div>
+              {(b.shortRows.span ?? 'zone') === 'zone' ? (
+                <ExprField label="Turn zone width (centred on the bust point)" value={b.shortRows.zoneWidth} onChange={setDim((x, d) => void (x.shortRows.zoneWidth = d), 'z')} fieldKey="z" {...common} />
+              ) : (
+                <p className="small muted">
+                  First turn at the bust point, then every {cb?.shortRows?.step ? `${cb.shortRows.step} sts` : '… sts'} towards the side seam (stitches between the bust point and the side ÷ turns per side, rounded down).
+                  {b.shortRows.start === 'apex' ? (panel.direction === 'top-down' ? ' They begin on the bust-point row.' : ' They finish at the bust-point row.') : ''}
+                </p>
+              )}
             </>
           )}
           {b.method === 'horizontal-dart' && (

@@ -37,6 +37,7 @@ npm run typecheck
   - `bust.ts`: bust shaping (formulas with numbers plugged in, short-row wedges, horizontal and vertical darts).
   - `joins.ts`: measuring tagged edges, seam comparison, pick-up suggestions. `edges.ts`: edge length along the outline.
   - `layout.ts`: garment layout geometry (local cm frame, rotation, placement), size alignment, T-shape auto-arrange.
+  - `chart.ts`: the stitch chart grid built from a computed panel (cells, short rows, repeats, legend, column folding).
 - `src/ui/`: React views.
 - `samples/`: sample sizing tables (`sizing_table_cm.csv`, `sizing_table_cm.json`, same data).
 
@@ -165,8 +166,13 @@ centre front `apex_to_apex / 2`.
 | Method | What it does |
 |---|---|
 | **Short rows** | `round(L × rows/cm ÷ 2)` pairs (German or wrap & turn), a stepped wedge centred vertically on the bust point. Turns are spread evenly across a zone centred on each bust point (default width `max(6, bust_l × 2.5)` cm), each row shorter or each row longer. The first short row is a RS row. |
+| **Short rows, bust point → side seam** | Same method with *Turns span: Bust point → side seam* (and usually *Start: At the bust point*). The first turn is at the bust point; each later one is `step` stitches further towards the side seam, where `step` = stitches between the bust point and the side (less a 2-st margin) ÷ turns per side, rounded down. Top-down: start right after the bust-point row, each row longer. Bottom-up mirror: start near the side seam, each row shorter, finishing at the bust-point row. The preset button sets all of this (and German short rows) for the panel's direction. If the turns don't fit (step < 1 st), you're told to shorten L or stack a second dart. |
 | **Horizontal dart** | Knitted horizontal darts are short rows: turns run from the side seam (or just below the underarm) to a tip that stops short of the bust point (default 2.5 cm). Drawn with dart legs. |
 | **Vertical darts** | Two darts on lines through the bust points. Each adds W/2, 2 stitches per shaping row (one each side of the dart line). They open from `waist.height + 2.5` to 2 cm below the bust point and close from 2 cm above it to `underarm.height + armhole_depth × 0.5`. When RS rows run out, the shaping moves to every row (noted). The schematic widens accordingly. |
+
+In the saved file these are `bust.shortRows.span` (`"zone"` | `"apex-to-side"`) and `bust.shortRows.start`
+(`"centred"` | `"apex"`), both optional (default zone, centred). The schematic wedge is drawn in working order over
+the rows that follow the insertion point, so its wide edge is where the first (longest) short rows are.
 
 For each size the helper lists every turn: stitches worked on the RS and WS short row, and stitches left unworked at
 each edge. You can edit those per size; changing one side only is flagged as asymmetric. Vertical dart rows can be edited
@@ -175,6 +181,22 @@ that don't fit their rows or don't close. A table shows D, W, L and the steps fo
 
 The front template's armhole binds off half its width change in one go and shapes up to `armhole_depth × 0.6`, so it
 can absorb the bust width in every size.
+
+## Princess-seam shaping
+
+Increases and decreases can be worked at two vertical **princess lines** instead of, or as well as, the side edges
+(Shaping → *Shape at*: Side edges / Princess lines / Side edges + princess lines). The choice is per segment, so
+waist decreases and hip increases can differ, and per panel (front only, or front and back).
+
+- **Position**: `panel.princess.position`, the distance of each line from the centre line, default `apex_to_apex / 2`
+  (through the bust points), shared by all of the panel's princess segments; editable with per-size fixed values.
+- **At each line**: both sides of the marker (2 sts per line per shaping row, e.g. "ssk, sm, k2tog") or one side
+  (1 st). With *Side edges + princess lines* each half also shapes 1 st at the edge (3 sts per half per row).
+- The stitch counts at each waypoint are unchanged; you just need about half as many shaping rows. When the change
+  doesn't divide evenly, the odd stitch is worked on one side of the marker on one row (noted in the checks).
+- The schematic keeps drawing the finished width, with the lines dashed and the markers on them; the chart puts the
+  symbols either side of each line. Hand-placed markers on a princess segment count all their stitches (a k2tog marker
+  at a two-sided line is −2). Bind-off/cast-on steps stay at the edges.
 
 ## Short-row segments
 
@@ -206,7 +228,8 @@ multiples of 2 and 4, for every size.
 
 ## Layout and size display
 
-The centre view has three tabs: **Schematic** (one panel), **Layout** (all panels) and **Measurements**.
+The centre view has four tabs: **Schematic** (one panel), **Chart** (one panel, stitch by stitch), **Layout** (all
+panels) and **Measurements**.
 
 **Layout** draws every panel at one scale (cm, y up). Panels keep their position and rotation (`panel.layout`, cm,
 rotation 0/90/180/270 anticlockwise about the panel's centre line at its lower edge). Until a panel has been placed,
@@ -220,6 +243,36 @@ linked by a dashed line; click either to open the join.
 light-to-dark ramp with a legend, aligned at the lower edge, waist, underarm, shoulder or top; the schematic overlay
 also shows each size's bust points and short-row wedges), or **Grid** (each selected size side by side at the same
 scale; in Layout, the whole arrangement per size). Choose the sizes with *Sizes ▾*. These are view settings, not undoable.
+
+## Stitch chart
+
+The **Chart** tab draws the selected panel one square per stitch, one row per knit row, **upright** like the
+schematic (row 1 at the bottom for bottom-up panels, at the top for top-down ones). It is a picture of the shaping,
+not pattern text.
+
+- **Cells.** Each row shows the stitches on the needle at the end of that row. Bound-off stitches are drawn in the
+  row that binds them off (BO); cast-on stitches in the row that casts them on (CO). Decreases and increases sit
+  `shapingInset` stitches in from the edge (default 2: "k2, ssk … k2tog, k2"), using the marker's symbol. Neck
+  centre stitches are bound off or placed on hold on the split row; neck-edge shaping is mirrored on both sides.
+  Stitches held by short-row segments are hatched; vertical bust darts show their increases/decreases either side
+  of each dart line.
+- **Bust short rows** are inserted where they are worked, right after knit row `bust.shortRows.afterRow`, labelled
+  **SR1, SR2, …** (odd = RS, even = WS). Each shows the stitches it works, the turn (German double stitch ◆ or
+  wrap & turn ◇) and the held stitches beyond it. They aren't counted as knit rows, so row numbers match the schematic.
+- **Reading direction.** Flat RS rows read right to left (number on the right), WS rows left to right (number on
+  the left); in the round every round reads right to left. Stitches are numbered from the right. A blue number
+  beside a row is the stitch count after it, shown where it changes. Every 10th stitch and row has a stronger line.
+- **Repeats.** Pattern sections get a bracket in the left margin with their name and multiple, and dashed lines
+  every *multiple* stitches.
+- **Collapse plain middle** folds long runs of identical plain columns into a ⋯n column (off by default).
+- **Zoom**: −/+, ⌘/Ctrl + scroll, **Fit** (F). Below about 7 px per stitch symbols are drawn as coloured bands.
+- **Editing.** Click a shaping symbol to select its marker (the marker table opens on the right), drag it up or down
+  to move it (one undo step), Delete removes it, double-click a stitch to add a marker on that row at the nearer
+  edge. As on the schematic, the first edit switches that size to hand-placed markers.
+- **Legend** lists exactly the symbols the chart uses. **My symbols** adds your own: a colour, an abbreviation, a
+  meaning and a stitch change; they appear in every marker's *Stitch* menu and are drawn as a coloured cell with
+  the abbreviation.
+- **Sizes**: One size or Grid (each selected size's chart at one shared scale). Overlay doesn't apply to charts.
 
 ## Pattern sections
 
@@ -276,6 +329,9 @@ Saved files are `*.knitbit.json`. All lengths are in cm, whatever the display un
   }],
   "ease": { "global": 5, "per": { "bust": 8 } },
   "panels": [Panel],
+  "joins": [Join],                             // optional
+  "symbols": [{ "id": "custom_…", "label": "Twisted decrease", "abbr": "tw",
+                "color": "#f2d17a", "change": -1 }],   // optional: your own chart symbols
   "settings": { "seamToleranceCm": 1, "pickUp": { "stitches": 3, "rows": 4 } },
   "createdAt": "ISO date", "updatedAt": "ISO date"
 }
@@ -303,11 +359,13 @@ A **Panel**:
   }],
   "segments": [{                                // shaping from a waypoint up to the next one
     "fromWaypoint": "wp_…", "mirror": true,
+    "placement": "edge" | "princess" | "both",  // optional, default edge
     "left": Method, "right": Method,
     "manual": { "<sizeId>": { "left": [{ "row": 3, "delta": -1, "symbol": "ssk" }], "right": […] } }
   }],
   "neckline": null | { "shape": "round" | "v" | "square" | "boat", "width": Dim, "depth": Dim,
                        "centre": "bindoff" | "hold", "centreWidth": Dim, "side": "rs" | "any" },
+  "princess": null | { "position": Dim, "sides": "both" | "one" },   // optional
   "layout": { "x": 0, "y": 0, "rotation": 0 | 90 | 180 | 270 },
   "notes": ""
 }

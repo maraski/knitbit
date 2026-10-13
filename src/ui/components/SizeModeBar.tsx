@@ -13,6 +13,7 @@ interface Props {
   setCompare: (ids: Id[]) => void;
   align: AlignRef;
   setAlign: (a: AlignRef) => void;
+  modes?: SizeMode[]; // which modes this view offers (default: all)
 }
 
 const ALIGNS: { value: AlignRef; label: string }[] = [
@@ -23,13 +24,13 @@ const ALIGNS: { value: AlignRef; label: string }[] = [
   { value: 'top', label: 'top' },
 ];
 
-export function SizeModeBar({ project, mode, setMode, compare, setCompare, align, setAlign }: Props) {
+export function SizeModeBar({ project, mode, setMode, compare, setCompare, align, setAlign, modes = ['single', 'overlay', 'grid'] }: Props) {
   const [open, setOpen] = useState(false);
   const chosen = project.sizes.filter((s) => compare.includes(s.id));
   return (
     <div className="size-mode">
       <div className="segmented" title="How sizes are shown">
-        {(['single', 'overlay', 'grid'] as SizeMode[]).map((m) => (
+        {modes.map((m) => (
           <button key={m} className={mode === m ? 'active' : ''} onClick={() => setMode(m)}>
             {m === 'single' ? 'One size' : m === 'overlay' ? 'Overlay' : 'Grid'}
           </button>

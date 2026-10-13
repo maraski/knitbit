@@ -44,6 +44,8 @@ export interface ComputedBust {
     liveStitches: number;
     manual: boolean;
     tipX: number; // dart: distance of the tip from the centre (sts)
+    span: 'zone' | 'apex-to-side';
+    step: number; // apex-to-side: stitches between turns (0 otherwise)
   } | null;
   darts: {
     leftX: number;
@@ -151,10 +153,16 @@ export function computeBust(ctx: BustContext): ComputedBust | null {
       return out;
     }
     // Where to insert: centred on the bust point, or just below the underarm for an underarm dart.
+    const span = b.method === 'shortrows' ? (b.shortRows.span ?? 'zone') : 'zone';
+    const startAtApex = b.method === 'shortrows' && b.shortRows.start === 'apex';
     let after: number;
     if (b.method === 'horizontal-dart' && b.dart.placement === 'underarm' && ctx.underarmRow !== null) {
       const gap = roundNearest(2 * rpc);
       after = ctx.topDown ? ctx.underarmRow + gap : ctx.underarmRow - gap - 1;
+    } else if (startAtApex) {
+      // Right at the bust point: top-down they begin once the bust-point row is worked; bottom-up they finish
+      // just before it. Either way the extra length sits just below the bust point.
+      after = ctx.topDown ? apexRow : apexRow - 1;
     } else {
       after = apexRow - (ctx.topDown ? -n : n);
     }
@@ -171,7 +179,18 @@ export function computeBust(ctx: BustContext): ComputedBust | null {
     let inner: number;
     let outer: number;
     let tipX = 0;
-    if (b.method === 'shortrows') {
+    let step = 0; // apex-to-side: stitches between turns
+    if (span === 'apex-to-side') {
+      // First turn at the bust point, then every `step` sts towards the side seam ("stitches before turn" =
+      // side stitches ÷ turns per side, rounded down).
+      inner = Math.max(1, Math.round(offsetSts));
+      outer = hHalf - margin;
+      step = Math.floor((outer - inner) / n);
+      if (step < 1) {
+        issues.push({ severity: 'error', message: `${n} turns per side don't fit between the bust point and the side seam (${Math.max(0, Math.floor(outer - inner))} sts). Reduce the length or stack a second dart.` });
+        return out;
+      }
+    } else if (b.method === 'shortrows') {
       const zw = evaluateDim(b.shortRows.zoneWidth, ctx.sizeId, s);
       const z = (zw.ok ? zw.value.value : 6) * spc;
       inner = Math.max(1, offsetSts - z / 2);
@@ -190,7 +209,8 @@ export function computeBust(ctx: BustContext): ComputedBust | null {
     const uMin = Math.round(hHalf - outer);
     const uMax = Math.round(hHalf - inner);
     let u: number[];
-    if (n === 1) u = [Math.round((uMin + uMax) / 2)];
+    if (span === 'apex-to-side') u = Array.from({ length: n }, (_, j) => Math.round(hHalf - (inner + (n - 1 - j) * step)));
+    else if (n === 1) u = [Math.round((uMin + uMax) / 2)];
     else {
       const gaps = splitEvenly(uMax - uMin, n - 1, 'spread');
       u = [uMin];
@@ -231,6 +251,8 @@ export function computeBust(ctx: BustContext): ComputedBust | null {
       liveStitches: live,
       manual: !!(manual?.left || manual?.right),
       tipX,
+      span,
+      step,
     };
     return out;
   }
@@ -318,4 +340,14 @@ function blank(d: DimExpr): BustFormula {
 export function evaluateFormula(expr: string, scope: Record<string, number>): number | null {
   const r = evaluate(expr, scopeFrom(scope));
   return r.ok ? r.value : null;
+}
+
+/**
+ * The short-row wedge as bands in knit rows, in working order: pair i occupies knit rows after + 2i … after + 2i + 2
+ * (drawn over the following rows, as the extra rows aren't in the outline).
+ */
+export function wedgeBands(b: ComputedBust): { leftX: number; rightX: number; from: number; to: number; index: number }[] {
+  const sr = b.shortRows;
+  if (!sr) return [];
+  return sr.pairs.map((p, i) => ({ leftX: p.leftX, rightX: p.rightX, from: sr.afterRow + 2 * i, to: sr.afterRow + 2 * i + 2, index: p.index }));
 }

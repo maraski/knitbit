@@ -84,12 +84,29 @@ export interface ManualEvent {
   symbol: string; // symbol id, e.g. 'k2tog', 'ssk', 'm1l', 'yo'
 }
 
+export type ShapingPlacement = 'edge' | 'princess' | 'both';
+
+/** Two vertical shaping lines, mirrored about the centre (princess-seam waist shaping, as in fisheye darts). */
+export interface Princess {
+  position: DimExpr; // distance of each line from the centre line (cm)
+  sides: 'both' | 'one'; // shape on both sides of the marker (2 sts per line per row) or on one side
+}
+
+export function defaultPrincess(): Princess {
+  return { position: dim('apex_to_apex / 2'), sides: 'both' };
+}
+
 /** Shaping of one edge between waypoint `fromWaypoint` and the next waypoint up. */
 export interface Segment {
   fromWaypoint: Id;
   left: SegmentMethod;
   right: SegmentMethod;
   mirror: boolean; // right edge follows the left edge's method
+  /**
+   * Where increases/decreases are worked: at the side edges (default), at the panel's princess lines (the edges
+   * stay straight in the fabric), or both. Only applies to increases/decreases, not bind-off/cast-on steps.
+   */
+  placement?: ShapingPlacement;
   /** Manual marker lists by size id; when present they replace the auto-suggestion for that size and edge. */
   manual: Record<Id, { left?: ManualEvent[]; right?: ManualEvent[] }>;
 }
@@ -136,7 +153,16 @@ export interface BustShaping {
   sideWidth: boolean; // short rows / horizontal dart: also add W at the side seams (bust_side_w = W)
   apexHeight: DimExpr; // bust point height, up from the garment's lower edge
   apexOffset: DimExpr; // bust point distance from centre front
-  shortRows: { style: ShortRowStyle; pairs: number | null; order: 'shortening' | 'lengthening'; zoneWidth: DimExpr };
+  shortRows: {
+    style: ShortRowStyle;
+    pairs: number | null;
+    order: 'shortening' | 'lengthening';
+    zoneWidth: DimExpr;
+    /** Where the turns go: a zone centred on the bust point, or from the bust point out to the side seam. */
+    span?: 'zone' | 'apex-to-side';
+    /** Where the short rows start: centred on the bust point's height, or right at it. */
+    start?: 'centred' | 'apex';
+  };
   dart: { placement: 'side' | 'underarm'; tipGap: DimExpr };
   vertical: { bottom: DimExpr; gap: DimExpr; top: DimExpr };
   /** Hand-adjusted steps by size: unworked stitches per short-row pair at each edge; vertical dart rows (knit rows). */
@@ -179,6 +205,7 @@ export interface Panel {
   segments: Segment[];
   neckline: Neckline | null;
   bust?: BustShaping | null;
+  princess?: Princess | null;
   layout: { x: number; y: number; rotation: 0 | 90 | 180 | 270 };
   notes: string;
 }
@@ -220,6 +247,15 @@ export interface ProjectSettings {
   pickUp: { stitches: number; rows: number }; // default 3 sts per 4 rows
 }
 
+/** A stitch symbol the knitter defines (drawn as a coloured cell with its abbreviation). */
+export interface CustomSymbol {
+  id: Id; // 'custom_…'
+  label: string;
+  abbr: string;
+  color: string; // CSS colour
+  change: number; // stitch change when used as a shaping marker
+}
+
 export interface Project {
   schemaVersion: number;
   id: Id;
@@ -232,6 +268,7 @@ export interface Project {
   ease: EaseSettings;
   panels: Panel[];
   joins?: Join[];
+  symbols?: CustomSymbol[];
   settings: ProjectSettings;
   createdAt: string;
   updatedAt: string;

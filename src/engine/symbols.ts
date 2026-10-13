@@ -1,3 +1,5 @@
+import type { CustomSymbol } from './model';
+
 // The stitch symbol set (Craft Yarn Council style). Glyphs are drawn by the chart view; this module
 // holds what each symbol means, including the stitch change it makes when used as a shaping marker.
 
@@ -76,7 +78,9 @@ export function defaultSymbol(kind: 'dec' | 'inc' | 'bindoff' | 'caston' | 'turn
 }
 
 /** Stitch change of a marker with this symbol; `count` is used by bind-off / cast-on / turn markers. */
-export function markerDelta(symbol: string, count = 1): number {
+export function markerDelta(symbol: string, count = 1, custom: CustomSymbol[] = []): number {
+  const c = custom.find((x) => x.id === symbol);
+  if (c) return c.change;
   const s = SYMBOLS[symbol as SymbolId];
   if (!s || s.change === null) return 0;
   if (s.change === 'count') return symbol === 'co' ? Math.abs(count) : -Math.abs(count);
@@ -85,4 +89,21 @@ export function markerDelta(symbol: string, count = 1): number {
 
 export function isCountSymbol(symbol: string): boolean {
   return SYMBOLS[symbol as SymbolId]?.change === 'count';
+}
+
+export interface SymbolInfo {
+  id: string;
+  label: string;
+  abbr: string;
+  color?: string; // custom symbols only
+  custom: boolean;
+}
+
+/** Label/abbreviation for a built-in or custom symbol id (unknown ids are shown by id). */
+export function symbolInfo(id: string, custom: CustomSymbol[] = []): SymbolInfo {
+  const c = custom.find((x) => x.id === id);
+  if (c) return { id, label: c.label, abbr: c.abbr, color: c.color, custom: true };
+  const s = SYMBOLS[id as SymbolId];
+  if (s) return { id, label: s.label, abbr: s.abbr, custom: false };
+  return { id, label: id, abbr: id, custom: false };
 }
