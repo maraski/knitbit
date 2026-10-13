@@ -1,8 +1,8 @@
 # Knitbit: handoff
 
 _Last updated 2026-10-13. Git `main`: `b99db67` (milestones 1–8), `d1e84e3` (first handoff), `ea7908c` (fitted cap +
-M9), `6ee297f` (M10 + bust/princess options); painted stitches, shaping lines and the shoulders-first construction are in the working tree
-(uncommitted at the time of writing). 201 tests passing; typecheck and build clean._
+M9), `6ee297f` (M10 + bust/princess options), `89c2318` (painted stitches, shaping lines, shoulders-first); waypoint dragging + linked panels are in the working tree
+(uncommitted at the time of writing). 207 tests passing; typecheck and build clean._
 
 > **Milestone count:** the plan has **12 milestones**. **1–10 are complete**; **11–12 remain** (export, polish).
 
@@ -74,6 +74,7 @@ flagged `topDown`; the renderer flips them so every panel is drawn **upright**.
 | — | **Shaping options** (after M10, user request) | **Bust short rows bust point → side seam** (`bust.shortRows.span = 'apex-to-side'`, `start = 'apex'`; turns at the apex then every `step` = floor(side sts ÷ turns per side) sts outwards, per the starcrossed knits method; top-down lengthening / bottom-up shortening mirror; preset button; error when step < 1). `wedgeBands()` draws the wedge in working order. **Princess-seam shaping** (`Segment.placement` edge/princess/both, `Panel.princess` {position Dim, default `apex_to_apex / 2`, sides both/one}); `computePanel` multiplies auto `perSide` by the shaping points, puts markers on the lines (`ComputedPanel.princess.offset`), odd stitch one-sided with an info note; `manual.shapingPoints` scales hand-placed marker deltas; chart draws stitch + mirror either side of each line. Tests in `shapingOptions.test.ts`. |
 | — | **Experimenting tools** (after M10, user request; "A then B before M11") | **A. Painted stitches** (`engine/free.ts`, `Panel.freeStitches` per size: row, x = cell left edge from the row centre, symbol, mirror): paint/erase/toggle, mirror with leaning swap, repeat every N rows × k, **Copy to all sizes** (proportional between waypoints and across the half width, snapped to the stitch grid), clear; Chart ✎ Paint mode (P), strokes interpolated, one undo per stroke; schematic marks. **B. Shaping lines** (`engine/lines.ts`, `Panel.shapingLines`: two anchors as cm expressions, amount in sts, one-way/fisheye, both/one side, RS/any rows, mirror, manual rows per size): `computeLines` spreads events, `lineX` interpolates; `lineFromPoints` turns two schematic clicks into graded expressions; presets; `LineProps` editor, ✎ Line tool, chart symbols either side of the line. Both feed one interior array in `computePanel` that widens the edges about the centre (edge markers shifted to match; darts too). Tests: `free.test.ts`, `lines.test.ts`. Also: `grading.allDims` now includes bust/princess/line expressions (rename + remove size). |
 | — | **Top-down shoulders-first construction** (user's usual method) | `templates.ts`: `construction` (default `shoulders-first` for top-down), `shoulderSlope` (short rows / none), `backNeck` (straight default / shaped); front `startFrom: 'pickup'`; armhole_bo = `underarm.width − 2·round(underarm_co/2/st_w)·st_w` so front and back cast on the same whole number of sts per side (half each); armhole_end at 0.6 (back) / 0.75 (front) of armhole depth so 4X fits; `topDownTop()` returns back + front + 2 joins (front top pick-up; underarm cast-on front sides vs back sides); 'top' template in the sidebar adds the set. Engine: top-down round start = max(underarm join, neck close) with an info note; top-down neck parity now checks row 1 (was the hem: a bug); square neck centre/width rounding; `measureEdge('top')` counts short-row-held cast-on sts. New estimate `underarm_co`. Tests: `construction.test.ts`, template cases. |
+| — | **Drag waypoints + linked panels** (user request) | `engine/waypointDrag.ts`: `placeHeight` (proportional `lo + (hi − lo) × t` between neighbours, skipping ones that would create a cycle; fixed offset for the top/bottom; 'size' = per-size override), `placeWidth`/`scaleExpr` (`(expr) × f`, factors folded), `dragHeight`/`dragWidth` (linked partner by waypoint name: same amount in this size, proportional elsewhere), `matchPartner`, `linkPanels` (`Panel.linkedTo`, symmetric, set manually). Schematic: click a waypoint line to activate it, then drag the line/grip (ns-resize) or the width handles (drawn on top); ↑↓ / ←→ nudge by a row / a stitch each side (Shift ×5, Alt this size) in App's key handler, Alt = this size only, readout, one undo per drag (`drag:wp:`); App keeps the width at drag start. Panel props: Linked panel; waypoint props: Match buttons. Tests: `waypointDrag.test.ts`. |
 | 10 | **Stitch chart + symbols & legend** | `engine/chart.ts` (`buildChart`: per knit row a cell array, `''` outside / `'k'` plain / `'h'` held / symbol id; bind-offs and cast-ons drawn in their row; shaping at `shapingInset`; neck split + mirrored neck shaping; vertical-dart symbols at the dart lines; **bust short rows inserted after `afterRow`** as SR1…SRn with turns and held stitches; RS/WS/round reading direction; worked + live counts; repeats from sections; legend of used symbols; `collapseColumns`). `ui/glyphs.tsx` (CYC-style SVG glyphs in a unit square, cell tints, low-zoom band colours, legend swatch). **Chart** tab (`ChartView.tsx`): upright like the schematic, row-virtualised, plain stitches drawn as runs over an SVG grid pattern, ⌘-scroll zoom, Fit, collapse plain middle, row/stitch numbers, count column, hover readout; select/drag/double-click-add/Delete markers via `markerActions`; One size / Grid (shared scale). **Custom symbols** (`project.symbols`: label, abbr, colour, stitch change) editable in the legend, offered in the marker Stitch menu, `markerDelta` honours them. |
 
 ---
@@ -128,6 +129,10 @@ All confirmed with the user unless marked _(my call)_.
 - **Contiguous method** (Susie Myers; PDF provided by the user) is a different construction the user sometimes
   uses: one continuous row from the start with shoulder-seam increases each side of 2 centre sts every row, then
   sleeve-cap increases. Not modelled yet (it would need sleeves joined to the body from the cast-on).
+- **Waypoint drags are proportional across sizes** (heights as a fraction between neighbours, widths as a factor);
+  Alt = this size only. **Linked panels are chosen by the user** (not auto-linked, also not by the top-down set);
+  linked waypoints (same name) move by the **same amount**, with a **Match** option. Dragging replaces typed formulas
+  (user agreed).
 - **Princess lines** run through the bust points by default (`apex_to_apex / 2` from centre) on every panel; an odd
   stitch is worked one-sided on one row rather than rounding the waist width (user chose this).
 - **Chart conventions (M10)**: a row shows the stitches on the needle at the *end* of the row; bound-off stitches
@@ -174,7 +179,7 @@ All confirmed with the user unless marked _(my call)_.
     │   ├── chart.ts               buildChart (cells per row, SR rows, refs to markers, repeats, legend), collapseColumns
     │   ├── checks.ts              projectChecks, groupChecks
     │   ├── testFixtures.ts        fixtureProject() from the sample CSV, sizeId()
-    │   └── *.test.ts              201 tests (incl. armhole, layout, chart, shapingOptions, free, lines, construction)
+    │   └── *.test.ts              207 tests (incl. armhole, layout, chart, shapingOptions, free, lines, construction, waypointDrag)
     └── ui/
         ├── App.tsx                layout, view state (size, panel, centre view, selection), shortcuts, wiring
         ├── store.ts               useProjectStore (history + autosave), sampleProject()
@@ -226,6 +231,10 @@ All confirmed with the user unless marked _(my call)_.
   (sloped) outline although the fabric edge is straight; changing *Shape at* doesn't rescale existing hand-placed
   markers (reset them). Combining short-row and vertical bust darts (as the article mentions) isn't supported:
   bust methods are exclusive.
+- **Dragging limits**: only in One size mode on vertical panels; the first waypoint's height isn't draggable; a
+  width drag on a waypoint other expressions depend on (e.g. `shoulder.width = armhole_end.width`) moves those too;
+  dragging only changes the dragged and partner waypoint, never segments/markers (hand-placed markers may then fall
+  outside their segment — they're reported).
 - **Shoulders-first limits**: the front is still one panel (both halves drawn together); the pick-up join counts
   the front's first-row stitches (one per back cast-on st), it doesn't check the back's shoulder count separately; the
   set's joins aren't updated if you later rename/delete waypoints; cardigan fronts don't exist yet.

@@ -85,6 +85,7 @@ function PanelList({ project, panelId, update, selectPanel }: Props) {
     }
     for (const s of copy.segments) s.fromWaypoint = idMap.get(s.fromWaypoint) ?? s.fromWaypoint;
     if (copy.joinAt) copy.joinAt = idMap.get(copy.joinAt) ?? null;
+    copy.linkedTo = null;
     for (const sec of copy.sections) sec.id = newId('sec');
     update((p) => produce(p, (d) => void d.panels.splice(d.panels.findIndex((x) => x.id === id) + 1, 0, copy)));
     selectPanel(copy.id);
@@ -96,6 +97,7 @@ function PanelList({ project, panelId, update, selectPanel }: Props) {
     update((p) =>
       produce(p, (d) => {
         d.panels = d.panels.filter((x) => x.id !== id);
+        for (const x of d.panels) if (x.linkedTo === id) x.linkedTo = null;
         d.joins = dropPanelFromJoins(d.joins, id);
       }),
     );

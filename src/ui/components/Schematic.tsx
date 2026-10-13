@@ -40,6 +40,11 @@ interface Props {
   /** Draw-a-line mode: two clicks give the ends (cm up from the lower edge, cm from the row's centre). */
   drawLine?: boolean;
   onDrawLine?: (a: { h: number; x: number }, b: { h: number; x: number }) => void;
+  /**
+   * Waypoint dragging: a new height (cm up from the lower edge, row-snapped) or a width factor (new / current) for the
+   * whole width or one half. `size` = this size only (Alt held). `key` coalesces one drag into one undo step.
+   */
+  onDragWaypoint?: (wpId: string, change: { kind: 'height'; h: number } | { kind: 'width'; part: 'width' | 'left' | 'right'; factor: number }, size: boolean, key: string) => void;
 }
 
 interface View {
@@ -68,7 +73,9 @@ interface MarkerDrag {
 
 const isStepLike = (e: ShapeEvent) => e.kind === 'bindoff' || e.kind === 'caston' || e.kind === 'turn';
 
-export function Schematic({ computed: c, direction, units, selection, onSelect, fitKey, fitOutlines, markers, joins = [], mode = 'single', compare = [], align = 'hem', project, drawLine = false, onDrawLine }: Props) {
+export function Schematic({ computed: c, direction, units, selection, onSelect, fitKey, fitOutlines, markers, joins = [], mode = 'single', compare = [], align = 'hem', project, drawLine = false, onDrawLine, onDragWaypoint }: Props) {
+  const wpDrag = useRef<{ wpId: string; kind: 'height' | 'width'; part: 'width' | 'left' | 'right'; half0: number; key: string; x: number; y: number; moved: boolean; last: string } | null>(null);
+  const [wpReadout, setWpReadout] = useState<{ sx: number; sy: number; text: string } | null>(null);
   const [drawPts, setDrawPts] = useState<{ first: { h: number; x: number; sx: number; sy: number } | null; cursor: { sx: number; sy: number } | null }>({ first: null, cursor: null });
   useEffect(() => {
     if (!drawLine) setDrawPts({ first: null, cursor: null });
@@ -240,6 +247,15 @@ export function Schematic({ computed: c, direction, units, selection, onSelect, 
     const centre = (c.leftEdge[row] + c.rightEdge[row]) / 2 / spc;
     return { h: Y, x: X - centre, sx, sy };
   };
+  const startWpDrag = (e: React.PointerEvent, w: ComputedPanel['waypoints'][number], kind: 'height' | 'width', part: 'width' | 'left' | 'right') => {
+    if (!onDragWaypoint || !vertical || e.button !== 0 || drawLine) return;
+    e.stopPropagation();
+    const half0 = part === 'left' ? -w.leftPos : part === 'right' ? w.rightPos : (w.rightPos - w.leftPos) / 2;
+    if (half0 <= 0) return;
+    wrapRef.current?.setPointerCapture(e.pointerId);
+    wpDrag.current = { wpId: w.id, kind, part, half0, key: `drag:wp:${Date.now()}`, x: e.clientX, y: e.clientY, moved: false, last: '' };
+    onSelect({ kind: 'waypoint', id: w.id });
+  };
   const onPointerDown = (e: React.PointerEvent) => {
     if (e.button !== 0) return;
     if (drawLine && vertical) {
@@ -266,6 +282,35 @@ export function Schematic({ computed: c, direction, units, selection, onSelect, 
   };
 
   const onPointerMove = (e: React.PointerEvent) => {
+    const wd = wpDrag.current;
+    if (wd && onDragWaypoint) {
+      if (!wd.moved && Math.hypot(e.clientX - wd.x, e.clientY - wd.y) < 3) return;
+      wd.moved = true;
+      suppressClick.current = true;
+      const p = garmentAt(e.clientX, e.clientY);
+      if (wd.kind === 'height') {
+        const g = Math.max(0, Math.round(p.h * rpc));
+        const sig = `h${g}`;
+        if (sig !== wd.last) {
+          wd.last = sig;
+          onDragWaypoint(wd.wpId, { kind: 'height', h: g / rpc }, e.altKey, wd.key);
+        }
+        setWpReadout({ sx: p.sx, sy: p.sy, text: `row ${c.topDown ? top - g : g} · ${len(g / rpc, units)} up${e.altKey ? ' · this size only' : ''}` });
+      } else {
+        // Half width from the centre line, snapped to half stitches.
+        const r = wrapRef.current!.getBoundingClientRect();
+        const X = (e.clientX - r.left - v.ox) / v.scale;
+        const half = Math.max(1, Math.round(Math.abs(X) * spc * 2) / 2);
+        const factor = half / wd.half0;
+        const sig = `w${half}`;
+        if (sig !== wd.last) {
+          wd.last = sig;
+          onDragWaypoint(wd.wpId, { kind: 'width', part: wd.part, factor }, e.altKey, wd.key);
+        }
+        setWpReadout({ sx: p.sx, sy: p.sy, text: `${wd.part === 'width' ? sts(Math.round(half * 2)) : `${wd.part} half ${sts(half)}`}${e.altKey ? ' · this size only' : ''}` });
+      }
+      return;
+    }
     if (drawLine && drawPts.first) {
       const r = wrapRef.current!.getBoundingClientRect();
       setDrawPts((d) => ({ ...d, cursor: { sx: e.clientX - r.left, sy: e.clientY - r.top } }));
@@ -304,6 +349,12 @@ export function Schematic({ computed: c, direction, units, selection, onSelect, 
     setHoverRow(row >= 0 && row <= top ? row : null);
   };
   const onPointerUp = () => {
+    if (wpDrag.current) {
+      if (wpDrag.current.moved) suppressClick.current = true;
+      wpDrag.current = null;
+      setWpReadout(null);
+      return;
+    }
     const md = markerDrag.current;
     if (md) {
       markerDrag.current = null;
@@ -452,7 +503,22 @@ export function Schematic({ computed: c, direction, units, selection, onSelect, 
           return (
             <g key={w.id} className={`wp${sel ? ' selected' : ''}`} onClick={click({ kind: 'waypoint', id: w.id })}>
               <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} className="wp-line" />
-              <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} className="hit" />
+              <line
+                x1={a.x}
+                y1={a.y}
+                x2={b.x}
+                y2={b.y}
+                className={`hit${onDragWaypoint && vertical && i > 0 && sel ? ' drag-y' : ''}`}
+                onPointerDown={(e) => i > 0 && sel && startWpDrag(e, w, 'height', 'width')}
+              />
+              {onDragWaypoint && vertical && i > 0 && sel && (
+                <g className="wp-grip" onPointerDown={(e) => startWpDrag(e, w, 'height', 'width')}>
+                  <rect x={(a.x + b.x) / 2 - 14} y={(a.y + b.y) / 2 - 7} width={28} height={14} rx={7} />
+                  <path d={`M${(a.x + b.x) / 2 - 6},${(a.y + b.y) / 2 - 2} h12 M${(a.x + b.x) / 2 - 6},${(a.y + b.y) / 2 + 2} h12`} />
+                  <title>Drag up or down (or use ↑ ↓; Alt: this size only)</title>
+                </g>
+              )}
+
               {showWidth && vertical && (
                 <text x={mid.x} y={mid.y + (labelBelow(w.row) || crowdedAbove(i) ? 13 : -5)} className="dim-text" textAnchor="middle">
                   {len(finishedCm(w.actualStitches, w.selvedge), units)} · {sts(w.actualStitches)}
@@ -665,6 +731,25 @@ export function Schematic({ computed: c, direction, units, selection, onSelect, 
               </g>
             );
           })}
+        {/* width handles of the selected waypoint (on top, so the edges don't cover them) */}
+        {onDragWaypoint && vertical && selection.kind === 'waypoint' && (() => {
+          const w = c.waypoints.find((x) => x.id === selection.id);
+          if (!w) return null;
+          return (['left', 'right'] as const).map((side) => {
+            const p = S(side === 'left' ? c.leftEdge[w.row] : c.rightEdge[w.row], w.row);
+            const part = w.symmetric ? 'width' : side;
+            return (
+              <rect key={side} x={p.x - 5} y={p.y - 5} width={10} height={10} className="wp-handle" onPointerDown={(e) => startWpDrag(e, w, 'width', part)}>
+                <title>Drag to change the width (Alt: this size only)</title>
+              </rect>
+            );
+          });
+        })()}
+        {wpReadout && (
+          <text x={wpReadout.sx + 12} y={wpReadout.sy - 10} className="drag-label">
+            {wpReadout.text}
+          </text>
+        )}
         {drawLine && drawPts.first && drawPts.cursor && (
           <line x1={drawPts.first.sx} y1={drawPts.first.sy} x2={drawPts.cursor.sx} y2={drawPts.cursor.sy} className="draw-preview" />
         )}

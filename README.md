@@ -36,6 +36,7 @@ npm run typecheck
   - `checks.ts`: project-wide checks for the check panel.
   - `bust.ts`: bust shaping (formulas with numbers plugged in, short-row wedges, horizontal and vertical darts).
   - `joins.ts`: measuring tagged edges, seam comparison, pick-up suggestions. `edges.ts`: edge length along the outline.
+  - `waypointDrag.ts`: proportional waypoint height/width edits, linked panels, match.
   - `layout.ts`: garment layout geometry (local cm frame, rotation, placement), size alignment, T-shape auto-arrange.
   - `free.ts`: painted stitches (paint, erase, repeat, mirror, copy to all sizes). `lines.ts`: shaping lines.
   - `chart.ts`: the stitch chart grid built from a computed panel (cells, short rows, repeats, legend, column folding).
@@ -107,6 +108,30 @@ Raw counts are rounded in this order, and each step is shown in the UI:
    The last neck decrease falls one row before the top, because the final row of a flat panel works one side only.
 6. Every row's edge positions and live stitch count are recorded. The check list flags targets that are not reached,
    shaping that doesn't fit its rows, and a neck wider than the shoulders.
+
+## Dragging waypoints and linked panels
+
+On the schematic (one size), **click a waypoint's dashed line to activate it** (it turns blue and gets a grip in the
+middle; dragging an inactive line just pans the view). Then **drag the line or its grip** up or down to move it (snaps
+to whole rows), and **drag the squares at its ends** to change its width (snaps to half stitches per side; on an
+asymmetric waypoint each end moves its own half). Or use the keyboard: **↑ ↓** one row, **← →** one stitch each side
+narrower/wider, **Shift** for 5. A readout shows the row or stitch count; each drag (or run of key presses) is one
+undo step.
+
+Every size follows **proportionally**:
+- a dragged **height** is rewritten as a fraction of the way between the waypoints below and above,
+  `armhole_bo.height + (shoulder.height - armhole_bo.height) * 0.42`, so it keeps its relative place in every size
+  (neighbours that refer back to it are skipped to avoid loops; the top or bottom waypoint keeps a fixed distance from
+  its neighbour);
+- a dragged **width** multiplies its expression, `(cross_chest_back + 1) * 1.18`; repeated drags fold into one factor.
+
+Hold **Alt** while dragging to change **this size only** (a per-size fixed value). Typed formulas are replaced when
+you drag (the old one stays in undo).
+
+**Linked panels** (Panel → *Linked panel*, e.g. Back ↔ Front, set by you): dragging a waypoint also moves the
+waypoint **with the same name** on the linked panel **by the same amount** (the same rows in this size, then
+proportionally in the others; widths by the same proportion), so differences you built in are kept. To line them up
+instead, a linked waypoint's properties have *Make Front's armhole_end match this one: height / width / both*.
 
 ## Templates
 
@@ -424,6 +449,7 @@ A **Panel**:
                      "amount": Dim, "kind": "one-way" | "fisheye", "sides": "both" | "one",
                      "rowSide": "rs" | "any", "mirror": true, "manual": { "<sizeId>": [12, 16] } }],
   "startFrom": "caston" | "pickup",            // optional: how the first row is made (top-down fronts: pickup)
+  "linkedTo": "panel_…" | null,                // optional: linked panel (waypoint drags follow by name)
   "layout": { "x": 0, "y": 0, "rotation": 0 | 90 | 180 | 270 },
   "notes": ""
 }

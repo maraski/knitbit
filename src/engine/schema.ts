@@ -186,6 +186,7 @@ const panel = obj({
   ),
   princess: optional(nullable(obj({ position: dimExpr, sides: oneOf('both', 'one') }))),
   startFrom: optional(oneOf('caston', 'pickup')),
+  linkedTo: optional(nullable(str)),
   freeStitches: optional(arr(obj({ id: str, sizeId: str, row: num, x: num, symbol: str, mirror: bool }))),
   shapingLines: optional(
     arr(

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Id } from '../engine/model';
 import { buildScope } from '../engine/measurements';
 import { computePanel, resolvePanelDims, type ComputedPanel } from '../engine/panel';
@@ -7,6 +7,7 @@ import { LayoutView } from './components/LayoutView';
 import { SizeModeBar, type SizeMode } from './components/SizeModeBar';
 import { ChartView } from './components/ChartView';
 import { lineFromPoints } from '../engine/lines';
+import { dragHeight, dragWidth } from '../engine/waypointDrag';
 import { editPanel } from './edit';
 import { loadProject, serializeProject } from '../engine/schema';
 import { CheckPanel } from './components/CheckPanel';
@@ -45,6 +46,7 @@ export function App() {
   const [center, setCenter] = useState<CenterView>(view.center ?? 'schematic');
   const [sizeMode, setSizeMode] = useState<SizeMode>(view.mode ?? 'single');
   const [drawLine, setDrawLine] = useState(false);
+  const wpDragStart = useRef<{ key: string; value: number } | null>(null);
   const [compareRaw, setCompare] = useState<Id[] | null>(view.compare ?? null); // null = all sizes
   const [align, setAlign] = useState<AlignRef>(view.align ?? 'hem');
   const compare = (compareRaw ?? project.sizes.map((s) => s.id)).filter((id) => project.sizes.some((s) => s.id === id));
@@ -139,6 +141,33 @@ export function App() {
         else if ((k === 'delete' || k === 'backspace') && selection.kind === 'segment' && selection.marker !== undefined && markers) {
           markers.remove(selection.fromWaypoint, selection.edge ?? 'left', selection.marker);
           setSelection({ ...selection, marker: undefined });
+        } else if (k.startsWith('arrow') && center === 'schematic' && sizeMode === 'single' && selection.kind === 'waypoint' && panel && size && computed?.ok && panel.direction !== 'side-to-side') {
+          // Nudge the active waypoint: ↑ ↓ one row (Shift: 5), ← → one stitch each side (Shift: 5). Alt: this size only.
+          const w = computed.waypoints.find((x) => x.id === selection.id);
+          if (!w) return;
+          const step = e.shiftKey ? 5 : 1;
+          const mode = e.altKey ? 'size' : 'all';
+          const key = `nudge:${w.id}:${k}:${mode}`;
+          if (k === 'arrowup' || k === 'arrowdown') {
+            const first = computed.topDown ? computed.waypoints[computed.waypoints.length - 1] : computed.waypoints[0];
+            if (w.id === first.id) return;
+            const h = scope[`${w.key}.height`];
+            if (h === undefined) return;
+            update((p) => dragHeight(p, panel.id, w.id, size.id, h + ((k === 'arrowup' ? 1 : -1) * step) / computed.rowsPerCm, mode), key);
+          } else {
+            const sign = k === 'arrowright' ? 1 : -1;
+            const parts = w.symmetric ? (['width'] as const) : (['left', 'right'] as const);
+            update((p) => {
+              let q = p;
+              for (const part of parts) {
+                const v = scope[`${w.key}.${part}`];
+                if (v === undefined) continue;
+                const d = (sign * step * (part === 'width' ? 2 : 1)) / computed.stitchesPerCm;
+                q = dragWidth(q, panel.id, w.id, size.id, part, Math.max(0.5, v + d), mode);
+              }
+              return q;
+            }, key);
+          }
         } else if (k === 'escape') {
           setDrawLine(false);
           setSelection(PANEL_SELECTION);
@@ -294,6 +323,19 @@ export function App() {
               compare={compare.map((sid) => computedFor(panel.id, sid))}
               align={align}
               project={project}
+              onDragWaypoint={(wpId, ch, sizeOnly, key) => {
+                const w = computed.waypoints.find((x) => x.id === wpId);
+                if (!w || !size) return;
+                const mode = sizeOnly ? 'size' : 'all';
+                if (ch.kind === 'height') {
+                  const h0 = (scope[`${w.key}.height`] ?? w.heightCm) - w.heightCm;
+                  update((p) => dragHeight(p, panel.id, wpId, size.id, ch.h + h0, mode), key);
+                } else {
+                  if (wpDragStart.current?.key !== key) wpDragStart.current = { key, value: scope[`${w.key}.${ch.part}`] ?? 0 };
+                  const start = wpDragStart.current.value;
+                  if (start > 0) update((p) => dragWidth(p, panel.id, wpId, size.id, ch.part, start * ch.factor, mode), key);
+                }
+              }}
               drawLine={drawLine && sizeMode === 'single'}
               onDrawLine={(a, b) => {
                 const w0 = computed.waypoints[0];

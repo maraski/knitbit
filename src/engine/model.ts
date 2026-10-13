@@ -244,6 +244,8 @@ export interface Panel {
   neckline: Neckline | null;
   bust?: BustShaping | null;
   princess?: Princess | null;
+  /** A panel linked by the knitter (e.g. back ↔ front): dragging a waypoint moves the same-named one there too. */
+  linkedTo?: Id | null;
   /** How the first row is made: cast on (default) or picked up from another panel (top-down fronts). */
   startFrom?: 'caston' | 'pickup';
   freeStitches?: FreeStitch[];

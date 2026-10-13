@@ -2,6 +2,7 @@ import type { DimExpr, Id, Panel, Project, SegmentMethod, Waypoint } from '../..
 import { defaultAutoMethod, defaultBust, defaultPrincess, dim, newId, newWaypoint, type ShapingPlacement } from '../../engine/model';
 import { BustProps } from './BustProps';
 import { LineProps, linePresets } from './LineProps';
+import { linkPanels, matchPartner, partnerWaypoint } from '../../engine/waypointDrag';
 import { JOIN_TAGS, sameEdge } from '../../engine/joins';
 import type { EdgeKey, JoinTag } from '../../engine/model';
 import { produce } from '../edit';
@@ -177,6 +178,15 @@ function PanelProps({ ctx }: { ctx: PropsContext }) {
         </button>
       )}
 
+      <div className="field">
+        <label>Linked panel</label>
+        <select value={panel.linkedTo ?? ''} onChange={(e) => update((p) => linkPanels(p, panel.id, e.target.value || null))}>
+          <option value="">None</option>
+          {ctx.project.panels.filter((x) => x.id !== panel.id).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+        </select>
+        <div className="hint">Dragging a waypoint here moves the same-named one on the linked panel by the same amount (e.g. back ↔ front).</div>
+      </div>
+
       <TagEdge ctx={ctx} edge={{ kind: 'bottom' }} label="lower edge" />
       <TagEdge ctx={ctx} edge={{ kind: 'top' }} label="upper edge" />
 
@@ -326,6 +336,23 @@ function RoundingSteps({ r, label }: { r: RoundingResult; label?: string }) {
   );
 }
 
+/** "Match" buttons: line the linked panel's same-named waypoint up with this one. */
+function PartnerMatch({ ctx, wp }: { ctx: PropsContext; wp: Waypoint }) {
+  const pw = partnerWaypoint(ctx.project, ctx.panel, wp.id);
+  if (!ctx.panel.linkedTo) return null;
+  const partner = ctx.project.panels.find((p) => p.id === ctx.panel.linkedTo);
+  if (!pw) return <p className="hint">{partner?.name ?? 'The linked panel'} has no waypoint called “{wp.name}”, so it doesn't follow this one.</p>;
+  const match = (what: { height: boolean; width: boolean }) => ctx.update((p) => matchPartner(p, ctx.panel.id, wp.id, ctx.sizeId, what));
+  return (
+    <div className="button-row">
+      <span className="muted small">Make {pw.partner.name}’s {wp.name} match this one:</span>
+      <button onClick={() => match({ height: true, width: false })}>height</button>
+      <button onClick={() => match({ height: false, width: true })}>width</button>
+      <button onClick={() => match({ height: true, width: true })}>both</button>
+    </div>
+  );
+}
+
 function WaypointProps({ ctx, wp }: { ctx: PropsContext; wp: Waypoint }) {
   const { panel, update } = ctx;
   const cw = ctx.computed.waypoints.find((w) => w.id === wp.id);
@@ -377,6 +404,8 @@ function WaypointProps({ ctx, wp }: { ctx: PropsContext; wp: Waypoint }) {
         <input value={wp.name} onChange={(e) => set((w) => void (w.name = e.target.value), `wp.${wp.id}.name`)} />
         {cw && <div className="hint">Refer to it as <code>{cw.key}.height</code>, <code>{cw.key}.width</code></div>}
       </div>
+      <p className="hint">Drag its line on the schematic to move it, its end squares to change the width: every size follows proportionally (Alt: this size only).</p>
+      <PartnerMatch ctx={ctx} wp={wp} />
       <ExprField label="Height from start edge" value={wp.height} onChange={setDim('height')} fieldKey="height" {...common} detail={cw && <>→ row {cw.row}</>} />
       {cw && <RoundingSteps r={cw.rowRounding} />}
 
