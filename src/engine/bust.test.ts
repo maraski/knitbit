@@ -125,12 +125,17 @@ describe('short-row shoulders keep their stitches live', () => {
   it('top-down bodices cast on both shoulders and keep them through the slope', () => {
     const p = fixtureProject();
     const M = sizeId(p, 'M');
-    const c = computePanel(p, fromTemplate('back', { direction: 'top-down' }), M);
+    // Shaped back neck: both shoulders cast on, the neck opening excluded.
+    const c = computePanel(p, fromTemplate('back', { direction: 'top-down', backNeck: 'shaped' }), M);
     const shoulder = c.waypoints.find((w) => w.name === 'shoulder')!;
     const neckSide = c.waypoints.find((w) => w.name === 'neck_side')!;
-    expect(c.counts[0]).toBe(shoulder.stitches - neckSide.stitches); // both shoulders, neck opening excluded
+    expect(c.counts[0]).toBe(shoulder.stitches - neckSide.stitches);
     expect(c.held[0]).toBeGreaterThan(0);
     expect(c.held[shoulder.row]).toBe(0);
+    // Straight back neck (default): cast on straight across, back neck included.
+    const s2 = computePanel(p, fromTemplate('back', { direction: 'top-down' }), M);
+    expect(s2.counts[0]).toBe(s2.waypoints.find((w) => w.name === 'shoulder')!.stitches);
+    expect(s2.neck).toBeNull();
   });
 });
 

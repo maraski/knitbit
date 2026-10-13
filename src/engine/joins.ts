@@ -93,7 +93,8 @@ export function measureEdge(
 
   if (e.kind === 'bottom' || e.kind === 'top') {
     const r = e.kind === 'bottom' ? garmentBottom : garmentTop;
-    let sts = roundNearest(c.rightEdge[r] - c.leftEdge[r]);
+    // A top-down cast-on row includes the stitches short-row shoulders hold at first.
+    let sts = roundNearest(c.rightEdge[r] - c.leftEdge[r] + (c.topDown && e.kind === 'top' ? c.held[r] ?? 0 : 0));
     if (c.neckLeft[r] !== null) sts -= roundNearest(c.neckRight[r]! - c.neckLeft[r]!);
     sts = Math.max(0, sts);
     return { ok: true, label, rows: 0, stitches: sts, lengthCm: sts / spc, pickup: sts, parts: [`${sts} sts`], rowRange: null };

@@ -18,6 +18,8 @@ import { roundNearest, roundRows, roundStitches, type RoundingResult } from './r
 import { bustValues, computeBust, type ComputedBust } from './bust';
 import { sideEdgeLength } from './edges';
 import { defaultSymbol } from './symbols';
+import { freeCells, freeInterior } from './free';
+import { computeLines, type ComputedLine } from './lines';
 
 export type Edge = 'left' | 'right';
 export type EventKind = 'dec' | 'inc' | 'bindoff' | 'caston' | 'turn';
@@ -30,6 +32,7 @@ export interface ShapeEvent {
 }
 
 export type IssueRef =
+  | { kind: 'line'; id: Id }
   | { kind: 'panel' }
   | { kind: 'waypoint'; id: Id }
   | { kind: 'segment'; fromWaypoint: Id; edge?: Edge }
@@ -121,6 +124,7 @@ export interface Marker {
   delta: number;
   kind: EventKind;
   segment: number; // segment index, or -1 for the neckline
+  atLine?: boolean; // on a princess line, not the edge
 }
 
 export interface ComputedPanel {
@@ -140,6 +144,8 @@ export interface ComputedPanel {
   firstFlatRow: number;
   sections: ComputedSection[];
   bust: ComputedBust | null;
+  /** Shaping lines drawn in the panel, for this size. */
+  lines: ComputedLine[];
   /** Princess lines, when any segment shapes at them: distance of each line from the row's centre (sts). */
   princess: { offset: number; sides: 'both' | 'one' } | null;
   /** Stitches held (live but not worked) by short-row segments, per knit row. */
@@ -278,6 +284,7 @@ function emptyPanel(panel: Panel, sizeId: Id, spc: number, rpc: number, issues: 
     roundRows: null,
     firstFlatRow: 1,
     princess: null,
+    lines: [],
     sections: [],
     bust: null,
     held: [],
@@ -433,12 +440,29 @@ export function computePanel(project: Project, panel: Panel, sizeId: Id): Comput
   const joinRow = joinWp ? wps.find((w) => w.id === joinWp.id)!.row : null;
   let roundPart: { from: number; to: number } | null = null;
   if (panel.inTheRound) roundPart = { from: 1, to: totalRows };
-  else if (joinRow !== null) roundPart = topDown ? { from: joinRow + 1, to: totalRows } : { from: 1, to: joinRow };
+  else if (joinRow !== null) {
+    let from = joinRow + 1;
+    // Top-down with a front neckline: the fronts are joined at the centre when the neck shaping is done. If that is
+    // below the underarm join (a deep V), the body stays flat until then.
+    if (topDown && panel.neckline) {
+      const d = evaluateDim(panel.neckline.depth, sizeId, scope);
+      if (d.ok) {
+        let split = roundRows(d.value.value * rpc).value;
+        if (split % 2 === 0) split += 1; // the centre is cast on on a RS row
+        if (split >= from) {
+          issues.push({ severity: 'info', message: `The neck closes on row ${split}, below the underarm join (row ${joinRow}): the body is worked flat until then, in the round from row ${split + 1}.`, ref: { kind: 'neckline' } });
+          from = split + 1;
+        }
+      }
+    }
+    roundPart = topDown ? { from: Math.min(from, totalRows + 1), to: totalRows } : { from: 1, to: joinRow };
+    if (topDown && roundPart.from > roundPart.to) roundPart = null;
+  }
   const isFlatRow = (r: number) => !roundPart || r < roundPart.from || r > roundPart.to;
   const firstFlatRow = !roundPart || roundPart.from > 1 ? 1 : roundPart.to + 1;
   const rsOdd = firstFlatRow % 2 === 1;
   const isRS = (r: number) => (r - firstFlatRow) % 2 === 0;
-  const flat = isFlatRow(totalRows); // the top of the panel (where any neckline is)
+  const flat = isFlatRow(topDown ? 1 : totalRows); // the garment's top (where any neckline is): row 1 when top-down
 
   const sections: ComputedSection[] = rawSections.map((x) => {
     const g = (h: number) => roundRows_(h - h0);
@@ -570,8 +594,9 @@ export function computePanel(project: Project, panel: Panel, sizeId: Id): Comput
     const lineX = (edge: Edge, r: number) => (leftEdge[r] + rightEdge[r]) / 2 + (edge === 'left' ? -1 : 1) * princessOut!.offset;
     const markX = (edge: Edge, e: ShapeEvent) =>
       placement !== 'edge' && (e.kind === 'dec' || e.kind === 'inc') ? lineX(edge, e.row) : edge === 'left' ? leftEdge[e.row] : rightEdge[e.row];
-    for (const e of left.events) markers.push({ edge: 'left', row: e.row, x: markX('left', e), delta: e.delta, kind: e.kind, segment: i });
-    for (const e of right.events) markers.push({ edge: 'right', row: e.row, x: markX('right', e), delta: e.delta, kind: e.kind, segment: i });
+    const onLine = (e: ShapeEvent) => placement !== 'edge' && (e.kind === 'dec' || e.kind === 'inc');
+    for (const e of left.events) markers.push({ edge: 'left', row: e.row, x: markX('left', e), delta: e.delta, kind: e.kind, segment: i, atLine: onLine(e) });
+    for (const e of right.events) markers.push({ edge: 'right', row: e.row, x: markX('right', e), delta: e.delta, kind: e.kind, segment: i, atLine: onLine(e) });
 
     hi.actualStitches = R - L;
     if (hi.actualStitches !== hi.stitches) {
@@ -688,6 +713,51 @@ export function computePanel(project: Project, panel: Panel, sizeId: Id): Comput
     }
   }
 
+  // ---- shaping lines and free stitches: inside the fabric, so they widen/narrow the panel about the centre ----
+  const lineRes = computeLines({
+    panel,
+    sizeId,
+    scope,
+    spc,
+    rpc,
+    totalRows,
+    topDown,
+    h0,
+    isRS,
+    isFlatRow,
+    halfWidth: (r) => (rightEdge[r] - leftEdge[r]) / 2,
+  });
+  const lineOut = lineRes.lines;
+  for (const l of lineOut) for (const i of l.issues) issues.push({ ...i, message: `Line "${l.name}": ${i.message}`, ref: { kind: 'line', id: l.id } });
+  const freeOnly = freeInterior(project, panel, sizeId, totalRows);
+  const free = freeOnly.map((v, r) => v + lineRes.interior[r]);
+  const freeRows: number[] = [];
+  if (free.some((v) => v !== 0)) {
+    for (let r = 0; r <= totalRows; r++) {
+      leftEdge[r] -= free[r] / 2;
+      rightEdge[r] += free[r] / 2;
+      if (r > 0 && free[r] !== free[r - 1]) freeRows.push(r);
+    }
+    const net = free[totalRows];
+    // Narrowing that is never undone: the shoulder/top bind-offs were planned without it.
+    if (neck) {
+      const o = neck.openRow;
+      if ((neckLeft[o] ?? 0) - leftEdge[o] < -1e-6 || rightEdge[o] - (neckRight[o] ?? 0) < -1e-6) {
+        issues.push({ severity: 'warning', message: `Painted stitches / shaping lines run out of stitches at the shoulders (${net} sts overall): the shoulder bind-offs were planned for the original width. Add increases back, use a fisheye line, or treat it as an experiment.`, ref: { kind: 'panel' } });
+      }
+    } else if (rightEdge[totalRows] - leftEdge[totalRows] < 0) {
+      issues.push({ severity: 'warning', message: `Painted stitches / shaping lines run out of stitches before the top.`, ref: { kind: 'panel' } });
+    }
+    const netFree = freeOnly[totalRows];
+    if (freeOnly.some((v) => v !== 0)) issues.push({ severity: 'info', message: `Painted stitches change the count by ${netFree > 0 ? '+' : ''}${netFree} st${Math.abs(netFree) === 1 ? '' : 's'} by the last row; the shaping after them is unchanged, so later widths move with them.`, ref: { kind: 'panel' } });
+  }
+  // Edge markers follow widened edges (darts and painted stitches).
+  const widen = (r: number) => (bust?.darts ? bust.darts.interior[r] / 2 : 0) + free[r] / 2;
+  for (const m of markers) {
+    if (m.atLine || (m.edge !== 'left' && m.edge !== 'right')) continue;
+    m.x += (m.edge === 'left' ? -1 : 1) * widen(m.row);
+  }
+
   // ---- stitches held by short-row segments (live, but outside the turns) ----
   const held = new Array<number>(totalRows + 1).fill(0);
   for (const seg of segments) {
@@ -729,7 +799,26 @@ export function computePanel(project: Project, panel: Panel, sizeId: Id): Comput
     }
   }
 
-  const extraRows = bust?.darts ? [...bust.darts.incRows, ...bust.darts.decRows] : [];
+  const extraRows = [...(bust?.darts ? [...bust.darts.incRows, ...bust.darts.decRows] : []), ...freeRows];
+
+  // Painted stitches outside the fabric on their row.
+  {
+    let outside = 0;
+    for (const f of panel.freeStitches ?? []) {
+      if (f.sizeId !== sizeId) continue;
+      if (f.row < 1 || f.row > totalRows) {
+        outside++;
+        continue;
+      }
+      const centre = (leftEdge[f.row] + rightEdge[f.row]) / 2;
+      for (const cell of freeCells(f)) {
+        const a = centre + cell.x;
+        const inNeck = neckLeft[f.row] !== null && a + 0.5 > neckLeft[f.row]! && a + 0.5 < neckRight[f.row]!;
+        if (a < leftEdge[f.row] - 1e-6 || a + 1 > rightEdge[f.row] + 1e-6 || inNeck) outside++;
+      }
+    }
+    if (outside) issues.push({ severity: 'warning', message: `${outside} painted stitch${outside === 1 ? ' is' : 'es are'} outside the fabric on ${outside === 1 ? 'its' : 'their'} row and ${outside === 1 ? 'is' : 'are'} not drawn.`, ref: { kind: 'panel' } });
+  }
   const outline = buildOutline(wps, segments, leftEdge, rightEdge, neckLeft, neckRight, neck, topDown, extraRows);
 
   return {
@@ -748,6 +837,7 @@ export function computePanel(project: Project, panel: Panel, sizeId: Id): Comput
     sections,
     bust,
     princess: princessOut,
+    lines: lineOut,
     held,
     leftEdge,
     rightEdge,
@@ -1014,6 +1104,7 @@ function computeNeck(
   const nl0 = fracL + roundNearest(centreX - centreRaw / 2 - fracL);
   const nr0 = fracR + roundNearest(centreX + centreRaw / 2 - fracR);
   const centre = Math.max(0, nr0 - nl0);
+  if (nk.shape === 'square') width = Math.max(width, centre); // the whole opening goes at once; rounding can differ by a stitch
   let perSide = Math.floor((width - centre) / 2);
   if (perSide < 0) {
     issues.push({ severity: 'warning', message: `The centre (${centre} sts) is wider than the neck opening (${width} sts).`, ref });

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { convertGauge, type GaugeBasis } from '../../engine/gauge';
 import { newId, type Id, type Project } from '../../engine/model';
 import { ensureEstimates } from '../../engine/seed';
-import { fromTemplate, TEMPLATE_MEASUREMENTS, TEMPLATES, type TemplateId, type TemplateOptions } from '../../engine/templates';
+import { fromTemplate, TEMPLATE_MEASUREMENTS, TEMPLATES, topDownTop, type TemplateId, type TemplateOptions } from '../../engine/templates';
 import { roundTo } from '../../engine/units';
 import { dropPanelFromJoins, JOIN_TAGS, type PanelCache } from '../../engine/joins';
 import type { JoinTag } from '../../engine/model';
@@ -42,16 +42,34 @@ export function Sidebar(props: Props) {
 }
 
 function PanelList({ project, panelId, update, selectPanel }: Props) {
-  const [tpl, setTpl] = useState<TemplateId>('front');
-  const [opts, setOpts] = useState<TemplateOptions>({ direction: 'bottom-up', neckline: 'round', sleeve: 'set-in', joinInRound: false });
+  const [tpl, setTpl] = useState<TemplateId>('top');
+  const [opts, setOpts] = useState<TemplateOptions>({
+    direction: 'bottom-up',
+    neckline: 'round',
+    sleeve: 'set-in',
+    joinInRound: true,
+    construction: 'shoulders-first',
+    shoulderSlope: 'shortrows',
+    backNeck: 'straight',
+  });
   const def = TEMPLATES.find((t) => t.id === tpl)!;
+  const topDown = tpl === 'top' || opts.direction === 'top-down';
+  const shouldersFirst = tpl === 'top' || (opts.direction === 'top-down' && opts.construction === 'shoulders-first');
 
   const add = () => {
-    const panel = fromTemplate(tpl, opts);
+    const set = tpl === 'top' ? topDownTop(opts) : { panels: [fromTemplate(tpl, opts)], joins: [] };
     const names = new Set(project.panels.map((p) => p.name));
-    if (names.has(panel.name)) for (let i = 2; ; i++) if (!names.has(`${panel.name} ${i}`)) { panel.name = `${panel.name} ${i}`; break; }
-    update((p) => produce(ensureEstimates(p, TEMPLATE_MEASUREMENTS[tpl]).project, (d) => void d.panels.push(panel)));
-    selectPanel(panel.id);
+    for (const panel of set.panels) {
+      if (names.has(panel.name)) for (let i = 2; ; i++) if (!names.has(`${panel.name} ${i}`)) { panel.name = `${panel.name} ${i}`; break; }
+      names.add(panel.name);
+    }
+    update((p) =>
+      produce(ensureEstimates(p, TEMPLATE_MEASUREMENTS[tpl]).project, (d) => {
+        d.panels.push(...set.panels);
+        if (set.joins.length) d.joins = [...(d.joins ?? []), ...set.joins];
+      }),
+    );
+    selectPanel(set.panels[set.panels.length - 1].id);
   };
   const duplicate = (id: Id) => {
     const src = project.panels.find((p) => p.id === id);
@@ -132,13 +150,38 @@ function PanelList({ project, panelId, update, selectPanel }: Props) {
             </select>
           </label>
         )}
+        {topDown && tpl !== 'top' && (tpl === 'back' || tpl === 'front') && (
+          <label className="opt">Construction
+            <select value={opts.construction} onChange={(e) => setOpts({ ...opts, construction: e.target.value as TemplateOptions['construction'] })}>
+              <option value="shoulders-first">Shoulders first ({tpl === 'front' ? 'picked up from the back' : 'front picked up from it'})</option>
+              <option value="standalone">Standalone (cast on at the top)</option>
+            </select>
+          </label>
+        )}
+        {topDown && def.options.includes('shoulderSlope') && (
+          <label className="opt">Shoulders
+            <select value={opts.shoulderSlope} onChange={(e) => setOpts({ ...opts, shoulderSlope: e.target.value as TemplateOptions['shoulderSlope'] })}>
+              <option value="shortrows">Sloped (German short rows)</option>
+              <option value="none">Straight</option>
+            </select>
+          </label>
+        )}
+        {topDown && def.options.includes('backNeck') && (
+          <label className="opt">Back neck
+            <select value={opts.backNeck} onChange={(e) => setOpts({ ...opts, backNeck: e.target.value as TemplateOptions['backNeck'] })}>
+              <option value="straight">Straight (cast on across)</option>
+              <option value="shaped">Shaped</option>
+            </select>
+          </label>
+        )}
+        {shouldersFirst && <p className="hint">Underarms: half the cast-on on the front, half on the back (Underarm cast-on, an estimated measurement).</p>}
         {def.options.includes('joinInRound') && (
           <label className="check">
             <input type="checkbox" checked={!!opts.joinInRound} onChange={(e) => setOpts({ ...opts, joinInRound: e.target.checked })} />
             In the round below the underarm
           </label>
         )}
-        <button className="primary" onClick={add}>Add {def.label.toLowerCase()}</button>
+        <button className="primary" onClick={add}>{tpl === 'top' ? 'Add back + front' : `Add ${def.label.toLowerCase()}`}</button>
       </div>
     </>
   );

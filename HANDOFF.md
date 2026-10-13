@@ -1,8 +1,8 @@
 # Knitbit: handoff
 
 _Last updated 2026-10-13. Git `main`: `b99db67` (milestones 1–8), `d1e84e3` (first handoff), `ea7908c` (fitted cap +
-M9); milestone 10 and the two shaping options below are in the working tree (uncommitted at the time of writing).
-180 tests passing; typecheck and build clean._
+M9), `6ee297f` (M10 + bust/princess options); painted stitches, shaping lines and the shoulders-first construction are in the working tree
+(uncommitted at the time of writing). 201 tests passing; typecheck and build clean._
 
 > **Milestone count:** the plan has **12 milestones**. **1–10 are complete**; **11–12 remain** (export, polish).
 
@@ -72,6 +72,8 @@ flagged `topDown`; the renderer flips them so every panel is drawn **upright**.
 | — | **Sleeve cap fitted to the armhole** (after M8) | `armhole_len` (from the sleeve's seam join, else Front + Back armholes, else an estimate); `cap_ease` estimate (1.5 cm); set-in `cap_top` height solved from it; `sqrt()` in expressions; `engine/edges.ts` shared edge-length measure. Cap now 1.0–2.4 cm longer than the armhole in all sizes, both directions (was 10–20 cm short). |
 | 9 | **Garment layout + size display modes** | `engine/layout.ts` (local cm frame, rotation/placement, `refHeight`/`alignShift`, T-shape `arrangeT` spaced for every size); **Layout** view: all panels at one scale, drag (one undo per drag), rotate ⟲/⟳, Auto-arrange, join-coloured edges, dashed seam links; **One size / Overlay / Grid** for Schematic and Layout with a sequential colour ramp, legend, size picker and alignment reference (lower edge, waist, underarm, shoulder, top); schematic overlay shows each size's bust points and short-row wedges. |
 | — | **Shaping options** (after M10, user request) | **Bust short rows bust point → side seam** (`bust.shortRows.span = 'apex-to-side'`, `start = 'apex'`; turns at the apex then every `step` = floor(side sts ÷ turns per side) sts outwards, per the starcrossed knits method; top-down lengthening / bottom-up shortening mirror; preset button; error when step < 1). `wedgeBands()` draws the wedge in working order. **Princess-seam shaping** (`Segment.placement` edge/princess/both, `Panel.princess` {position Dim, default `apex_to_apex / 2`, sides both/one}); `computePanel` multiplies auto `perSide` by the shaping points, puts markers on the lines (`ComputedPanel.princess.offset`), odd stitch one-sided with an info note; `manual.shapingPoints` scales hand-placed marker deltas; chart draws stitch + mirror either side of each line. Tests in `shapingOptions.test.ts`. |
+| — | **Experimenting tools** (after M10, user request; "A then B before M11") | **A. Painted stitches** (`engine/free.ts`, `Panel.freeStitches` per size: row, x = cell left edge from the row centre, symbol, mirror): paint/erase/toggle, mirror with leaning swap, repeat every N rows × k, **Copy to all sizes** (proportional between waypoints and across the half width, snapped to the stitch grid), clear; Chart ✎ Paint mode (P), strokes interpolated, one undo per stroke; schematic marks. **B. Shaping lines** (`engine/lines.ts`, `Panel.shapingLines`: two anchors as cm expressions, amount in sts, one-way/fisheye, both/one side, RS/any rows, mirror, manual rows per size): `computeLines` spreads events, `lineX` interpolates; `lineFromPoints` turns two schematic clicks into graded expressions; presets; `LineProps` editor, ✎ Line tool, chart symbols either side of the line. Both feed one interior array in `computePanel` that widens the edges about the centre (edge markers shifted to match; darts too). Tests: `free.test.ts`, `lines.test.ts`. Also: `grading.allDims` now includes bust/princess/line expressions (rename + remove size). |
+| — | **Top-down shoulders-first construction** (user's usual method) | `templates.ts`: `construction` (default `shoulders-first` for top-down), `shoulderSlope` (short rows / none), `backNeck` (straight default / shaped); front `startFrom: 'pickup'`; armhole_bo = `underarm.width − 2·round(underarm_co/2/st_w)·st_w` so front and back cast on the same whole number of sts per side (half each); armhole_end at 0.6 (back) / 0.75 (front) of armhole depth so 4X fits; `topDownTop()` returns back + front + 2 joins (front top pick-up; underarm cast-on front sides vs back sides); 'top' template in the sidebar adds the set. Engine: top-down round start = max(underarm join, neck close) with an info note; top-down neck parity now checks row 1 (was the hem: a bug); square neck centre/width rounding; `measureEdge('top')` counts short-row-held cast-on sts. New estimate `underarm_co`. Tests: `construction.test.ts`, template cases. |
 | 10 | **Stitch chart + symbols & legend** | `engine/chart.ts` (`buildChart`: per knit row a cell array, `''` outside / `'k'` plain / `'h'` held / symbol id; bind-offs and cast-ons drawn in their row; shaping at `shapingInset`; neck split + mirrored neck shaping; vertical-dart symbols at the dart lines; **bust short rows inserted after `afterRow`** as SR1…SRn with turns and held stitches; RS/WS/round reading direction; worked + live counts; repeats from sections; legend of used symbols; `collapseColumns`). `ui/glyphs.tsx` (CYC-style SVG glyphs in a unit square, cell tints, low-zoom band colours, legend swatch). **Chart** tab (`ChartView.tsx`): upright like the schematic, row-virtualised, plain stitches drawn as runs over an SVG grid pattern, ⌘-scroll zoom, Fit, collapse plain middle, row/stitch numbers, count column, hover readout; select/drag/double-click-add/Delete markers via `markerActions`; One size / Grid (shared scale). **Custom symbols** (`project.symbols`: label, abbr, colour, stitch change) editable in the legend, offered in the marker Stitch menu, `markerDelta` honours them. |
 
 ---
@@ -114,6 +116,18 @@ All confirmed with the user unless marked _(my call)_.
 - **Undo covers project edits only**, not view state (size, panel, zoom). Units toggle *is* a project edit.
 - **Bust short rows, bust point → side seam** (user's usual top-down method, from the starcrossed knits article):
   optional, not the default; first turn exactly at the bust point (not ½" outside); bottom-up mirror included.
+- **Painted stitches and shaping lines change the count inside the fabric** and the panel widens/narrows evenly
+  about the centre; edge shaping is *not* re-planned around them (they're for experimenting); net changes are
+  reported, and running out of stitches at the shoulders/top is a warning. Painted stitches are per size with
+  **Copy to all sizes** (user liked this); lines are expressions so they grade by themselves.
+- **Top-down = shoulders first** (user's method, confirmed as the default): back cast on at the shoulders, front
+  shoulders picked up from it, neck closed at the centre, underarms cast on **half each**, in the round once both the
+  underarms and the neck are joined. Shoulder slope (GSR) optional, ideally on both back and front; back neck
+  straight by default, shaped as an option. Joins are tagged *because the user chose the construction* (otherwise the
+  app still never decides joins). Cardigans: later (button band optional; user prefers ribless).
+- **Contiguous method** (Susie Myers; PDF provided by the user) is a different construction the user sometimes
+  uses: one continuous row from the start with shoulder-seam increases each side of 2 centre sts every row, then
+  sleeve-cap increases. Not modelled yet (it would need sleeves joined to the body from the cast-on).
 - **Princess lines** run through the bust points by default (`apex_to_apex / 2` from centre) on every panel; an odd
   stitch is worked one-sided on one row rather than rounding the waist width (user chose this).
 - **Chart conventions (M10)**: a row shows the stitches on the needle at the *end* of the row; bound-off stitches
@@ -155,10 +169,12 @@ All confirmed with the user unless marked _(my call)_.
     │   ├── joins.ts               edge measuring, seam reports, pick-ups
     │   ├── edges.ts               sideEdgeLength() along the drawn outline (shared by joins + armhole_len)
     │   ├── layout.ts              local cm frame, rotate/place, refHeight/alignShift, arrangeT, isUnarranged
+    │   ├── free.ts                painted stitches: freeInterior, paint/erase/copyFreeToAllSizes, MIRROR_SYMBOL
+    │   ├── lines.ts               shaping lines: computeLines, lineX, lineFromPoints
     │   ├── chart.ts               buildChart (cells per row, SR rows, refs to markers, repeats, legend), collapseColumns
     │   ├── checks.ts              projectChecks, groupChecks
     │   ├── testFixtures.ts        fixtureProject() from the sample CSV, sizeId()
-    │   └── *.test.ts              180 tests (incl. armhole, layout, chart, shapingOptions)
+    │   └── *.test.ts              201 tests (incl. armhole, layout, chart, shapingOptions, free, lines, construction)
     └── ui/
         ├── App.tsx                layout, view state (size, panel, centre view, selection), shortcuts, wiring
         ├── store.ts               useProjectStore (history + autosave), sampleProject()
@@ -171,6 +187,7 @@ All confirmed with the user unless marked _(my call)_.
         ├── format.ts, fileio.ts, app.css
         └── components/
             ├── Schematic.tsx      ★ SVG renderer, zoom/pan, labels, markers, handles, bust, joins, overlay/grid modes
+            ├── LineProps.tsx      shaping line editor + presets
             ├── ChartView.tsx      stitch chart: virtualised rows, zoom, collapse, marker editing, grid of sizes, legend + My symbols
             ├── LayoutView.tsx     all panels, drag/rotate/arrange, seam links, overlay; SizeGrid + SizeLegend
             ├── SizeModeBar.tsx    One size / Overlay / Grid, size picker, align-at
@@ -209,6 +226,13 @@ All confirmed with the user unless marked _(my call)_.
   (sloped) outline although the fabric edge is straight; changing *Shape at* doesn't rescale existing hand-placed
   markers (reset them). Combining short-row and vertical bust darts (as the article mentions) isn't supported:
   bust methods are exclusive.
+- **Shoulders-first limits**: the front is still one panel (both halves drawn together); the pick-up join counts
+  the front's first-row stitches (one per back cast-on st), it doesn't check the back's shoulder count separately; the
+  set's joins aren't updated if you later rename/delete waypoints; cardigan fronts don't exist yet.
+- **Experimenting tools limits**: painted stitches can't go on SR (inserted short) rows or held stitches; painting
+  bind-off/cast-on/turns isn't offered; a painted or line change never moves the neckline or re-plans shoulder
+  bind-offs; shaping lines have no drag handles yet (edit ends/rows in the properties); a one-sided line's width
+  change is still drawn symmetrically; lines on side-to-side panels aren't drawn.
 - **Chart virtualisation** relies on the scroll element's `scroll` events; programmatic `scrollTop` changes in a
   hidden/throttled browser pane may not re-render until a real scroll.
 - **Layout**: no snapping to other panels, no free rotation (90° steps only), no lock/hide per panel.

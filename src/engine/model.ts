@@ -86,6 +86,44 @@ export interface ManualEvent {
 
 export type ShapingPlacement = 'edge' | 'princess' | 'both';
 
+/** A point in a panel: height up from the garment's lower edge and distance from the centre line (− = left), cm. */
+export interface Anchor {
+  height: DimExpr;
+  x: DimExpr;
+}
+
+/**
+ * A shaping line drawn inside a panel: increases/decreases worked along it, spread over the rows between its ends.
+ * `amount` is the stitch change going up the garment from the lower end (an expression in stitches); a fisheye
+ * line makes that change up to its middle and undoes it above. Mirrored lines get a twin on the other half.
+ */
+export interface ShapingLine {
+  id: Id;
+  name: string;
+  from: Anchor;
+  to: Anchor;
+  amount: DimExpr; // stitches (per line), e.g. "-8" or "round(3 / st_w)"
+  kind: 'one-way' | 'fisheye';
+  sides: 'both' | 'one'; // shape on both sides of the line (2 sts per row) or one side
+  rowSide: 'rs' | 'any';
+  mirror: boolean;
+  manual: Record<Id, number[]>; // hand-placed knit rows per size
+}
+
+/**
+ * A stitch painted anywhere in the fabric, for one size: on knit row `row`, in the cell whose left edge is `x`
+ * stitches from the row's centre (negative = left of centre, as seen from the RS). Increases/decreases change the
+ * count and widen/narrow the panel evenly about the centre; other stitches are only drawn.
+ */
+export interface FreeStitch {
+  id: Id;
+  sizeId: Id;
+  row: number;
+  x: number;
+  symbol: string;
+  mirror: boolean; // also worked mirrored across the centre (leaning stitches swap)
+}
+
 /** Two vertical shaping lines, mirrored about the centre (princess-seam waist shaping, as in fisheye darts). */
 export interface Princess {
   position: DimExpr; // distance of each line from the centre line (cm)
@@ -206,6 +244,10 @@ export interface Panel {
   neckline: Neckline | null;
   bust?: BustShaping | null;
   princess?: Princess | null;
+  /** How the first row is made: cast on (default) or picked up from another panel (top-down fronts). */
+  startFrom?: 'caston' | 'pickup';
+  freeStitches?: FreeStitch[];
+  shapingLines?: ShapingLine[];
   layout: { x: number; y: number; rotation: 0 | 90 | 180 | 270 };
   notes: string;
 }

@@ -10,6 +10,9 @@ import type { MarkerActions } from '../markerActions';
 import type { Selection } from '../selection';
 import { bandColor, cellFill, Glyph, Swatch } from '../glyphs';
 import { signed } from '../format';
+import { cellX, clearFree, copyFreeToAllSizes, eraseStitch, findFree, freeFor, paintStitch, withOnlySize } from '../../engine/free';
+import { computePanel } from '../../engine/panel';
+import { SYMBOLS, type SymbolId } from '../../engine/symbols';
 
 interface Props {
   project: Project;
@@ -23,14 +26,30 @@ interface Props {
 }
 
 const PREF_KEY = 'knitbit.chart.v1';
-function readPrefs(): { cell: number; collapse: boolean } {
+export interface Brush {
+  on: boolean;
+  symbol: string; // symbol id, or 'erase'
+  mirror: boolean;
+  every: number;
+  times: number;
+}
+interface Prefs {
+  cell: number;
+  collapse: boolean;
+  brush: Brush;
+}
+const DEFAULT_BRUSH: Brush = { on: false, symbol: 'purl', mirror: true, every: 0, times: 1 };
+function readPrefs(): Prefs {
   try {
     const v = JSON.parse(localStorage.getItem(PREF_KEY) ?? '{}');
-    return { cell: typeof v.cell === 'number' ? v.cell : 14, collapse: !!v.collapse };
+    return { cell: typeof v.cell === 'number' ? v.cell : 14, collapse: !!v.collapse, brush: { ...DEFAULT_BRUSH, ...(v.brush ?? {}), on: false } };
   } catch {
-    return { cell: 14, collapse: false };
+    return { cell: 14, collapse: false, brush: DEFAULT_BRUSH };
   }
 }
+
+/** Stitches you can paint: everything except edge-only (bind off / cast on / turns) and plain knit. */
+const PAINTABLE: SymbolId[] = (Object.keys(SYMBOLS) as SymbolId[]).filter((id) => !['knit', 'bo', 'co', 'turn-wt', 'turn-german'].includes(id));
 
 const GUT = 46; // side gutters (row numbers)
 const TOP = 22;
@@ -73,7 +92,22 @@ export function ChartView({ project, panel, computed: c, selection, onSelect, ma
   return (
     <div className="chart-view">
       {chart ? (
-        <ChartCanvas chart={chart} c={c} custom={custom} cs={cs} setCell={setCell} collapse={prefs.collapse} setCollapse={(v) => setPrefs((p) => ({ ...p, collapse: v }))} selection={selection} onSelect={onSelect} markers={markers} />
+        <ChartCanvas
+          chart={chart}
+          c={c}
+          panel={panel}
+          update={update}
+          custom={custom}
+          cs={cs}
+          setCell={setCell}
+          collapse={prefs.collapse}
+          setCollapse={(v) => setPrefs((p) => ({ ...p, collapse: v }))}
+          brush={prefs.brush}
+          setBrush={(b) => setPrefs((p) => ({ ...p, brush: { ...p.brush, ...b } }))}
+          selection={selection}
+          onSelect={onSelect}
+          markers={markers}
+        />
       ) : (
         <div className="canvas-empty">
           <p>This panel can't be charted in this size: see the checks below.</p>
@@ -89,6 +123,10 @@ export function ChartView({ project, panel, computed: c, selection, onSelect, ma
 interface CanvasProps {
   chart: Chart;
   c: ComputedPanel;
+  panel: Panel;
+  update: Props['update'];
+  brush: Brush;
+  setBrush: (b: Partial<Brush>) => void;
   custom: CustomSymbol[];
   cs: number;
   setCell: (n: number) => void;
@@ -109,8 +147,18 @@ interface Drag {
   moved: boolean;
 }
 
-function ChartCanvas({ chart, c, custom, cs, setCell, collapse, setCollapse, selection, onSelect, markers }: CanvasProps) {
+function ChartCanvas({ chart, c, panel, update, brush, setBrush, custom, cs, setCell, collapse, setCollapse, selection, onSelect, markers }: CanvasProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const stroke = useRef<{ key: string; erase: boolean; seen: Set<string>; last: { x: number; y: number } } | null>(null);
+  const panelStart = panel.startFrom ?? 'caston';
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const typing = e.target instanceof HTMLElement && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName);
+      if (!typing && !e.metaKey && !e.ctrlKey && e.key.toLowerCase() === 'p') setBrush({ on: !brush.on });
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [brush.on, setBrush]);
   const [view, setView] = useState({ top: 0, height: 800 });
   const drag = useRef<Drag | null>(null);
   const [hover, setHover] = useState<{ row: ChartRow; col: number } | null>(null);
@@ -205,7 +253,57 @@ function ChartCanvas({ chart, c, custom, cs, setCell, collapse, setCollapse, sel
     return Math.max(0, Math.min(display.length - 1, Math.floor(y / cs)));
   };
 
+  /** Chart cell under the pointer: the display row and column (null in a folded gap or outside). */
+  const cellAt = (clientX: number, clientY: number): { row: ChartRow; col: number } | null => {
+    const el = scrollRef.current!;
+    const r = el.getBoundingClientRect();
+    const xi = Math.floor((clientX - r.left + el.scrollLeft - GUT) / cs);
+    const yi = Math.floor((clientY - r.top + el.scrollTop - TOP) / cs);
+    const d = dcols[xi];
+    const row = display[yi];
+    if (!d || !('col' in d) || !row) return null;
+    return { row, col: d.col };
+  };
+  const paintAt = (hit: { row: ChartRow; col: number }, toggle: boolean) => {
+    const st = stroke.current;
+    if (!st || hit.row.shortRow) return;
+    const id = `${hit.row.knitRow}:${hit.col}`;
+    if (st.seen.has(id)) return;
+    st.seen.add(id);
+    const v = hit.row.cells[hit.col];
+    if (v === '' || v === HELD) return; // outside the fabric
+    const r = hit.row.knitRow;
+    const x = cellX(c, chart.x0, hit.col, r);
+    const existing = findFree(panel, c.sizeId, r, x);
+    if (st.erase || (toggle && existing && existing.symbol === brush.symbol && Math.abs(existing.x - x) < 1e-6)) {
+      if (toggle && existing) st.erase = true; // a stroke that starts by removing keeps removing
+      update((p) => eraseStitch(p, panel.id, c.sizeId, r, x), st.key);
+      return;
+    }
+    update((p) => paintStitch(p, panel.id, c.sizeId, r, x, brush.symbol, { mirror: brush.mirror, every: brush.every, times: brush.times }, c.totalRows), st.key);
+  };
+  const onPaintDown = (e: React.PointerEvent) => {
+    if (!brush.on || (e.button !== 0 && e.button !== 2)) return;
+    const hit = cellAt(e.clientX, e.clientY);
+    if (!hit) return;
+    e.preventDefault();
+    (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
+    stroke.current = { key: `drag:paint:${Date.now()}`, erase: e.button === 2 || brush.symbol === 'erase', seen: new Set(), last: { x: e.clientX, y: e.clientY } };
+    paintAt(hit, true);
+  };
+
   const onPointerMove = (e: React.PointerEvent) => {
+    if (stroke.current) {
+      // Visit every cell between the last pointer position and this one, so fast strokes don't skip.
+      const { last } = stroke.current;
+      const steps = Math.max(1, Math.ceil(Math.hypot(e.clientX - last.x, e.clientY - last.y) / Math.max(2, cs / 2)));
+      for (let k = 1; k <= steps; k++) {
+        const hit = cellAt(last.x + ((e.clientX - last.x) * k) / steps, last.y + ((e.clientY - last.y) * k) / steps);
+        if (hit) paintAt(hit, false);
+      }
+      stroke.current.last = { x: e.clientX, y: e.clientY };
+      return;
+    }
     const d = drag.current;
     if (!d || !markers) return;
     const seg = segOf(d.fromWaypoint);
@@ -222,6 +320,7 @@ function ChartCanvas({ chart, c, custom, cs, setCell, collapse, setCollapse, sel
     }
   };
   const onPointerUp = () => {
+    stroke.current = null;
     const d = drag.current;
     drag.current = null;
     if (d) onSelect({ kind: 'segment', fromWaypoint: d.fromWaypoint, edge: d.edge, marker: d.index });
@@ -229,7 +328,7 @@ function ChartCanvas({ chart, c, custom, cs, setCell, collapse, setCollapse, sel
 
   const onCellDown = (e: React.PointerEvent, row: ChartRow, k: number) => {
     const ref = row.refs[k];
-    if (!ref || e.button !== 0) return;
+    if (brush.on || !ref || e.button !== 0) return;
     e.stopPropagation();
     const seg = segOf(ref.fromWaypoint);
     if (!seg) return;
@@ -241,7 +340,7 @@ function ChartCanvas({ chart, c, custom, cs, setCell, collapse, setCollapse, sel
 
   /** Double-click a stitch in a shaped stretch: add a marker on that row at the nearer edge. */
   const onDouble = (row: ChartRow, k: number) => {
-    if (!markers || row.shortRow) return;
+    if (brush.on || !markers || row.shortRow) return;
     const seg = c.segments.find((s) => row.knitRow >= s.rowFrom && row.knitRow <= s.rowTo && s.rowTo > s.rowFrom);
     if (!seg) return;
     const firstCol = row.cells.findIndex((v) => v !== '');
@@ -302,6 +401,7 @@ function ChartCanvas({ chart, c, custom, cs, setCell, collapse, setCollapse, sel
             <rect x={x} y={y} width={cs} height={cs} fill={band ?? cellFill(v, custom)} />
           )}
           {selected && <rect x={x - 1} y={y - 1} width={cs + 2} height={cs + 2} className="cell-selected" />}
+          {row.free[d.col] && fine && <rect x={x + 0.75} y={y + 0.75} width={cs - 1.5} height={cs - 1.5} className="painted-cell" />}
         </g>,
       );
     });
@@ -423,8 +523,56 @@ function ChartCanvas({ chart, c, custom, cs, setCell, collapse, setCollapse, sel
         <label className="check" title="Fold long runs of identical plain columns">
           <input type="checkbox" checked={collapse} onChange={(e) => setCollapse(e.target.checked)} /> Collapse plain middle
         </label>
+        <span className="sep" />
+        <button className={brush.on ? 'active' : ''} onClick={() => setBrush({ on: !brush.on })} title="Paint stitches anywhere (P)">
+          ✎ Paint
+        </button>
+        {brush.on && (
+          <>
+            <select value={brush.symbol} onChange={(e) => setBrush({ symbol: e.target.value })} title="Stitch to paint">
+              <option value="erase">Eraser</option>
+              {PAINTABLE.map((id) => (
+                <option key={id} value={id}>
+                  {SYMBOLS[id].abbr || '·'} – {SYMBOLS[id].label}
+                  {typeof SYMBOLS[id].change === 'number' && SYMBOLS[id].change !== 0 ? ` (${signed(SYMBOLS[id].change as number)})` : ''}
+                </option>
+              ))}
+              {custom.map((cs2) => <option key={cs2.id} value={cs2.id}>{cs2.abbr} – {cs2.label}{cs2.change ? ` (${signed(cs2.change)})` : ''}</option>)}
+            </select>
+            <label className="check" title="Also paint the mirror image across the centre (leaning stitches swap)">
+              <input type="checkbox" checked={brush.mirror} onChange={(e) => setBrush({ mirror: e.target.checked })} /> Mirror
+            </label>
+            <label className="check" title="Repeat up the panel: every N rows, this many times in all (0 = no repeat)">
+              every <input className="num tiny" type="number" min={0} value={brush.every} onChange={(e) => setBrush({ every: Math.max(0, Math.round(Number(e.target.value)) || 0) })} /> rows ×
+              <input className="num tiny" type="number" min={1} value={brush.times} onChange={(e) => setBrush({ times: Math.max(1, Math.round(Number(e.target.value)) || 1) })} />
+            </label>
+            <span className="muted small">{freeFor(panel, c.sizeId).length} painted</span>
+            <button
+              onClick={() => {
+                if (!window.confirm(`Copy this size's ${freeFor(panel, c.sizeId).length} painted stitches to every size? Painted stitches in the other sizes are replaced.`)) return;
+                update((p) => {
+                  const base = withOnlySize(p, panel.id, c.sizeId);
+                  const pn = base.panels.find((x) => x.id === panel.id)!;
+                  return copyFreeToAllSizes(p, panel.id, c.sizeId, (sid) => computePanel(base, pn, sid));
+                });
+              }}
+              title="Place these stitches in every size, at the same relative position (between the same waypoints, same fraction of the width)"
+            >
+              Copy to all sizes
+            </button>
+            <button onClick={() => window.confirm('Remove all painted stitches in this size?') && update((p) => clearFree(p, panel.id, c.sizeId))}>Clear size</button>
+          </>
+        )}
       </div>
-      <div className="chart-scroll" ref={scrollRef} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerLeave={() => setHover(null)}>
+      <div
+        className={`chart-scroll${brush.on ? ' painting' : ''}`}
+        ref={scrollRef}
+        onPointerDown={onPaintDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerLeave={() => setHover(null)}
+        onContextMenu={(e) => brush.on && e.preventDefault()}
+      >
         <svg width={GUT * 2 + W + 30} height={TOP + H + BOT} className="chart-svg">
           <defs>
             <pattern id="chart-grid" patternUnits="userSpaceOnUse" x={GUT} y={TOP} width={cs} height={cs}>
@@ -442,13 +590,17 @@ function ChartCanvas({ chart, c, custom, cs, setCell, collapse, setCollapse, sel
           {colLabels}
           {repeats}
           <text x={GUT + W / 2} y={chart.topDown ? TOP + H + BOT - 2 : TOP + H + BOT - 2} textAnchor="middle" className="chart-note">
-            {chart.topDown ? `Worked top-down: row 1 at the top · cast on ${chart.castOn} sts` : `Cast on ${chart.castOn} sts`}
+            {chart.topDown ? `Worked top-down: row 1 at the top · ${panelStart === 'pickup' ? 'pick up' : 'cast on'} ${chart.castOn} sts` : `Cast on ${chart.castOn} sts`}
           </text>
         </svg>
       </div>
       <div className="chart-hint">
         {hoverText ?? `${chart.rows.length} rows · ${chart.cols} sts wide · RS rows read right to left, WS left to right`}
-        {markers && !hoverText ? ' · drag a shaping symbol up or down · double-click a stitch to add a marker' : ''}
+        {brush.on
+          ? ' · Paint: click or drag to paint, click a painted stitch again (or right-click) to remove · each stroke is one undo'
+          : markers && !hoverText
+            ? ' · drag a shaping symbol up or down · double-click a stitch to add a marker'
+            : ''}
       </div>
     </div>
   );

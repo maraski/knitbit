@@ -31,6 +31,10 @@ function allDims(panel: Panel): DimExpr[] {
   for (const w of panel.waypoints) out.push(w.height, w.width, w.left, w.right);
   for (const s of panel.sections) out.push(s.fromHeight, s.toHeight);
   if (panel.neckline) out.push(panel.neckline.width, panel.neckline.depth, panel.neckline.centreWidth);
+  const b = panel.bust;
+  if (b) out.push(b.width, b.length, b.apexHeight, b.apexOffset, b.shortRows.zoneWidth, b.dart.tipGap, b.vertical.bottom, b.vertical.gap, b.vertical.top);
+  if (panel.princess) out.push(panel.princess.position);
+  for (const l of panel.shapingLines ?? []) out.push(l.from.height, l.from.x, l.to.height, l.to.x, l.amount);
   return out;
 }
 
@@ -76,6 +80,9 @@ export function removeSize(p: Project, id: Id): Project {
   for (const panel of d.panels) {
     for (const dim of allDims(panel)) delete dim.overrides[id];
     for (const s of panel.segments) delete s.manual[id];
+    if (panel.bust) delete panel.bust.manual[id];
+    if (panel.freeStitches) panel.freeStitches = panel.freeStitches.filter((f) => f.sizeId !== id);
+    for (const l of panel.shapingLines ?? []) delete l.manual[id];
   }
   return d;
 }

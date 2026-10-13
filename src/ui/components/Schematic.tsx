@@ -10,6 +10,9 @@ import type { EdgeKey, Join, KnitDirection } from '../../engine/model';
 import type { ComputedPanel, ComputedSegment, Edge, Marker, ShapeEvent } from '../../engine/panel';
 import { SYMBOLS, type SymbolId } from '../../engine/symbols';
 import { wedgeBands } from '../../engine/bust';
+import { freeCells } from '../../engine/free';
+import { lineX } from '../../engine/lines';
+import { bandColor } from '../glyphs';
 import type { MarkerActions } from '../markerActions';
 import type { Units } from '../../engine/units';
 import { len, rows as rowsText, sts } from '../format';
@@ -34,6 +37,9 @@ interface Props {
   compare?: ComputedPanel[];
   align?: AlignRef;
   project?: Project;
+  /** Draw-a-line mode: two clicks give the ends (cm up from the lower edge, cm from the row's centre). */
+  drawLine?: boolean;
+  onDrawLine?: (a: { h: number; x: number }, b: { h: number; x: number }) => void;
 }
 
 interface View {
@@ -62,7 +68,11 @@ interface MarkerDrag {
 
 const isStepLike = (e: ShapeEvent) => e.kind === 'bindoff' || e.kind === 'caston' || e.kind === 'turn';
 
-export function Schematic({ computed: c, direction, units, selection, onSelect, fitKey, fitOutlines, markers, joins = [], mode = 'single', compare = [], align = 'hem', project }: Props) {
+export function Schematic({ computed: c, direction, units, selection, onSelect, fitKey, fitOutlines, markers, joins = [], mode = 'single', compare = [], align = 'hem', project, drawLine = false, onDrawLine }: Props) {
+  const [drawPts, setDrawPts] = useState<{ first: { h: number; x: number; sx: number; sy: number } | null; cursor: { sx: number; sy: number } | null }>({ first: null, cursor: null });
+  useEffect(() => {
+    if (!drawLine) setDrawPts({ first: null, cursor: null });
+  }, [drawLine]);
   const wrapRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ w: 800, h: 600 });
   const [view, setView] = useState<View | null>(null);
@@ -218,8 +228,31 @@ export function Schematic({ computed: c, direction, units, selection, onSelect, 
     return edge === 'left' ? c.leftEdge[row] : c.rightEdge[row];
   };
 
+  /** Garment point under the pointer: cm up from the lower edge and cm from that row's centre. */
+  const garmentAt = (clientX: number, clientY: number) => {
+    const r = wrapRef.current!.getBoundingClientRect();
+    const sx = clientX - r.left;
+    const sy = clientY - r.top;
+    const X = (sx - v.ox) / v.scale;
+    const Y = -(sy - v.oy) / v.scale;
+    const g = Math.max(0, Math.min(top, Math.round(Y * rpc)));
+    const row = c.topDown ? top - g : g;
+    const centre = (c.leftEdge[row] + c.rightEdge[row]) / 2 / spc;
+    return { h: Y, x: X - centre, sx, sy };
+  };
   const onPointerDown = (e: React.PointerEvent) => {
     if (e.button !== 0) return;
+    if (drawLine && vertical) {
+      e.stopPropagation();
+      const p = garmentAt(e.clientX, e.clientY);
+      if (!drawPts.first) setDrawPts({ first: p, cursor: { sx: p.sx, sy: p.sy } });
+      else {
+        onDrawLine?.({ h: drawPts.first.h, x: drawPts.first.x }, { h: p.h, x: p.x });
+        setDrawPts({ first: null, cursor: null });
+      }
+      suppressClick.current = true;
+      return;
+    }
     drag.current = { x: e.clientX, y: e.clientY, ox: v.ox, oy: v.oy, moved: false };
     suppressClick.current = false;
   };
@@ -233,6 +266,10 @@ export function Schematic({ computed: c, direction, units, selection, onSelect, 
   };
 
   const onPointerMove = (e: React.PointerEvent) => {
+    if (drawLine && drawPts.first) {
+      const r = wrapRef.current!.getBoundingClientRect();
+      setDrawPts((d) => ({ ...d, cursor: { sx: e.clientX - r.left, sy: e.clientY - r.top } }));
+    }
     const md = markerDrag.current;
     if (md && markers) {
       const y = knitYAt(e.clientX, e.clientY);
@@ -351,7 +388,8 @@ export function Schematic({ computed: c, direction, units, selection, onSelect, 
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerLeave={() => setHoverRow(null)}
-      onClick={() => !suppressClick.current && onSelect({ kind: 'panel' })}
+      onClick={() => !suppressClick.current && !drawLine && onSelect({ kind: 'panel' })}
+      style={drawLine ? { cursor: 'crosshair' } : undefined}
     >
       <svg width={size.w} height={size.h} className="schematic">
         <defs>
@@ -380,7 +418,7 @@ export function Schematic({ computed: c, direction, units, selection, onSelect, 
             <g className="round-part" pointerEvents="none">
               <rect x={a.x} y={y0} width={b.x - a.x} height={h} clipPath="url(#panel-clip)" className="round-fill" />
               {!whole && <line x1={j0.x - 10} y1={j0.y} x2={j1.x + 10} y2={j1.y} className="join-line" />}
-              <text x={(j0.x + j1.x) / 2} y={whole ? y0 + h / 2 : j0.y + 13} textAnchor="middle" className="round-label">
+              <text x={whole ? (j0.x + j1.x) / 2 : j0.x + 8} y={whole ? y0 + h / 2 : j0.y + 13} textAnchor={whole ? 'middle' : 'start'} className="round-label">
                 {whole ? 'worked in the round' : 'joined in the round below'}
               </text>
             </g>
@@ -437,6 +475,18 @@ export function Schematic({ computed: c, direction, units, selection, onSelect, 
                 {hem.name}: {len(finishedCm(n, hem.selvedge), units)} · {c.topDown ? 'bind off' : 'cast on'} {sts(n)}
               </text>
             </g>
+          );
+        })()}
+
+        {/* top-down: how the first row is made */}
+        {vertical && c.topDown && (() => {
+          const a = S(minX, 0);
+          const n = c.counts[0];
+          const pickup = project?.panels.find((x) => x.id === c.panelId)?.startFrom === 'pickup';
+          return (
+            <text x={a.x} y={a.y - 46} className="dim-text start-label">
+              {pickup ? `pick up ${sts(n)} along the back shoulders` : `cast on ${sts(n)}`}
+            </text>
           );
         })()}
 
@@ -586,6 +636,51 @@ export function Schematic({ computed: c, direction, units, selection, onSelect, 
                 const pts: Pt[] = [];
                 for (let r = Math.max(0, seg.rowFrom - 1); r <= seg.rowTo; r++) pts.push(S(shapeX(seg, edge, r, 'dec'), r));
                 return <path key={`pl-${seg.fromWaypoint}-${edge}`} d={path(pts)} className="princess-line" />;
+              }),
+            )}
+
+        {/* shaping lines */}
+        {vertical &&
+          c.lines.map((l) => {
+            const sel = selection.kind === 'line' && selection.id === l.id;
+            const centre = (r: number) => (c.leftEdge[r] + c.rightEdge[r]) / 2;
+            const twins = l.mirror ? [1, -1] : [1];
+            return (
+              <g key={l.id} className={`shaping-line${sel ? ' selected' : ''}`} onClick={click({ kind: 'line', id: l.id })}>
+                {twins.map((sgn) => {
+                  const a = S(centre(l.ends[0].row) + sgn * l.ends[0].x, l.ends[0].row);
+                  const b = S(centre(l.ends[1].row) + sgn * l.ends[1].x, l.ends[1].row);
+                  return (
+                    <g key={sgn}>
+                      <path d={`M${a.x},${a.y} L${b.x},${b.y}`} className="line-path" />
+                      <path d={`M${a.x},${a.y} L${b.x},${b.y}`} className="hit" />
+                      {l.events.map((ev, k) => {
+                        const p = S(centre(ev.row) + sgn * lineX(l, ev.row), ev.row);
+                        return <circle key={k} cx={p.x} cy={p.y} r={2.2} className={ev.delta < 0 ? 'mk-dec' : 'mk-inc'} />;
+                      })}
+                    </g>
+                  );
+                })}
+                <title>{`${l.name}: ${l.amount > 0 ? '+' : ''}${l.amount} sts${l.mirror ? ' per line, mirrored' : ''}`}</title>
+              </g>
+            );
+          })}
+        {drawLine && drawPts.first && drawPts.cursor && (
+          <line x1={drawPts.first.sx} y1={drawPts.first.sy} x2={drawPts.cursor.sx} y2={drawPts.cursor.sy} className="draw-preview" />
+        )}
+
+        {/* painted stitches */}
+        {vertical &&
+          (project?.panels.find((x) => x.id === c.panelId)?.freeStitches ?? [])
+            .filter((f) => f.sizeId === c.sizeId && f.row >= 1 && f.row <= top)
+            .flatMap((f) =>
+              freeCells(f).map((cell, k) => {
+                const p = S((c.leftEdge[f.row] + c.rightEdge[f.row]) / 2 + cell.x + 0.5, f.row - 0.5);
+                return (
+                  <rect key={`${f.id}-${k}`} x={p.x - 2} y={p.y - 2} width={4} height={4} className="free-st" fill={bandColor(cell.symbol, project?.symbols) ?? 'var(--muted)'}>
+                    <title>{`Painted ${cell.symbol}, row ${f.row}`}</title>
+                  </rect>
+                );
               }),
             )}
 

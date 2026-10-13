@@ -2,9 +2,9 @@
 // Widths use total circumference ease split front/back (ease/2 per body panel). Heights are measured up
 // from the garment's lower edge whatever the knitting direction.
 
-import { defaultAutoMethod, defaultBust, dim, newId, newPanel, newSegment, newWaypoint, type KnitDirection, type NecklineShape, type Panel } from './model';
+import { defaultAutoMethod, defaultBust, dim, newId, newPanel, newSegment, newWaypoint, type Join, type KnitDirection, type NecklineShape, type Panel } from './model';
 
-export type TemplateId = 'back' | 'front' | 'sleeve' | 'rectangle' | 'neckband';
+export type TemplateId = 'top' | 'back' | 'front' | 'sleeve' | 'rectangle' | 'neckband';
 export type SleeveType = 'set-in' | 'drop' | 'straight';
 
 export interface TemplateOptions {
@@ -12,11 +12,24 @@ export interface TemplateOptions {
   neckline?: NecklineShape;
   sleeve?: SleeveType;
   joinInRound?: boolean; // body: worked in the round up to the underarm
+  /**
+   * Top-down bodices. 'shoulders-first' (default): the back is cast on at the shoulders, the front shoulders are
+   * picked up from it, and the underarm cast-on is split half each. 'standalone': each panel cast on on its own.
+   */
+  construction?: 'shoulders-first' | 'standalone';
+  shoulderSlope?: 'shortrows' | 'none'; // top-down: German short rows, or straight shoulders
+  backNeck?: 'straight' | 'shaped'; // top-down back: cast on straight across, or a shaped back neck
 }
 
 export const TEMPLATES: { id: TemplateId; label: string; description: string; options: (keyof TemplateOptions)[] }[] = [
-  { id: 'back', label: 'Back bodice', description: 'Hem, waist, set-in armholes, shoulder slope and back neck.', options: ['direction', 'joinInRound'] },
-  { id: 'front', label: 'Front bodice', description: 'Like the back, with a front neckline.', options: ['direction', 'neckline', 'joinInRound'] },
+  {
+    id: 'top',
+    label: 'Top-down top (back + front)',
+    description: 'Back cast on at the shoulders; front shoulders picked up from it; neck joined at the centre; underarms cast on half each, then in the round. Joins are tagged for you.',
+    options: ['neckline', 'shoulderSlope', 'backNeck', 'joinInRound'],
+  },
+  { id: 'back', label: 'Back bodice', description: 'Hem, waist, set-in armholes, shoulder slope and back neck.', options: ['direction', 'shoulderSlope', 'backNeck', 'joinInRound'] },
+  { id: 'front', label: 'Front bodice', description: 'Like the back, with a front neckline.', options: ['direction', 'neckline', 'shoulderSlope', 'joinInRound'] },
   { id: 'sleeve', label: 'Sleeve', description: 'Set-in cap, drop shoulder or straight, with a ribbed cuff.', options: ['direction', 'sleeve'] },
   { id: 'rectangle', label: 'Plain rectangle', description: 'Two waypoints, no shaping.', options: ['direction'] },
   { id: 'neckband', label: 'Neckband strip', description: 'A ribbed strip; its length is a starting estimate.', options: [] },
@@ -24,8 +37,9 @@ export const TEMPLATES: { id: TemplateId; label: string; description: string; op
 
 /** Measurements each template's expressions rely on that may be missing (seeded estimates). */
 export const TEMPLATE_MEASUREMENTS: Record<TemplateId, string[]> = {
-  back: ['hem_to_waist', 'shoulder_slope', 'neck_width', 'back_neck_depth', 'waist_shift'],
-  front: ['hem_to_waist', 'shoulder_slope', 'neck_width', 'front_neck_depth', 'back_neck_depth', 'waist_shift', 'bust_point_depth', 'apex_to_apex'],
+  top: ['hem_to_waist', 'shoulder_slope', 'neck_width', 'front_neck_depth', 'back_neck_depth', 'waist_shift', 'bust_point_depth', 'apex_to_apex', 'underarm_co'],
+  back: ['hem_to_waist', 'shoulder_slope', 'neck_width', 'back_neck_depth', 'waist_shift', 'underarm_co'],
+  front: ['hem_to_waist', 'shoulder_slope', 'neck_width', 'front_neck_depth', 'back_neck_depth', 'waist_shift', 'bust_point_depth', 'apex_to_apex', 'underarm_co'],
   sleeve: ['cap_height', 'cap_ease'],
   rectangle: [],
   neckband: ['neck_width', 'front_neck_depth'],
@@ -39,6 +53,10 @@ const FRONT_NECKS: Record<NecklineShape, { width: string; depth: string; centre:
   square: { width: 'neck_width', depth: 'front_neck_depth + 2', centre: 'neck_width', top: 'neck_width' },
   boat: { width: 'neck_width + 6', depth: 'back_neck_depth + 1', centre: 'neck_width + 2', top: 'neck_width + 6' },
 };
+
+function shouldersFirstEarly(direction: KnitDirection, opts: TemplateOptions): boolean {
+  return direction === 'top-down' && (opts.construction ?? 'shoulders-first') === 'shoulders-first';
+}
 
 /**
  * Back or front bodice. Bottom-up: shoulder slope in bind-off steps up to the neck width.
@@ -61,8 +79,13 @@ export function bodice(kind: 'back' | 'front', opts: TemplateOptions = {}): Pane
   // Underarm bind-off in one go ("bind off X sts at the beginning of the next 2 rows"), then armhole decreases.
   // The front carries the bust width to the underarm, so it binds off more and shapes over a longer span.
   const front = kind === 'front';
-  const bo = newWaypoint('armhole_bo', 'underarm.height + 2 * row_h', `underarm.width - (underarm.width - armhole_end.width) * ${front ? 0.5 : 0.4}`);
-  const end = newWaypoint('armhole_end', front ? 'underarm.height + armhole_depth * 0.6' : 'underarm.height + armhole_depth * 0.45', 'cross_chest_back + 1');
+  const shouldersFirst = direction === 'top-down' && (opts.construction ?? 'shoulders-first') === 'shoulders-first';
+  // Shoulders first: front and back each cast on half of the underarm width.
+  // A whole number of stitches per side, so front and back cast on the same count whatever their widths round to.
+  const boWidth = shouldersFirst ? 'underarm.width - 2 * round(underarm_co / 2 / st_w) * st_w' : `underarm.width - (underarm.width - armhole_end.width) * ${front ? 0.5 : 0.4}`;
+  const bo = newWaypoint('armhole_bo', 'underarm.height + 2 * row_h', boWidth);
+  const endAt = shouldersFirstEarly(direction, opts) ? (front ? 0.75 : 0.6) : front ? 0.6 : 0.45;
+  const end = newWaypoint('armhole_end', `underarm.height + armhole_depth * ${endAt}`, 'cross_chest_back + 1');
   const shoulder = newWaypoint('shoulder', 'underarm.height + armhole_depth', 'armhole_end.width');
   p.waypoints = [hem, waist, underarm, bo, end, shoulder];
   p.segments = [
@@ -72,17 +95,28 @@ export function bodice(kind: 'back' | 'front', opts: TemplateOptions = {}): Pane
     newSegment(bo.id, { ...defaultAutoMethod(), side: 'any', align: 'start', order: 'shortFirst' }),
     newSegment(end.id, { kind: 'straight' }),
   ];
-  const top = newWaypoint('neck_side', 'shoulder.height + shoulder_slope', neck.top);
-  p.waypoints.push(top);
-  p.segments.push(
-    newSegment(
-      shoulder.id,
-      direction === 'bottom-up' ? { kind: 'steps', steps: null, maxPerStep: 8, align: 'end' } : { kind: 'shortrows', steps: null, maxPerStep: 8, style: 'german', align: 'end' },
-    ),
-  );
+  // Straight shoulders (top-down option): the panel ends at the shoulder line, no slope.
+  const sloped = direction !== 'top-down' || (opts.shoulderSlope ?? 'shortrows') === 'shortrows';
+  if (sloped) {
+    const top = newWaypoint('neck_side', 'shoulder.height + shoulder_slope', neck.top);
+    p.waypoints.push(top);
+    p.segments.push(
+      newSegment(
+        shoulder.id,
+        direction === 'bottom-up' ? { kind: 'steps', steps: null, maxPerStep: 8, align: 'end' } : { kind: 'shortrows', steps: null, maxPerStep: 8, style: 'german', align: 'end' },
+      ),
+    );
+  }
   if (kind === 'front') p.bust = defaultBust();
-  p.neckline = { shape: kind === 'back' ? 'round' : shape, width: dim(neck.width), depth: dim(neck.depth), centre: 'bindoff', centreWidth: dim(neck.centre), side: 'rs' };
+  const straightBack = kind === 'back' && direction === 'top-down' && (opts.backNeck ?? 'straight') === 'straight';
+  p.neckline = straightBack ? null : { shape: kind === 'back' ? 'round' : shape, width: dim(neck.width), depth: dim(neck.depth), centre: 'bindoff', centreWidth: dim(neck.centre), side: 'rs' };
+  if (shouldersFirst && front) p.startFrom = 'pickup';
   if (opts.joinInRound) p.joinAt = underarm.id;
+  if (shouldersFirst) {
+    p.notes = front
+      ? 'Shoulders first: each shoulder is picked up from the back, worked flat with the neck increases; the centre is cast on to join the two sides, and the underarms are cast on to join the back.'
+      : 'Shoulders first: cast on at the shoulders and work flat to the underarm; the front shoulders are picked up from this cast-on edge.';
+  }
   return p;
 }
 
@@ -161,8 +195,43 @@ export function neckband(): Panel {
   return p;
 }
 
+/**
+ * A top-down top worked shoulders first: back and front, with the joins this construction implies (front shoulders
+ * picked up from the back's cast-on edge; underarms cast on half each). The joins are ordinary, editable joins.
+ */
+export function topDownTop(opts: TemplateOptions = {}): { panels: Panel[]; joins: Join[] } {
+  const o: TemplateOptions = { ...opts, direction: 'top-down', construction: 'shoulders-first' };
+  const back = bodice('back', o);
+  const front = bodice('front', o);
+  const wp = (p: Panel, name: string) => p.waypoints.find((w) => w.name === name)!.id;
+  const side = (p: Panel, s: 'left' | 'right') => ({ panelId: p.id, edge: { kind: 'side' as const, side: s, from: wp(p, 'underarm'), to: wp(p, 'armhole_bo') } });
+  const joins: Join[] = [
+    {
+      id: newId('join'),
+      name: 'Front shoulders picked up from the back',
+      tag: 'pickup',
+      edges: [{ panelId: front.id, edge: { kind: 'top' } }],
+      partner: [],
+      ratio: null,
+      note: 'Pick up along the back shoulders (cast-on edge), one stitch per cast-on stitch; work each front shoulder flat.',
+    },
+    {
+      id: newId('join'),
+      name: 'Underarm cast-on',
+      tag: 'caston',
+      edges: [side(front, 'left'), side(front, 'right')],
+      partner: [side(back, 'right'), side(back, 'left')],
+      ratio: null,
+      note: 'Cast on half the underarm stitches on the front and half on the back to join them.',
+    },
+  ];
+  return { panels: [back, front], joins };
+}
+
 export function fromTemplate(id: TemplateId, opts: TemplateOptions = {}): Panel {
   switch (id) {
+    case 'top':
+      return topDownTop(opts).panels[1]; // single-panel callers get the front; use topDownTop() for the set
     case 'back':
       return bodice('back', opts);
     case 'front':

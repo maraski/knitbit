@@ -6,6 +6,8 @@ import type { AlignRef } from '../engine/layout';
 import { LayoutView } from './components/LayoutView';
 import { SizeModeBar, type SizeMode } from './components/SizeModeBar';
 import { ChartView } from './components/ChartView';
+import { lineFromPoints } from '../engine/lines';
+import { editPanel } from './edit';
 import { loadProject, serializeProject } from '../engine/schema';
 import { CheckPanel } from './components/CheckPanel';
 import { ImportDialog } from './components/ImportDialog';
@@ -42,6 +44,7 @@ export function App() {
   const [selection, setSelection] = useState<Selection>(PANEL_SELECTION);
   const [center, setCenter] = useState<CenterView>(view.center ?? 'schematic');
   const [sizeMode, setSizeMode] = useState<SizeMode>(view.mode ?? 'single');
+  const [drawLine, setDrawLine] = useState(false);
   const [compareRaw, setCompare] = useState<Id[] | null>(view.compare ?? null); // null = all sizes
   const [align, setAlign] = useState<AlignRef>(view.align ?? 'hem');
   const compare = (compareRaw ?? project.sizes.map((s) => s.id)).filter((id) => project.sizes.some((s) => s.id === id));
@@ -137,6 +140,7 @@ export function App() {
           markers.remove(selection.fromWaypoint, selection.edge ?? 'left', selection.marker);
           setSelection({ ...selection, marker: undefined });
         } else if (k === 'escape') {
+          setDrawLine(false);
           setSelection(PANEL_SELECTION);
           setMeasSel(null);
         }
@@ -229,6 +233,11 @@ export function App() {
                 </span>
                 <span className="spacer" />
                 {sizeMode === 'single' && <Legend />}
+                {sizeMode === 'single' && panel.direction !== 'side-to-side' && (
+                  <button className={drawLine ? 'active' : ''} onClick={() => setDrawLine(!drawLine)} title="Draw a shaping line: click its two ends (Esc cancels)">
+                    ✎ Line
+                  </button>
+                )}
                 <button onClick={() => window.dispatchEvent(new Event('knitbit:fit'))} title="Fit (F)">Fit</button>
               </>
             )}
@@ -285,6 +294,16 @@ export function App() {
               compare={compare.map((sid) => computedFor(panel.id, sid))}
               align={align}
               project={project}
+              drawLine={drawLine && sizeMode === 'single'}
+              onDrawLine={(a, b) => {
+                const w0 = computed.waypoints[0];
+                const h0 = (scope[`${w0.key}.height`] ?? w0.heightCm) - w0.heightCm;
+                const n = (panel.shapingLines?.length ?? 0) + 1;
+                const line = lineFromPoints(panel, scope, { h: a.h + h0, x: a.x }, { h: b.h + h0, x: b.x }, `Line ${n}`);
+                update((p) => editPanel(p, panel.id, (pn) => void (pn.shapingLines = [...(pn.shapingLines ?? []), line])));
+                setSelection({ kind: 'line', id: line.id });
+                setDrawLine(false);
+              }}
             />
           ) : (
             <div className="canvas-empty">

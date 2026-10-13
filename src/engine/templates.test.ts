@@ -14,6 +14,13 @@ const CASES: [TemplateId, TemplateOptions][] = [
   ['front', { neckline: 'boat' }],
   ['front', { direction: 'top-down' }],
   ['front', { direction: 'top-down', neckline: 'v', joinInRound: true }],
+  ['top', {}],
+  ['top', { neckline: 'v', joinInRound: true, shoulderSlope: 'none' }],
+  ['back', { direction: 'top-down', shoulderSlope: 'none' }],
+  ['back', { direction: 'top-down', backNeck: 'shaped', joinInRound: true }],
+  ['front', { direction: 'top-down', shoulderSlope: 'none', neckline: 'square', joinInRound: true }],
+  ['back', { direction: 'top-down', construction: 'standalone' }],
+  ['front', { direction: 'top-down', construction: 'standalone' }],
   ['sleeve', { sleeve: 'set-in' }],
   ['sleeve', { sleeve: 'set-in', direction: 'top-down' }],
   ['sleeve', { sleeve: 'drop' }],
@@ -37,7 +44,7 @@ describe('templates', () => {
   });
 
   it('lists every template id', () => {
-    expect(TEMPLATES.map((t) => t.id).sort()).toEqual(['back', 'front', 'neckband', 'rectangle', 'sleeve']);
+    expect(TEMPLATES.map((t) => t.id).sort()).toEqual(['back', 'front', 'neckband', 'rectangle', 'sleeve', 'top']);
   });
 
   it('front and back share side seams: same rows, front wider at the waist by 2 × waist_shift', () => {

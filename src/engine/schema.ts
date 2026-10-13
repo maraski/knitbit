@@ -185,6 +185,24 @@ const panel = obj({
     ),
   ),
   princess: optional(nullable(obj({ position: dimExpr, sides: oneOf('both', 'one') }))),
+  startFrom: optional(oneOf('caston', 'pickup')),
+  freeStitches: optional(arr(obj({ id: str, sizeId: str, row: num, x: num, symbol: str, mirror: bool }))),
+  shapingLines: optional(
+    arr(
+      obj({
+        id: str,
+        name: str,
+        from: obj({ height: dimExpr, x: dimExpr }),
+        to: obj({ height: dimExpr, x: dimExpr }),
+        amount: dimExpr,
+        kind: oneOf('one-way', 'fisheye'),
+        sides: oneOf('both', 'one'),
+        rowSide: oneOf('rs', 'any'),
+        mirror: bool,
+        manual: rec(arr(num)),
+      }),
+    ),
+  ),
   layout: obj({ x: num, y: num, rotation: oneOf(0, 90, 180, 270) }),
   notes: str,
 });

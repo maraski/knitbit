@@ -1,6 +1,7 @@
 import type { DimExpr, Id, Panel, Project, SegmentMethod, Waypoint } from '../../engine/model';
 import { defaultAutoMethod, defaultBust, defaultPrincess, dim, newId, newWaypoint, type ShapingPlacement } from '../../engine/model';
 import { BustProps } from './BustProps';
+import { LineProps, linePresets } from './LineProps';
 import { JOIN_TAGS, sameEdge } from '../../engine/joins';
 import type { EdgeKey, JoinTag } from '../../engine/model';
 import { produce } from '../edit';
@@ -42,6 +43,8 @@ export function Properties({ ctx, selection }: { ctx: PropsContext; selection: S
       return ctx.panel.neckline ? <NecklineProps ctx={ctx} /> : <PanelProps ctx={ctx} />;
     case 'bust':
       return ctx.panel.bust ? <BustProps ctx={ctx} /> : <PanelProps ctx={ctx} />;
+    case 'line':
+      return ctx.panel.shapingLines?.some((l) => l.id === selection.id) ? <LineProps ctx={ctx} id={selection.id} /> : <PanelProps ctx={ctx} />;
     default:
       return <PanelProps ctx={ctx} />;
   }
@@ -176,6 +179,41 @@ function PanelProps({ ctx }: { ctx: PropsContext }) {
 
       <TagEdge ctx={ctx} edge={{ kind: 'bottom' }} label="lower edge" />
       <TagEdge ctx={ctx} edge={{ kind: 'top' }} label="upper edge" />
+
+      <h4>Shaping lines</h4>
+      {(panel.shapingLines ?? []).length > 0 && (
+        <ul className="plain-list">
+          {panel.shapingLines!.map((l) => {
+            const cl = c.lines.find((x) => x.id === l.id);
+            return (
+              <li key={l.id}>
+                <button className="link" onClick={() => ctx.select({ kind: 'line', id: l.id })}>
+                  {l.name}
+                </button>{' '}
+                <span className="muted small">
+                  {l.kind === 'fisheye' ? 'fisheye' : 'one way'} · {cl ? `${signed(cl.amount)} sts` : '–'}
+                  {l.mirror ? ' ×2' : ''}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      <select
+        value=""
+        style={{ width: '100%' }}
+        onChange={(e) => {
+          const preset = linePresets(panel)[Number(e.target.value)];
+          if (!preset) return;
+          const line = preset.make();
+          set((p) => void (p.shapingLines = [...(p.shapingLines ?? []), line]));
+          ctx.select({ kind: 'line', id: line.id });
+        }}
+      >
+        <option value="">+ Add shaping line…</option>
+        {linePresets(panel).map((p, i) => <option key={i} value={i}>{p.label}</option>)}
+      </select>
+      <p className="hint">Or draw one on the schematic with ✎ Line.</p>
 
       <h4>Bust shaping</h4>
       {panel.bust ? (

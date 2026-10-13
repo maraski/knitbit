@@ -5,7 +5,9 @@
 // RS). A row shows the stitches on the needle at the end of that row, plus anything bound off in it.
 // Shaping symbols sit `shapingInset` stitches in from the edge ("k2, ssk … k2tog, k2").
 
-import type { CustomSymbol, Id, Panel, Project } from './model';
+import type { CustomSymbol, FreeStitch, Id, Panel, Project } from './model';
+import { freeCells, freeFor, freeInterior } from './free';
+import { lineX } from './lines';
 import type { ComputedPanel, ComputedSegment, Edge, ShapeEvent } from './panel';
 import { defaultSymbol, symbolInfo, type SymbolInfo } from './symbols';
 
@@ -35,6 +37,7 @@ export interface ChartRow {
   rtl: boolean;
   cells: Cell[];
   refs: Record<number, CellRef>; // column → marker
+  free: Record<number, Id>; // column → painted stitch
   worked: number; // stitches worked in this row (incl. bound off)
   count: number; // live stitches at the end of the row
 }
@@ -53,6 +56,8 @@ export interface Chart {
   panelId: Id;
   sizeId: Id;
   cols: number;
+  /** Stitch x (from the centre line) of column 0's left edge. */
+  x0: number;
   rows: ChartRow[]; // knit order
   topDown: boolean;
   castOn: number;
@@ -77,7 +82,15 @@ export function cellInfo(id: string, custom: CustomSymbol[] = []): SymbolInfo {
 export function buildChart(project: Project, panel: Panel, c: ComputedPanel): Chart {
   const T = c.totalRows;
   const inset = Math.max(0, panel.shapingInset);
-  const interior = c.bust?.darts?.interior ?? new Array<number>(T + 1).fill(0);
+  const darts = c.bust?.darts?.interior ?? new Array<number>(T + 1).fill(0);
+  const freeI = freeInterior(project, panel, c.sizeId, T);
+  const lineChange = new Array<number>(T + 1).fill(0);
+  for (const l of c.lines) for (const e of l.events) if (e.row >= 1 && e.row <= T) lineChange[e.row] += e.delta * (l.mirror ? 2 : 1);
+  let lineAcc = 0;
+  const lineI = lineChange.map((d) => (lineAcc += d));
+  const interior = darts.map((v, r) => v + freeI[r] + lineI[r]);
+  const freeByRow = new Map<number, FreeStitch[]>();
+  for (const f of freeFor(panel, c.sizeId)) freeByRow.set(f.row, [...(freeByRow.get(f.row) ?? []), f]);
   const isRound = (r: number) => !!c.roundRows && r >= c.roundRows.from && r <= c.roundRows.to;
   const isRS = (r: number) => isRound(r) || (((r - c.firstFlatRow) % 2) + 2) % 2 === 0;
 
@@ -214,7 +227,7 @@ export function buildChart(project: Project, panel: Panel, c: ComputedPanel): Ch
     // Vertical bust darts: shaping either side of each dart line.
     if (dartRows.has(r) && c.bust?.darts) {
       const d = c.bust.darts;
-      const change = interior[r] - interior[r - 1]; // both darts together
+      const change = darts[r] - darts[r - 1]; // both darts together
       const per = Math.abs(change) / 2;
       const centre = (c.leftEdge[r] + c.rightEdge[r]) / 2;
       const mid = (c.leftEdge[r - 1] + c.rightEdge[r - 1]) / 2;
@@ -230,10 +243,39 @@ export function buildChart(project: Project, panel: Panel, c: ComputedPanel): Ch
       }
     }
 
+    // Shaping lines: the stitch on the line's outer side, and its mirror on the inner side.
+    for (const l of c.lines) {
+      const ev = l.events.find((e) => e.row === r);
+      if (!ev) continue;
+      const kind = ev.delta < 0 ? 'dec' : 'inc';
+      const centre = (c.leftEdge[r] + c.rightEdge[r]) / 2;
+      for (const sgn of l.mirror ? [1, -1] : [1]) {
+        const x = sgn * lineX(l, r);
+        const k = col(centre + x);
+        const leftSide = x < 0;
+        const outerSym = defaultSymbol(kind, leftSide ? 'right' : 'left', Math.sign(ev.delta));
+        put(cells, leftSide ? k - 1 : k, outerSym);
+        if (Math.abs(ev.delta) >= 2) put(cells, leftSide ? k : k - 1, MIRROR[outerSym] ?? outerSym);
+      }
+    }
+
+    // Painted stitches, drawn over whatever is there (only inside the fabric).
+    const free: Record<number, Id> = {};
+    const centreR = (c.leftEdge[r] + c.rightEdge[r]) / 2;
+    for (const f of freeByRow.get(r) ?? []) {
+      for (const cell of freeCells(f)) {
+        const k = col(centreR + cell.x);
+        if (k < 0 || k >= cols || cells[k] === '' || cells[k] === HELD) continue;
+        cells[k] = cell.symbol;
+        free[k] = f.id;
+        delete refs[k];
+      }
+    }
+
     const round = isRound(r);
     const rs = isRS(r);
     const worked = cells.filter((v) => v !== '' && v !== HELD && v !== HOLD).length;
-    return { key: String(r), knitRow: r, label: String(r), shortRow: null, round, rs, rtl: round || rs, cells, refs, worked, count: c.counts[r] };
+    return { key: String(r), knitRow: r, label: String(r), shortRow: null, round, rs, rtl: round || rs, cells, refs, free, worked, count: c.counts[r] };
   };
 
   const rows: ChartRow[] = [];
@@ -265,7 +307,7 @@ export function buildChart(project: Project, panel: Panel, c: ComputedPanel): Ch
   });
   const legend = ids.map((id) => cellInfo(id, project.symbols));
 
-  return { panelId: c.panelId, sizeId: c.sizeId, cols, rows, topDown: c.topDown, castOn: c.counts[0] ?? 0, repeats, legend };
+  return { panelId: c.panelId, sizeId: c.sizeId, cols, x0, rows, topDown: c.topDown, castOn: c.counts[0] ?? 0, repeats, legend };
 }
 
 function shortRows(c: ComputedPanel, sr: NonNullable<NonNullable<ComputedPanel['bust']>['shortRows']>, col: (x: number) => number, cols: number, after: number): ChartRow[] {
@@ -294,6 +336,7 @@ function shortRows(c: ComputedPanel, sr: NonNullable<NonNullable<ComputedPanel['
         rtl: rs,
         cells,
         refs: {},
+        free: {},
         worked: rs ? p.rsWorked : p.wsWorked,
         count: sr.liveStitches,
       };

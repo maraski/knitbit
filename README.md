@@ -37,6 +37,7 @@ npm run typecheck
   - `bust.ts`: bust shaping (formulas with numbers plugged in, short-row wedges, horizontal and vertical darts).
   - `joins.ts`: measuring tagged edges, seam comparison, pick-up suggestions. `edges.ts`: edge length along the outline.
   - `layout.ts`: garment layout geometry (local cm frame, rotation, placement), size alignment, T-shape auto-arrange.
+  - `free.ts`: painted stitches (paint, erase, repeat, mirror, copy to all sizes). `lines.ts`: shaping lines.
   - `chart.ts`: the stitch chart grid built from a computed panel (cells, short rows, repeats, legend, column folding).
 - `src/ui/`: React views.
 - `samples/`: sample sizing tables (`sizing_table_cm.csv`, `sizing_table_cm.json`, same data).
@@ -111,7 +112,7 @@ Raw counts are rounded in this order, and each step is shown in the UI:
 
 Templates are starting points: everything they generate is an ordinary, editable panel. Add them from the Panels tab;
 duplicate (⧉) or delete (×) any panel there. Options: knitting direction, neckline, sleeve type, and for bodices
-"in the round below the underarm".
+"in the round below the underarm"; top-down bodices also have construction, shoulders and back neck.
 
 | Template | Waypoints (bottom to top) | Notes |
 |---|---|---|
@@ -130,8 +131,25 @@ cap top height solves `both cap edges ≈ armhole_len + cap_ease` (`cap_ease`, d
 `cap_bo.height + sqrt(((armhole_len + cap_ease)/2 × 0.966 − bind-off run)² − horizontal run²)`; 0.966 allows for the
 bell's curve. In the sample sizes the cap comes out 1.0–2.4 cm longer than the armhole; the seam check shows the exact figure.
 
-**Top-down** bodices start at the shoulder line: both shoulders are cast on either side of the neck, the shoulder
-slope is worked in short rows, the neck edges increase, and the centre is cast on to join.
+**Top-down tops are worked shoulders first** (the default for top-down backs and fronts, and the first template,
+*Top-down top (back + front)*, which adds both panels and their joins):
+
+1. **Back**: cast on at the shoulders. *Back neck*: **straight** (cast on straight across, the default) or **shaped**
+   (a back neckline with increases and the centre cast on). *Shoulders*: **sloped** in German short rows (default)
+   or **straight**. Worked flat with the armhole increases to the row before the underarm cast-on.
+2. **Front**: each shoulder is **picked up** from the back's cast-on edge (the schematic and chart say "pick up N sts";
+   the same slope option applies, so a sloped back gets a sloped front), worked flat with the neck increases and the
+   armhole increases, ending on the same row as the back. The centre neck stitches are cast on to join the sides.
+3. **Underarms**: `underarm_co` (an estimated measurement, `upper_chest × 0.05`, editable) is cast on at each
+   underarm, **half on the front and half on the back**, a whole number of stitches per side so both match. The
+   armholes increase from `armhole_end` (`armhole_depth × 0.6` back, `× 0.75` front above the underarm) to there.
+4. **In the round** below the underarm (pullovers): the round starts only when the underarms are joined **and** the
+   neck is closed; a deep V that closes below the underarm keeps the body flat until then (noted in the checks).
+5. Bust and waist shaping as usual.
+
+The set adds two ordinary, editable joins: *Front shoulders picked up from the back* (pick up, with the stitch count)
+and *Underarm cast-on* (front sides vs back sides). Choose **Construction: Standalone** on a top-down back or front for
+the old behaviour (each panel cast on at its own top). Cardigans (left/right fronts, optional button band) are planned.
 
 ## Working in the round
 
@@ -197,6 +215,39 @@ waist decreases and hip increases can differ, and per panel (front only, or fron
 - The schematic keeps drawing the finished width, with the lines dashed and the markers on them; the chart puts the
   symbols either side of each line. Hand-placed markers on a princess segment count all their stitches (a k2tog marker
   at a two-sided line is −2). Bind-off/cast-on steps stay at the edges.
+
+## Experimenting: painted stitches and shaping lines
+
+For shaping the options don't cover, two free-form tools. Both work *inside* the fabric: stitches they add or remove
+widen or narrow the panel evenly about the centre (like vertical darts), the stitch counts, Checks, seam lengths and
+the chart all follow, and the edge shaping is not changed, so later widths move with them (a note says by how much;
+a warning appears if the shoulders or top run out of stitches).
+
+**Painted stitches** (Chart → ✎ Paint, or P). Pick a stitch (every symbol except bind-off/cast-on/turns, plus your
+own), then click or drag to paint; click a painted stitch again, right-click, or use the Eraser to remove. **Mirror**
+(on by default) paints the mirror image across the centre with leaning stitches swapped (ssk ↔ k2tog, M1L ↔ M1R).
+**Every N rows × k** repeats each placement up the panel. Each stroke is one undo step. Painted cells have a thin blue
+outline; on the schematic they show as small coloured marks. Painted stitches belong to one size: **Copy to all
+sizes** places this size's stitches in every size (replacing theirs) at the same relative place: between the same two
+waypoints at the same fraction of the way, and at the same fraction of the half width, snapped to that size's
+stitches. **Clear size** removes this size's. Shaping-row positions are relative to each row's centre, so they stay
+put when other shaping changes the width.
+
+**Shaping lines** (Panel → *Shaping lines*, or Schematic → ✎ Line and click the two ends). A line has:
+- two ends, each a height (up from the lower edge) and a distance from the centre (− = left half), as expressions.
+  Lines drawn on the schematic are stored relative to the waypoint below and that waypoint's width, e.g.
+  `waist.height + 2` and `waist.width / 2 * -0.5`, so they grade with the sizes. Chips fill in waypoints, the
+  centre, the bust point, ⅓ in from the side or 3 cm from the side;
+- **stitches** per line (an expression in stitches, e.g. `-6`, or `round(-3 / st_w)` for 3 cm), with per-size
+  fixed values; − decreases going up the garment;
+- **shape**: *one way* (keeps the change) or *fisheye* (makes the change up to the middle, then undoes it; drawn
+  lines start as fisheye so nothing runs out of stitches);
+- **at the line**: both sides (2 sts per shaping row, the stitch on the outer side and its mirror on the inner side)
+  or one side; **RS rows** or any row (falls back to every row with a note); **mirror** on the other half (default on).
+
+Rows are spread evenly (centred) between the ends; a slanted line moves across as it rises. Per size you can edit the
+rows by hand in the line's table (Reset to auto goes back). Presets: fisheye dart through the bust point, waist dart
+⅓ in from the side, slanted side-front dart, sway-back dart at the centre back.
 
 ## Short-row segments
 
@@ -366,6 +417,13 @@ A **Panel**:
   "neckline": null | { "shape": "round" | "v" | "square" | "boat", "width": Dim, "depth": Dim,
                        "centre": "bindoff" | "hold", "centreWidth": Dim, "side": "rs" | "any" },
   "princess": null | { "position": Dim, "sides": "both" | "one" },   // optional
+  "freeStitches": [{ "id": "st_…", "sizeId": "size_…", "row": 40, "x": -8.5,      // optional; x = cell's left edge
+                     "symbol": "k2tog", "mirror": true }],                       //   in sts from the row's centre
+  "shapingLines": [{ "id": "line_…", "name": "Dart",                               // optional
+                     "from": { "height": Dim, "x": Dim }, "to": { "height": Dim, "x": Dim },
+                     "amount": Dim, "kind": "one-way" | "fisheye", "sides": "both" | "one",
+                     "rowSide": "rs" | "any", "mirror": true, "manual": { "<sizeId>": [12, 16] } }],
+  "startFrom": "caston" | "pickup",            // optional: how the first row is made (top-down fronts: pickup)
   "layout": { "x": 0, "y": 0, "rotation": 0 | 90 | 180 | 270 },
   "notes": ""
 }
