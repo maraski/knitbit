@@ -32,7 +32,11 @@ function allDims(panel: Panel): DimExpr[] {
   for (const s of panel.sections) out.push(s.fromHeight, s.toHeight);
   if (panel.neckline) out.push(panel.neckline.width, panel.neckline.depth, panel.neckline.centreWidth);
   const b = panel.bust;
-  if (b) out.push(b.width, b.length, b.apexHeight, b.apexOffset, b.shortRows.zoneWidth, b.dart.tipGap, b.vertical.bottom, b.vertical.gap, b.vertical.top);
+  if (b) {
+    out.push(b.width, b.length, b.apexHeight, b.apexOffset, b.shortRows.zoneWidth, b.dart.tipGap, b.vertical.bottom, b.vertical.gap, b.vertical.top);
+    if (b.lengthNoWidth) out.push(b.lengthNoWidth);
+    if (b.apexCorrection) out.push(b.apexCorrection);
+  }
   if (panel.princess) out.push(panel.princess.position);
   for (const l of panel.shapingLines ?? []) out.push(l.from.height, l.from.x, l.to.height, l.to.x, l.amount);
   return out;

@@ -1,10 +1,13 @@
 import { useMemo } from 'react';
 import { buildScope } from '../../engine/measurements';
-import { defaultBust, type BustMethod, type BustShaping, type DimExpr, type Panel } from '../../engine/model';
+import { CUPS, CUSTOM_BUST, cupLabel, customCupNames, fitAliasList } from '../../engine/fit';
+import { removeMeasurement } from '../../engine/grading';
+import { DEFAULT_LENGTH_NO_WIDTH, defaultBust, dim, type BustMethod, type BustShaping, type CupChoice, type DimExpr, type Panel } from '../../engine/model';
 import { computePanel } from '../../engine/panel';
 import { editPanel } from '../edit';
 import { fmtNum, len } from '../format';
 import { ExprField } from './ExprField';
+import { sizeText } from './EstMark';
 import { IssueList, type PropsContext } from './Properties';
 
 const METHODS: Record<BustMethod, string> = {
@@ -40,28 +43,61 @@ export function BustProps({ ctx }: { ctx: PropsContext }) {
       </div>
       {b.method !== 'none' && (
         <>
+          <CupPicker ctx={ctx} />
           <div className="estimate">
             <div className="estimate-head">Starting estimate · {ctx.sizeName}</div>
             <p className="small">
-              Bust difference <strong>D</strong> = bust − upper_chest = {fmtNum(ms.bust ?? 0)} − {fmtNum(ms.upper_chest ?? 0)} = <strong>{len((ms.bust ?? 0) - (ms.upper_chest ?? 0), ctx.units)}</strong>
+              Bust difference <strong>D</strong> = bust ({cupLabel(ctx.project.fit.cup)}) − upper_chest = {fmtNum(ms.bust ?? 0)} − {fmtNum(ms.upper_chest ?? 0)} ={' '}
+              <strong>{len((ms.bust ?? 0) - (ms.upper_chest ?? 0), ctx.units)}</strong>
             </p>
-            <ExprField
-              label="Extra width W (bust_w)"
-              value={b.width}
-              onChange={setDim((x, d) => void (x.width = d), 'w')}
-              fieldKey="w"
-              {...common}
-              detail={cb && <span className="plugged">= {cb.width.plugged}</span>}
-            />
-            <ExprField
-              label="Extra centre-front length L (bust_l)"
-              value={b.length}
-              onChange={setDim((x, d) => void (x.length = d), 'l')}
-              fieldKey="l"
-              {...common}
-              detail={cb && <span className="plugged">= {cb.length.plugged}</span>}
-            />
-            <p className="hint">Defaults: W = D × 1.0, L = max(0, D − b) × k with b = 0, k = 0.5. Edit the numbers in the formulas, or fix a value for one size.</p>
+            {usesTurns && (
+              <label className="check" title="The dart heights in the sizing table assume some width is also added at the front.">
+                <input type="checkbox" checked={b.frontWidth !== false} onChange={(e) => set((x) => void (x.frontWidth = e.target.checked))} />
+                Extra width added at the front
+              </label>
+            )}
+            {cb?.noFrontWidth ? (
+              <p className="small">Extra width W (bust_w) = <strong>0</strong>: no width is added at the front.</p>
+            ) : (
+              <ExprField
+                label="Extra width W (bust_w)"
+                value={b.width}
+                onChange={setDim((x, d) => void (x.width = d), 'w')}
+                fieldKey="w"
+                {...common}
+                detail={cb && <span className="plugged">= {cb.width.plugged}</span>}
+              />
+            )}
+            {cb?.noFrontWidth ? (
+              <ExprField
+                label="Extra centre-front length L (bust_l), no front width"
+                value={b.lengthNoWidth ?? dim(DEFAULT_LENGTH_NO_WIDTH)}
+                onChange={setDim((x, d) => void (x.lengthNoWidth = d), 'lnw')}
+                fieldKey="lnw"
+                {...common}
+                detail={cb && <span className="plugged">= {cb.length.plugged}</span>}
+              />
+            ) : (
+              <ExprField
+                label="Extra centre-front length L (bust_l)"
+                value={b.length}
+                onChange={setDim((x, d) => void (x.length = d), 'l')}
+                fieldKey="l"
+                {...common}
+                detail={cb && <span className="plugged">= {cb.length.plugged}</span>}
+              />
+            )}
+            <p className="hint">
+              Defaults: W = D × 1.0. L = <code>dart_height</code>, the sizing table’s suggested dart height for the cup, which assumes some width is
+              also added at the front. With no front width the length has to hold all the bust volume, so L = <code>dart_height + D × 0.25</code>.
+              Edit the numbers in the formulas, or fix a value for one size.
+            </p>
+            <OwnCupNames ctx={ctx} />
+            {!isDefault(b) && (
+              <button className="link" onClick={() => set((x) => resetToTableDefaults(x))} title="W, L, the no-width L, the bust point and its correction">
+                Use the sizing-table defaults
+              </button>
+            )}
           </div>
 
           {usesTurns && (
@@ -76,6 +112,17 @@ export function BustProps({ ctx }: { ctx: PropsContext }) {
 
           <h4>Bust point</h4>
           <ExprField label="Height (up from the lower edge)" value={b.apexHeight} onChange={setDim((x, d) => void (x.apexHeight = d), 'h')} fieldKey="h" {...common} detail={cb && <>→ row {cb.apex.row}</>} />
+          <ExprField
+            label="Vertical correction (bust_apex_corr, taken off hps_to_apex)"
+            value={b.apexCorrection ?? dim(0)}
+            onChange={setDim((x, d) => void (x.apexCorrection = d), 'corr')}
+            fieldKey="corr"
+            {...common}
+          />
+          <p className="hint">
+            <code>hps_to_apex</code> is measured over the bust, so it is a little longer than the straight vertical drop; the correction (starting
+            estimate 5 %) raises the bust point by that much. Set it to 0 to use the measurement as it is.
+          </p>
           <ExprField label="Distance from centre front" value={b.apexOffset} onChange={setDim((x, d) => void (x.apexOffset = d), 'o')} fieldKey="o" {...common} />
 
           {b.method === 'shortrows' && (
@@ -292,6 +339,75 @@ function RowsInput({ label, rows, onChange }: { label: string; rows: number[]; o
 }
 
 /** One row per size: how the bust shaping grades. */
+/** The fields "Use the sizing-table defaults" resets. */
+const TABLE_DEFAULT_KEYS = ['width', 'length', 'lengthNoWidth', 'apexCorrection', 'apexHeight', 'apexOffset'] as const;
+
+function isDefault(b: BustShaping): boolean {
+  const d = defaultBust();
+  return TABLE_DEFAULT_KEYS.every((k) => b[k]?.expr === d[k]!.expr);
+}
+
+function resetToTableDefaults(x: BustShaping): void {
+  const d = defaultBust();
+  for (const k of TABLE_DEFAULT_KEYS) x[k] = { expr: d[k]!.expr, overrides: x[k]?.overrides ?? {} };
+}
+
+/** The project's cup choice, edited here too because the bust helper is where it matters. */
+function CupPicker({ ctx }: { ctx: PropsContext }) {
+  const { project, update } = ctx;
+  const cup = project.fit.cup;
+  const hasCustom = project.measurements.some((m) => m.name === CUSTOM_BUST);
+  const custom = customCupNames(project, buildScope(project, ctx.sizeId));
+  return (
+    <div className="field">
+      <label>Cup (whole project)</label>
+      <select value={cup} onChange={(e) => update((p) => ({ ...p, fit: { ...p.fit, cup: e.target.value as CupChoice } }))}>
+        {CUPS.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+        <option value="custom">Custom bust circumference</option>
+      </select>
+      {cup === 'custom' && !hasCustom && (
+        <p className="notice-inline small">
+          No <code>{CUSTOM_BUST}</code> yet.{' '}
+          <button
+            className="link"
+            onClick={() =>
+              update((p) => ({
+                ...p,
+                measurements: [...p.measurements, { name: CUSTOM_BUST, label: 'Bust (custom)', kind: 'circumference', rule: { type: 'expression', expr: 'bust_cd_cup' }, table: {}, manual: {}, note: 'Your bust circumference: type it per size in the Measurements grid (starts as the C/D column).' }],
+              }))
+            }
+          >
+            Add it (starts as the C/D column; type your values in the grid)
+          </button>
+        </p>
+      )}
+      {cup === 'custom' && custom && (
+        <div className="hint">
+          {ctx.sizeName}: dart height and apex to apex from the nearest cup by D, {cupLabel(custom.cup)}.
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Measurements of the project's own that win over the cup columns (e.g. an estimated apex_to_apex from an older project). */
+function OwnCupNames({ ctx }: { ctx: PropsContext }) {
+  const own = fitAliasList(ctx.project).filter((a) => ['bust', 'dart_height', 'apex_to_apex'].includes(a.name) && ctx.project.measurements.some((m) => m.name === a.name));
+  if (!own.length) return null;
+  return (
+    <p className="notice-inline small">
+      {own.map((a) => (
+        <span key={a.name}>
+          <code>{a.name}</code> is a measurement of this project and wins over <code>{a.expr}</code>.{' '}
+          <button className="link" onClick={() => ctx.update((p) => removeMeasurement(p, a.name))}>
+            Use {a.expr}
+          </button>{' '}
+        </span>
+      ))}
+    </p>
+  );
+}
+
 function SizeTable({ ctx }: { ctx: PropsContext }) {
   const rows = useMemo(
     () =>
@@ -302,10 +418,11 @@ function SizeTable({ ctx }: { ctx: PropsContext }) {
         const gaps = sr ? sr.pairs.slice(1).map((p, i) => Math.abs(p.leftUnworked - sr.pairs[i].leftUnworked)) : [];
         return {
           id: s.id,
-          name: s.name,
+          name: sizeText(s, ctx.project),
           D: b?.D ?? 0,
           W: b?.width.value ?? 0,
           L: b?.length.value ?? 0,
+          apex: b ? b.apex.heightCm : null,
           steps: sr ? `${sr.pairs.length} pairs` : b?.darts ? `${b.darts.perDart} sts/dart` : '—',
           gap: gaps.length ? Math.min(...gaps) : null,
           problems: c.issues.filter((i) => i.ref.kind === 'bust' && i.severity !== 'info').length,
@@ -316,7 +433,7 @@ function SizeTable({ ctx }: { ctx: PropsContext }) {
   return (
     <table className="events size-table">
       <thead>
-        <tr><th>Size</th><th>D</th><th>W</th><th>L</th><th>Shaping</th><th>Min gap</th><th /></tr>
+        <tr><th>Size</th><th>D</th><th>W</th><th>L</th><th title="Bust point height, up from the lower edge (cm)">Bust pt</th><th>Shaping</th><th>Min gap</th><th /></tr>
       </thead>
       <tbody>
         {rows.map((r) => (
@@ -325,6 +442,7 @@ function SizeTable({ ctx }: { ctx: PropsContext }) {
             <td>{fmtNum(Math.round(r.D * 100) / 100)}</td>
             <td>{fmtNum(Math.round(r.W * 100) / 100)}</td>
             <td>{fmtNum(Math.round(r.L * 100) / 100)}</td>
+            <td>{r.apex === null ? '—' : fmtNum(Math.round(r.apex * 10) / 10)}</td>
             <td>{r.steps}</td>
             <td>{r.gap ?? '—'}</td>
             <td>{r.problems ? <span className="err">⚠ {r.problems}</span> : ''}</td>

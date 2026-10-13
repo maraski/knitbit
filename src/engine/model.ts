@@ -213,7 +213,15 @@ export type BustMethod = 'shortrows' | 'horizontal-dart' | 'vertical-dart' | 'no
 export interface BustShaping {
   method: BustMethod;
   width: DimExpr; // W: extra width over the bust (total)
-  length: DimExpr; // L: extra length at centre front
+  length: DimExpr; // L: extra length at centre front (when width is added at the front)
+  /**
+   * Short rows / horizontal dart: extra width is added at the front (default). Off: W = 0 and L comes from
+   * `lengthNoWidth`, which is longer because the length has to hold all the bust volume. Vertical darts always add width.
+   */
+  frontWidth?: boolean;
+  lengthNoWidth?: DimExpr;
+  /** Bust point: subtracted from hps_to_apex, which is measured over the bust and so is longer than the vertical drop. */
+  apexCorrection?: DimExpr;
   sideWidth: boolean; // short rows / horizontal dart: also add W at the side seams (bust_side_w = W)
   apexHeight: DimExpr; // bust point height, up from the garment's lower edge
   apexOffset: DimExpr; // bust point distance from centre front
@@ -233,13 +241,19 @@ export interface BustShaping {
   manual: Record<Id, { left?: number[]; right?: number[]; incRows?: number[]; decRows?: number[] }>;
 }
 
+/** Bust length when no width is added at the front: the dart height plus a quarter of the bust difference. */
+export const DEFAULT_LENGTH_NO_WIDTH = 'dart_height + (bust - upper_chest) * 0.25';
+
 export function defaultBust(): BustShaping {
   return {
     method: 'shortrows',
     width: dim('(bust - upper_chest) * 1.0'),
-    length: dim('max(0, (bust - upper_chest) - 0) * 0.5'),
+    length: dim('dart_height'),
+    frontWidth: true,
+    lengthNoWidth: dim(DEFAULT_LENGTH_NO_WIDTH),
+    apexCorrection: dim('hps_to_apex * 0.05'),
     sideWidth: true,
-    apexHeight: dim('shoulder.height + shoulder_drop - hps_to_apex'),
+    apexHeight: dim('shoulder.height + shoulder_drop - (hps_to_apex - bust_apex_corr)'),
     apexOffset: dim('apex_to_apex / 2'),
     shortRows: { style: 'german', pairs: null, order: 'shortening', zoneWidth: dim('max(6, bust_l * 2.5)') },
     dart: { placement: 'side', tipGap: dim(2.5) },

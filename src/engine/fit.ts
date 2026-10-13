@@ -88,6 +88,22 @@ export function fitAliases(project: Pick<Project, 'fit' | 'measurements'>): Reco
   return out;
 }
 
+/**
+ * Custom bust: the sizing table has dart heights and apex widths per cup, not per bust, so each size takes them from
+ * the cup whose typical bust − upper_chest is closest to its own. Names the project defines itself are left alone.
+ */
+export function customCupNames(project: Pick<Project, 'fit' | 'measurements'>, values: Record<string, number>): { cup: Exclude<CupChoice, 'custom'>; names: Record<string, string> } | null {
+  if (project.fit?.cup !== 'custom' || values.bust === undefined || values.upper_chest === undefined) return null;
+  const cup = closestCup(values.bust - values.upper_chest);
+  const c = CUPS.find((x) => x.id === cup)!;
+  const have = new Set(project.measurements.map((m) => m.name));
+  const names: Record<string, string> = {};
+  for (const [name, col] of [['dart_height', `dart_height_${cup}`], ['apex_to_apex', `apex_to_apex_${c.apex}`]]) {
+    if (!have.has(name) && col in values) names[name] = col;
+  }
+  return { cup, names };
+}
+
 /** Why a derived name is missing (for error messages), or null when it isn't a derived name or isn't missing. */
 export function missingAliasHint(project: Pick<Project, 'fit' | 'measurements'>, name: string): string | null {
   const a = fitAliasList(project).find((x) => x.name === name);

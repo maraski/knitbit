@@ -62,7 +62,10 @@ describe('template bindings (new sizing table)', () => {
     expect(wpExpr(back, 'neck_side', 'width')).toBe('back_neck_width');
     expect(back.neckline!.depth.expr).toBe('back_neck_drop');
     expect(front.neckline!.depth.expr).toBe('front_neck_drop');
-    expect(front.bust!.apexHeight.expr).toBe('shoulder.height + shoulder_drop - hps_to_apex');
+    expect(front.bust!.apexHeight.expr).toBe('shoulder.height + shoulder_drop - (hps_to_apex - bust_apex_corr)');
+    expect(front.bust!.apexCorrection!.expr).toBe('hps_to_apex * 0.05');
+    expect(front.bust!.length.expr).toBe('dart_height');
+    expect(front.bust!.lengthNoWidth!.expr).toBe('dart_height + (bust - upper_chest) * 0.25');
     expect(front.bust!.apexOffset.expr).toBe('apex_to_apex / 2');
     const sl = sleeve('set-in');
     expect(wpExpr(sl, 'cuff', 'width')).toBe('wrist + ease.wrist');

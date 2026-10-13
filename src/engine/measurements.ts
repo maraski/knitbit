@@ -2,7 +2,7 @@
 // Precedence per size: manual override → table value → grading rule.
 
 import { evaluate, resolveDefinitions, scopeFrom, type Result } from './expr';
-import { fitAliases } from './fit';
+import { customCupNames, fitAliases } from './fit';
 import { regionOf, regionSources } from './regions';
 import type { DimExpr, Id, Measurement, Project, ValueSource } from './model';
 
@@ -82,6 +82,10 @@ export function resolveMeasurements(project: Project, sizeId: Id): ResolvedMeasu
       values[name] = { value: resolved.values[name], source: t?.source ?? 'rule', ...(t?.from ? { from: t.from } : {}) };
     } else values[name] = { value: resolved.values[name], source: 'rule' };
   }
+  // Custom bust: dart height and apex width from the nearest cup, per size.
+  const plain = Object.fromEntries(Object.entries(values).map(([k, v]) => [k, v.value]));
+  const custom = customCupNames(project, plain);
+  if (custom) for (const [name, col] of Object.entries(custom.names)) values[name] = { ...values[col], source: 'rule' };
   return { values, errors };
 }
 

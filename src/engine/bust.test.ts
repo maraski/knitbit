@@ -21,7 +21,7 @@ describe('bust formulas', () => {
     const c = computePanel(p, front(), M);
     expect(c.bust!.D).toBe(7.5); // C/D cup: 122 − 114.5
     expect(c.bust!.width).toMatchObject({ plugged: '(122 - 114.5) * 1.0', value: 7.5, overridden: false });
-    expect(c.bust!.length).toMatchObject({ plugged: 'max(0, (122 - 114.5) - 0) * 0.5', value: 3.75 });
+    expect(c.bust!.length).toMatchObject({ expr: 'dart_height', plugged: '3.75', value: 3.75 }); // dart_height_cd
     expect(plugIn('bust/2 + ease/2', buildScope(p, M))).toBe('122/2 + 5/2');
   });
 

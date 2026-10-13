@@ -218,21 +218,35 @@ counts differ and notes when their side shaping falls on different rounds.
 Front panels carry an optional bust shaping setup (Panel → *Bust shaping*). The amounts are **starting estimates**
 from editable formulas, shown with your numbers plugged in, and each can be fixed for any size:
 
-- **D** = `bust − upper_chest` (from the sizing table)
-- **W**, extra width over the bust = `(bust - upper_chest) * 1.0` → available to waypoints as `bust_w`
-- **L**, extra centre-front length = `max(0, (bust - upper_chest) - 0) * 0.5` (`max(0, D − b) × k`, b = 0, k = 0.5) → `bust_l`
+- **Cup** (project-wide; also under Project → Fit): A/B, C/D, E/F, G/H, or a custom bust circumference
+  (`bust_custom`, added on request, starting as the C/D column; type your values per size in the grid). `bust` follows
+  the cup's column.
+- **D** = `bust − upper_chest`.
+- **W**, extra width over the bust = `(bust - upper_chest) * 1.0` → `bust_w`.
+- **L**, extra centre-front length (short rows or horizontal dart) = `dart_height` → `bust_l`: the sizing table's
+  suggested dart height for the cup (`dart_height_ab/cd/ef/gh`), which assumes some width is also added at the front.
+- **Extra width added at the front** (toggle, on by default; short rows and horizontal darts). Off: W = 0, nothing is
+  added at the side seams, and L comes from its own editable formula `dart_height + (bust - upper_chest) * 0.25`,
+  longer because the length has to hold all the bust volume. Vertical darts always add width.
 - `bust_side_w` = W when short rows or a horizontal dart also add width at the side seams (on by default); the front
   template's underarm width is `upper_chest / 2 + ease / 2 + bust_side_w`. With vertical darts, or "none", it is 0.
+- With a custom bust, `dart_height` and `apex_to_apex` come per size from the cup whose typical bust − upper chest
+  (A/B 5, C/D 7.5, E/F 10, G/H 12.5 cm) is closest; the helper says which.
 
-The bust point is an expression too: height `shoulder.height + shoulder_slope − bust_point_depth`, distance from
-centre front `apex_to_apex / 2`.
+The bust point: height `shoulder.height + shoulder_drop − (hps_to_apex − bust_apex_corr)` (the HPS level minus HPS to
+apex), distance from centre front `apex_to_apex / 2`, where `apex_to_apex` is the cup's column (A/B → `apex_to_apex_b`,
+C/D → `_d`, E/F → `_f`, G/H → `_h`). `bust_apex_corr` is an editable **vertical correction**, starting estimate
+`hps_to_apex * 0.05`: HPS to apex is measured over the bust, so it is a little longer than the vertical drop (0 = use
+it as measured). A project measurement named `bust`, `dart_height` or `apex_to_apex` (e.g. an estimate from an older
+project) wins over the cup's column; the helper points this out and can remove it. *Use the sizing-table defaults*
+resets W, L, the no-width L, the bust point and its correction to the formulas above (per-size values are kept).
 
 | Method | What it does |
 |---|---|
-| **Short rows** | `round(L × rows/cm ÷ 2)` pairs (German or wrap & turn), a stepped wedge centred vertically on the bust point. Turns are spread evenly across a zone centred on each bust point (default width `max(6, bust_l × 2.5)` cm), each row shorter or each row longer. The first short row is a RS row. |
+| **Short rows** | `round(L × rows/cm ÷ 2)` pairs (German or wrap & turn), a stepped wedge centred vertically on the bust point. Turns are spread evenly across a zone centred on each bust point (default width `max(6, bust_l × 2.5)` cm, never closer than 2 sts to centre front), each row shorter or each row longer. The first short row is a RS row. |
 | **Short rows, bust point → side seam** | Same method with *Turns span: Bust point → side seam* (and usually *Start: At the bust point*). The first turn is at the bust point; each later one is `step` stitches further towards the side seam, where `step` = stitches between the bust point and the side (less a 2-st margin) ÷ turns per side, rounded down. Top-down: start right after the bust-point row, each row longer. Bottom-up mirror: start near the side seam, each row shorter, finishing at the bust-point row. The preset button sets all of this (and German short rows) for the panel's direction. If the turns don't fit (step < 1 st), you're told to shorten L or stack a second dart. |
 | **Horizontal dart** | Knitted horizontal darts are short rows: turns run from the side seam (or just below the underarm) to a tip that stops short of the bust point (default 2.5 cm). Drawn with dart legs. |
-| **Vertical darts** | Two darts on lines through the bust points. Each adds W/2, 2 stitches per shaping row (one each side of the dart line). They open from `waist.height + 2.5` to 2 cm below the bust point and close from 2 cm above it to `underarm.height + armhole_depth × 0.5`. When RS rows run out, the shaping moves to every row (noted). The schematic widens accordingly. |
+| **Vertical darts** | Two darts on lines through the bust points. Each adds W/2, 2 stitches per shaping row (one each side of the dart line). They open from `waist.height` to 2 cm below the bust point and close from 2 cm above it to `underarm.height + armhole_depth × 0.5`. When RS rows run out, the shaping moves to every row (noted). The schematic widens accordingly. |
 
 In the saved file these are `bust.shortRows.span` (`"zone"` | `"apex-to-side"`) and `bust.shortRows.start`
 (`"centred"` | `"apex"`), both optional (default zone, centred). The schematic wedge is drawn in working order over
