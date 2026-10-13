@@ -1,0 +1,317 @@
+// The project data model. Plain JSON-serializable objects only.
+// All lengths are centimetres. Ids are opaque strings.
+
+import type { Align, IntervalOrder, RowSide } from './distribute';
+import type { Gauge } from './gauge';
+import type { Parity } from './rounding';
+import type { Units } from './units';
+
+export const SCHEMA_VERSION = 1;
+
+export type Id = string;
+
+// ---------- sizes & measurements ----------
+
+export interface Size {
+  id: Id;
+  name: string; // e.g. "3XS", "M", "2X"
+}
+
+/** How a measurement gets values for sizes that have neither a table value nor a manual override. */
+export type GradingRule =
+  | { type: 'none' }
+  /** Base value at the project's base size; `steps[sizeId]` = change from the previous size to that size. */
+  | { type: 'increment'; baseValue: number; defaultStep: number; steps: Record<Id, number> }
+  /** Derived from other measurements, e.g. `cross_chest_back + 3`. */
+  | { type: 'expression'; expr: string };
+
+export interface Measurement {
+  name: string; // identifier used in expressions
+  label: string;
+  kind: 'circumference' | 'length';
+  rule: GradingRule;
+  table: Record<Id, number>; // values imported from a sizing table, by size id
+  manual: Record<Id, number>; // per-size manual overrides (win over everything)
+  estimate?: boolean; // seeded estimate the user should check
+  note?: string;
+}
+
+/** Where a resolved measurement value came from (shown as a subtle indicator). */
+export type ValueSource = 'table' | 'rule' | 'manual';
+
+/** Ease is total circumference ease in cm, split between panels by the expressions that use it. */
+export interface EaseSettings {
+  global: number; // `ease` in expressions
+  per: Record<string, number>; // `ease.<measurement>`; falls back to global
+}
+
+// ---------- panel geometry ----------
+
+/** A dimension given as an expression, with optional per-size fixed overrides (cm). */
+export interface DimExpr {
+  expr: string;
+  overrides: Record<Id, number>;
+}
+
+export interface Waypoint {
+  id: Id;
+  name: string; // hem, waist, bust, underarm, shoulder, …
+  height: DimExpr; // from the panel's start edge
+  symmetric: boolean;
+  width: DimExpr; // full width, used when symmetric
+  left: DimExpr; // half-width from the centre line to the left edge, used when not symmetric
+  right: DimExpr; // half-width to the right edge, used when not symmetric
+}
+
+export type Rhythm = { type: 'auto' } | { type: 'fixed'; every: number } | { type: 'mixed'; a: number; b: number };
+
+export type SegmentMethod =
+  /** Spread increases/decreases over the rows of the segment. */
+  | { kind: 'auto'; side: RowSide; align: Align; order: IntervalOrder; rhythm: Rhythm; perSide: number }
+  /** Bind off (or cast on) in steps at the start of the segment, e.g. armhole or shoulder steps. */
+  | { kind: 'steps'; steps: number[] | null; maxPerStep: number; align?: Align } // null = auto-suggest; align default 'start'
+  /** Shoulder slope etc. worked with short rows instead of bind-off steps. */
+  | { kind: 'shortrows'; steps: number[] | null; maxPerStep: number; style: ShortRowStyle; align?: Align }
+  /** Width changes with no shaping (a warning is shown if widths differ). */
+  | { kind: 'straight' };
+
+export type ShortRowStyle = 'wrap-turn' | 'german';
+
+/** A shaping marker placed by hand. `row` is relative to the segment's first row (1-based). */
+export interface ManualEvent {
+  row: number;
+  delta: number; // stitch change at this edge
+  symbol: string; // symbol id, e.g. 'k2tog', 'ssk', 'm1l', 'yo'
+}
+
+/** Shaping of one edge between waypoint `fromWaypoint` and the next waypoint up. */
+export interface Segment {
+  fromWaypoint: Id;
+  left: SegmentMethod;
+  right: SegmentMethod;
+  mirror: boolean; // right edge follows the left edge's method
+  /** Manual marker lists by size id; when present they replace the auto-suggestion for that size and edge. */
+  manual: Record<Id, { left?: ManualEvent[]; right?: ManualEvent[] }>;
+}
+
+export type KnitDirection = 'bottom-up' | 'top-down' | 'side-to-side';
+export type PanelEdge = 'bottom' | 'top' | 'left' | 'right';
+
+export interface StitchPattern {
+  name: string; // e.g. "stockinette", "2x2 rib", "lace"
+  multiple: number;
+  offset: number;
+}
+
+/** A band of rows worked in a different stitch pattern, e.g. a ribbed hem or cuff. */
+export interface PatternSection {
+  id: Id;
+  name: string;
+  fromHeight: DimExpr;
+  toHeight: DimExpr;
+  pattern: StitchPattern;
+}
+
+export type NecklineShape = 'round' | 'v' | 'square' | 'boat';
+
+export interface Neckline {
+  shape: NecklineShape;
+  width: DimExpr; // neck opening width at the top of the panel
+  depth: DimExpr; // measured down from the top of the panel
+  centre: 'bindoff' | 'hold'; // what happens to the centre stitches
+  centreWidth: DimExpr; // width taken off at the centre in one go (round neck); 0 for V
+  side: 'rs' | 'any'; // which rows the side shaping uses
+}
+
+export type BustMethod = 'shortrows' | 'horizontal-dart' | 'vertical-dart' | 'none';
+
+/**
+ * Bust shaping for a front panel. Amounts are expressions (cm) over measurements and ease only;
+ * the results are available to waypoint expressions as `bust_w`, `bust_l` and `bust_side_w`.
+ */
+export interface BustShaping {
+  method: BustMethod;
+  width: DimExpr; // W: extra width over the bust (total)
+  length: DimExpr; // L: extra length at centre front
+  sideWidth: boolean; // short rows / horizontal dart: also add W at the side seams (bust_side_w = W)
+  apexHeight: DimExpr; // bust point height, up from the garment's lower edge
+  apexOffset: DimExpr; // bust point distance from centre front
+  shortRows: { style: ShortRowStyle; pairs: number | null; order: 'shortening' | 'lengthening'; zoneWidth: DimExpr };
+  dart: { placement: 'side' | 'underarm'; tipGap: DimExpr };
+  vertical: { bottom: DimExpr; gap: DimExpr; top: DimExpr };
+  /** Hand-adjusted steps by size: unworked stitches per short-row pair at each edge; vertical dart rows (knit rows). */
+  manual: Record<Id, { left?: number[]; right?: number[]; incRows?: number[]; decRows?: number[] }>;
+}
+
+export function defaultBust(): BustShaping {
+  return {
+    method: 'shortrows',
+    width: dim('(bust - upper_chest) * 1.0'),
+    length: dim('max(0, (bust - upper_chest) - 0) * 0.5'),
+    sideWidth: true,
+    apexHeight: dim('shoulder.height + shoulder_slope - bust_point_depth'),
+    apexOffset: dim('apex_to_apex / 2'),
+    shortRows: { style: 'german', pairs: null, order: 'shortening', zoneWidth: dim('max(6, bust_l * 2.5)') },
+    dart: { placement: 'side', tipGap: dim(2.5) },
+    vertical: { bottom: dim('waist.height + 2.5'), gap: dim(2), top: dim('underarm.height + armhole_depth * 0.5') },
+    manual: {},
+  };
+}
+
+export interface Panel {
+  id: Id;
+  name: string;
+  template: string | null; // which template generated it (informational)
+  direction: KnitDirection;
+  startEdge: PanelEdge;
+  inTheRound: boolean; // the whole panel is worked in the round
+  /**
+   * Worked in the round below (and up to) this waypoint, flat above it, e.g. a body joined in the round
+   * up to the underarm. Direction-independent: top-down panels are flat down to it, then joined.
+   */
+  joinAt?: Id | null;
+  selvedge: { left: number; right: number }; // 0–2 each, flat parts only
+  shapingInset: number; // stitches between the edge and the shaping (default 2)
+  rounding: { parity: Parity; rowParity: Parity };
+  pattern: StitchPattern; // main stitch pattern
+  sections: PatternSection[];
+  waypoints: Waypoint[]; // ordered by height
+  segments: Segment[];
+  neckline: Neckline | null;
+  bust?: BustShaping | null;
+  layout: { x: number; y: number; rotation: 0 | 90 | 180 | 270 };
+  notes: string;
+}
+
+// ---------- joins (annotation only) ----------
+
+export type JoinTag = 'seam' | 'pickup' | 'live' | 'bindoff' | 'caston' | 'free';
+
+/** A stretch of a panel's outline. Side edges run between two waypoints (in either order). */
+export type EdgeKey =
+  | { kind: 'side'; side: 'left' | 'right'; from: Id; to: Id }
+  | { kind: 'bottom' } // the garment's lower edge
+  | { kind: 'top' } // the garment's upper edge outside any neckline
+  | { kind: 'neck' }; // the whole neckline (both slopes and the centre)
+
+export interface EdgeRef {
+  panelId: Id;
+  edge: EdgeKey;
+}
+
+/**
+ * How panels meet, as the knitter decides it. The app measures and annotates; it never changes the knitting.
+ * Seams compare `edges` (one side) with `partner` (the other side); pick-ups sum all `edges`.
+ */
+export interface Join {
+  id: Id;
+  name: string;
+  tag: JoinTag;
+  edges: EdgeRef[];
+  partner: EdgeRef[];
+  ratio: { stitches: number; rows: number } | null; // pick-up ratio; null = the project default
+  note: string;
+}
+
+// ---------- project ----------
+
+export interface ProjectSettings {
+  seamToleranceCm: number;
+  pickUp: { stitches: number; rows: number }; // default 3 sts per 4 rows
+}
+
+export interface Project {
+  schemaVersion: number;
+  id: Id;
+  name: string;
+  units: Units;
+  gauge: Gauge;
+  sizes: Size[];
+  baseSizeId: Id;
+  measurements: Measurement[];
+  ease: EaseSettings;
+  panels: Panel[];
+  joins?: Join[];
+  settings: ProjectSettings;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ---------- factories ----------
+
+let idCounter = 0;
+export function newId(prefix = 'id'): Id {
+  idCounter = (idCounter + 1) % 1e6;
+  return `${prefix}_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}${idCounter.toString(36)}`;
+}
+
+export function dim(expr: string | number, overrides: Record<Id, number> = {}): DimExpr {
+  return { expr: String(expr), overrides };
+}
+
+export type AutoMethod = Extract<SegmentMethod, { kind: 'auto' }>;
+
+export function defaultAutoMethod(): AutoMethod {
+  return { kind: 'auto', side: 'rs', align: 'end', order: 'spread', rhythm: { type: 'auto' }, perSide: 1 };
+}
+
+export function newWaypoint(name: string, height: string | number, width: string | number): Waypoint {
+  return {
+    id: newId('wp'),
+    name,
+    height: dim(height),
+    symmetric: true,
+    width: dim(width),
+    left: dim(`(${width}) / 2`),
+    right: dim(`(${width}) / 2`),
+  };
+}
+
+export function newSegment(fromWaypoint: Id, method: SegmentMethod = defaultAutoMethod()): Segment {
+  return { fromWaypoint, left: method, right: method, mirror: true, manual: {} };
+}
+
+export function newPanel(name: string): Panel {
+  return {
+    id: newId('panel'),
+    name,
+    template: null,
+    direction: 'bottom-up',
+    startEdge: 'bottom',
+    inTheRound: false,
+    selvedge: { left: 1, right: 1 },
+    shapingInset: 2,
+    rounding: { parity: 'any', rowParity: 'any' },
+    pattern: { name: 'stockinette', multiple: 1, offset: 0 },
+    sections: [],
+    waypoints: [],
+    segments: [],
+    neckline: null,
+    layout: { x: 0, y: 0, rotation: 0 },
+    notes: '',
+  };
+}
+
+export function newMeasurement(name: string, label = name, kind: Measurement['kind'] = 'length'): Measurement {
+  return { name, label, kind, rule: { type: 'none' }, table: {}, manual: {} };
+}
+
+export function newProject(name = 'Untitled top'): Project {
+  const now = new Date().toISOString();
+  const size: Size = { id: newId('size'), name: 'M' };
+  return {
+    schemaVersion: SCHEMA_VERSION,
+    id: newId('project'),
+    name,
+    units: 'metric',
+    gauge: { stitches: 22, rows: 30, basis: '10cm' },
+    sizes: [size],
+    baseSizeId: size.id,
+    measurements: [],
+    ease: { global: 5, per: {} },
+    panels: [],
+    settings: { seamToleranceCm: 1, pickUp: { stitches: 3, rows: 4 } },
+    createdAt: now,
+    updatedAt: now,
+  };
+}
