@@ -6,7 +6,7 @@ import type { Gauge } from './gauge';
 import type { Parity } from './rounding';
 import type { Units } from './units';
 
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 export type Id = string;
 
@@ -332,6 +332,20 @@ export interface Join {
 
 // ---------- project ----------
 
+/**
+ * How the garment is built. 'panels': panels as drawn (the original behaviour). 'contiguous': a top-down contiguous
+ * yoke (Susie Myers' method) generates the yoke, body and sleeve panels, which stay ordinary and editable.
+ */
+export type Construction = 'panels' | 'contiguous';
+/** 'closed': a pullover. 'cardigan': the front opens at centre front (fronts and bands worked flat). */
+export type FrontOpening = 'closed' | 'cardigan';
+
+/** Project-level garment options; they combine freely. */
+export interface GarmentOptions {
+  construction: Construction;
+  opening: FrontOpening;
+}
+
 export interface ProjectSettings {
   seamToleranceCm: number;
   pickUp: { stitches: number; rows: number }; // default 3 sts per 4 rows
@@ -341,6 +355,8 @@ export interface ProjectSettings {
   regionGapLimit?: number;
   /** Check that the hem is at least the bust plus ease around (off by default). */
   hemCheck?: boolean;
+  /** Credit line for the construction method (if any) in the footer of exports. Absent = on. */
+  exportCredit?: boolean;
 }
 
 /** A stitch symbol the knitter defines (drawn as a coloured cell with its abbreviation). */
@@ -363,6 +379,9 @@ export interface Project {
   measurements: Measurement[];
   ease: EaseSettings;
   fit: FitChoices;
+  garment: GarmentOptions;
+  /** Free-form labels; some are added for you (e.g. "contiguous" for that construction). */
+  tags: string[];
   panels: Panel[];
   joins?: Join[];
   symbols?: CustomSymbol[];
@@ -444,6 +463,8 @@ export function newProject(name = 'Untitled top'): Project {
     measurements: [],
     ease: { global: 5, per: {} },
     fit: { cup: 'cd' },
+    garment: { construction: 'panels', opening: 'closed' },
+    tags: [],
     panels: [],
     settings: { seamToleranceCm: 1, pickUp: { stitches: 3, rows: 4 } },
     createdAt: now,

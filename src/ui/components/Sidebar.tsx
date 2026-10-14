@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { DEFAULT_REGION_GAP } from '../../engine/fitChecks';
 import { FitSettings } from './FitSettings';
+import { GarmentSettings } from './GarmentSettings';
 import { convertGauge, type GaugeBasis } from '../../engine/gauge';
 import { newId, type Id, type Project } from '../../engine/model';
 import { ensureEstimates } from '../../engine/seed';
@@ -258,6 +259,7 @@ function ProjectSettings({ project, update }: Props) {
     });
   return (
     <div className="props">
+      <GarmentSettings project={project} update={update} />
       <h4>Gauge</h4>
       <div className="row3">
         <div className="field">

@@ -481,13 +481,13 @@ shipped table has most of them; the first group is only seeded for older tables.
 per-measurement value that falls back to the global one. Expressions decide how it is split, e.g. a back panel
 using `upper_chest/2 + ease/2` takes half.
 
-## Project JSON (schema version 2)
+## Project JSON (schema version 3)
 
 Saved files are `*.knitbit.json`. All lengths are in cm, whatever the display units. Top level:
 
 ```jsonc
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "id": "project_…", "name": "My top",
   "units": "metric" | "imperial",              // display only
   "gauge": { "stitches": 22, "rows": 30, "basis": "10cm" | "4in" },
@@ -510,12 +510,16 @@ Saved files are `*.knitbit.json`. All lengths are in cm, whatever the display un
   "fit": { "cup": "cd",                        // which bust column `bust` follows: ab | cd | ef | gh | custom (bust_custom)
            "hem": "high_hip",                  // optional: high_hip | hip_seat_straight | hip_seat_curvy
            "broadBack": false },               // optional
+  "garment": { "construction": "panels" | "contiguous",   // contiguous = top-down contiguous yoke (generator)
+               "opening": "closed" | "cardigan" },
+  "tags": ["contiguous"],                      // free-form; "contiguous" is added/removed with that construction
   "panels": [Panel],
   "joins": [Join],                             // optional
   "symbols": [{ "id": "custom_…", "label": "Twisted decrease", "abbr": "tw",
                 "color": "#f2d17a", "change": -1 }],   // optional: your own chart symbols
   "settings": { "seamToleranceCm": 1, "pickUp": { "stitches": 3, "rows": 4 },
-                "regionSizing": false, "regionGapLimit": 2, "hemCheck": false },   // last three optional
+                "regionSizing": false, "regionGapLimit": 2, "hemCheck": false,   // these three optional
+                "exportCredit": true },        // optional: credit line in export footers (absent = on)
   "createdAt": "ISO date", "updatedAt": "ISO date"
 }
 ```
@@ -581,7 +585,7 @@ A **Panel**:
 - `{ "kind": "straight" }`
 
 New optional fields don't change the schema version; incompatible changes bump `schemaVersion` and add a migration
-(schema 2 renamed measurements for the Ysolda table and added `fit`).
+(schema 2 renamed measurements for the Ysolda table and added `fit`; schema 3 added `garment` and `tags`).
 
 ### Loading and migrations
 
@@ -619,6 +623,12 @@ file or restores an old auto-save.
   Old tables imported or seeded with a single `bust` column go through the same mapping.
 
 The tests in `src/engine/legacy.test.ts` load `src/engine/fixtures/project_v1.json`, a real schema-1 project.
+
+**Schema 2 → 3** (garment options, `src/engine/garment.ts`): adds `garment` = Panels + Closed / pullover (how every
+older project was built) and an empty `tags` list, and reports both. Nothing else changes: panels, joins,
+measurements and settings load as they were. The export credit setting is absent, which means on. Tests in
+`src/engine/garment.test.ts` load `src/engine/fixtures/project_v2.json` (a top-down top + sleeve at schema 2) and the
+schema-1 fixture, which goes through both migrations.
 
 ### Auto-save
 

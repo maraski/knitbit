@@ -1,0 +1,2028 @@
+{
+  "schemaVersion": 2,
+  "id": "project_v2fixture",
+  "name": "Schema 2 fixture",
+  "units": "metric",
+  "gauge": {
+    "stitches": 22,
+    "rows": 30,
+    "basis": "10cm"
+  },
+  "sizes": [
+    {
+      "id": "size_mv7yt12yvtodm3",
+      "name": "4XS",
+      "estimated": true
+    },
+    {
+      "id": "size_mv7yt12ymzb3r4",
+      "name": "3XS"
+    },
+    {
+      "id": "size_mv7yt12ytbg535",
+      "name": "2XS"
+    },
+    {
+      "id": "size_mv7yt12y4kue06",
+      "name": "XS"
+    },
+    {
+      "id": "size_mv7yt12yuwo2u7",
+      "name": "S"
+    },
+    {
+      "id": "size_mv7yt12yet41c8",
+      "name": "M"
+    },
+    {
+      "id": "size_mv7yt12y9hp909",
+      "name": "L"
+    },
+    {
+      "id": "size_mv7yt12yhqr9ca",
+      "name": "1X"
+    },
+    {
+      "id": "size_mv7yt12yi8grib",
+      "name": "2X"
+    },
+    {
+      "id": "size_mv7yt12yqi8v3c",
+      "name": "3X"
+    },
+    {
+      "id": "size_mv7yt12yd4yb7d",
+      "name": "4X"
+    }
+  ],
+  "baseSizeId": "size_mv7yt12yet41c8",
+  "measurements": [
+    {
+      "name": "upper_chest",
+      "label": "Upper chest",
+      "kind": "circumference",
+      "rule": {
+        "type": "none"
+      },
+      "table": {
+        "size_mv7yt12yvtodm3": 63.5,
+        "size_mv7yt12ymzb3r4": 73.5,
+        "size_mv7yt12ytbg535": 84,
+        "size_mv7yt12y4kue06": 94,
+        "size_mv7yt12yuwo2u7": 104,
+        "size_mv7yt12yet41c8": 114.5,
+        "size_mv7yt12y9hp909": 124.5,
+        "size_mv7yt12yhqr9ca": 134.5,
+        "size_mv7yt12yi8grib": 144.75,
+        "size_mv7yt12yqi8v3c": 155,
+        "size_mv7yt12yd4yb7d": 165
+      },
+      "manual": {}
+    },
+    {
+      "name": "bust_ab_cup",
+      "label": "Bust (A/B cup)",
+      "kind": "circumference",
+      "rule": {
+        "type": "none"
+      },
+      "table": {
+        "size_mv7yt12yvtodm3": 68.5,
+        "size_mv7yt12ymzb3r4": 78.75,
+        "size_mv7yt12ytbg535": 89,
+        "size_mv7yt12y4kue06": 99,
+        "size_mv7yt12yuwo2u7": 109.25,
+        "size_mv7yt12yet41c8": 119.5,
+        "size_mv7yt12y9hp909": 129.5,
+        "size_mv7yt12yhqr9ca": 139.5,
+        "size_mv7yt12yi8grib": 150,
+        "size_mv7yt12yqi8v3c": 160,
+        "size_mv7yt12yd4yb7d": 170
+      },
+      "manual": {}
+    },
+    {
+      "name": "bust_cd_cup",
+      "label": "Bust (C/D cup)",
+      "kind": "circumference",
+      "rule": {
+        "type": "none"
+      },
+      "table": {
+        "size_mv7yt12yvtodm3": 71,
+        "size_mv7yt12ymzb3r4": 81.25,
+        "size_mv7yt12ytbg535": 91.5,
+        "size_mv7yt12y4kue06": 101.5,
+        "size_mv7yt12yuwo2u7": 111.75,
+        "size_mv7yt12yet41c8": 122,
+        "size_mv7yt12y9hp909": 132,
+        "size_mv7yt12yhqr9ca": 142.25,
+        "size_mv7yt12yi8grib": 152.5,
+        "size_mv7yt12yqi8v3c": 162.5,
+        "size_mv7yt12yd4yb7d": 172.75
+      },
+      "manual": {}
+    },
+    {
+      "name": "bust_ef_cup",
+      "label": "Bust (E/F cup)",
+      "kind": "circumference",
+      "rule": {
+        "type": "none"
+      },
+      "table": {
+        "size_mv7yt12yvtodm3": 73.25,
+        "size_mv7yt12ymzb3r4": 84,
+        "size_mv7yt12ytbg535": 94,
+        "size_mv7yt12y4kue06": 104,
+        "size_mv7yt12yuwo2u7": 114.5,
+        "size_mv7yt12yet41c8": 124.5,
+        "size_mv7yt12y9hp909": 134.5,
+        "size_mv7yt12yhqr9ca": 144.75,
+        "size_mv7yt12yi8grib": 155,
+        "size_mv7yt12yqi8v3c": 165,
+        "size_mv7yt12yd4yb7d": 175.25
+      },
+      "manual": {}
+    },
+    {
+      "name": "bust_gh_cup",
+      "label": "Bust (G/H cup)",
+      "kind": "circumference",
+      "rule": {
+        "type": "none"
+      },
+      "table": {
+        "size_mv7yt12yvtodm3": 75.75,
+        "size_mv7yt12ymzb3r4": 86.5,
+        "size_mv7yt12ytbg535": 96.5,
+        "size_mv7yt12y4kue06": 106.5,
+        "size_mv7yt12yuwo2u7": 117,
+        "size_mv7yt12yet41c8": 127,
+        "size_mv7yt12y9hp909": 137,
+        "size_mv7yt12yhqr9ca": 147.5,
+        "size_mv7yt12yi8grib": 157.5,
+        "size_mv7yt12yqi8v3c": 167.5,
+        "size_mv7yt12yd4yb7d": 178
+      },
+      "manual": {}
+    },
+    {
+      "name": "hps_to_apex",
+      "label": "HPS to apex",
+      "kind": "length",
+      "rule": {
+        "type": "none"
+      },
+      "table": {
+        "size_mv7yt12yvtodm3": 22.75,
+        "size_mv7yt12ymzb3r4": 25.25,
+        "size_mv7yt12ytbg535": 26.25,
+        "size_mv7yt12y4kue06": 27.75,
+        "size_mv7yt12yuwo2u7": 29.5,
+        "size_mv7yt12yet41c8": 31.5,
+        "size_mv7yt12y9hp909": 33.25,
+        "size_mv7yt12yhqr9ca": 35.25,
+        "size_mv7yt12yi8grib": 37.25,
+        "size_mv7yt12yqi8v3c": 39,
+        "size_mv7yt12yd4yb7d": 41
+      },
+      "manual": {}
+    },
+    {
+      "name": "waist",
+      "label": "Waist",
+      "kind": "circumference",
+      "rule": {
+        "type": "none"
+      },
+      "table": {
+        "size_mv7yt12yvtodm3": 58.5,
+        "size_mv7yt12ymzb3r4": 68.5,
+        "size_mv7yt12ytbg535": 78.75,
+        "size_mv7yt12y4kue06": 89,
+        "size_mv7yt12yuwo2u7": 99,
+        "size_mv7yt12yet41c8": 109.25,
+        "size_mv7yt12y9hp909": 119.5,
+        "size_mv7yt12yhqr9ca": 129.5,
+        "size_mv7yt12yi8grib": 139.5,
+        "size_mv7yt12yqi8v3c": 150,
+        "size_mv7yt12yd4yb7d": 160
+      },
+      "manual": {}
+    },
+    {
+      "name": "high_hip",
+      "label": "High hip",
+      "kind": "circumference",
+      "rule": {
+        "type": "none"
+      },
+      "table": {
+        "size_mv7yt12yvtodm3": 70,
+        "size_mv7yt12ymzb3r4": 80,
+        "size_mv7yt12ytbg535": 90,
+        "size_mv7yt12y4kue06": 100.5,
+        "size_mv7yt12yuwo2u7": 110.5,
+        "size_mv7yt12yet41c8": 120.5,
+        "size_mv7yt12y9hp909": 131,
+        "size_mv7yt12yhqr9ca": 141,
+        "size_mv7yt12yi8grib": 151,
+        "size_mv7yt12yqi8v3c": 161.5,
+        "size_mv7yt12yd4yb7d": 171.5
+      },
+      "manual": {}
+    },
+    {
+      "name": "hip_seat_straight",
+      "label": "Hip / seat (straight)",
+      "kind": "circumference",
+      "rule": {
+        "type": "none"
+      },
+      "table": {
+        "size_mv7yt12yvtodm3": 73.25,
+        "size_mv7yt12ymzb3r4": 84,
+        "size_mv7yt12ytbg535": 94,
+        "size_mv7yt12y4kue06": 104,
+        "size_mv7yt12yuwo2u7": 114.5,
+        "size_mv7yt12yet41c8": 124.5,
+        "size_mv7yt12y9hp909": 134.5,
+        "size_mv7yt12yhqr9ca": 144.75,
+        "size_mv7yt12yi8grib": 155,
+        "size_mv7yt12yqi8v3c": 165,
+        "size_mv7yt12yd4yb7d": 175.25
+      },
+      "manual": {}
+    },
+    {
+      "name": "hip_seat_curvy",
+      "label": "Hip / seat (curvy)",
+      "kind": "circumference",
+      "rule": {
+        "type": "none"
+      },
+      "table": {
+        "size_mv7yt12yvtodm3": 79,
+        "size_mv7yt12ymzb3r4": 89,
+        "size_mv7yt12ytbg535": 99,
+        "size_mv7yt12y4kue06": 109.25,
+        "size_mv7yt12yuwo2u7": 119.5,
+        "size_mv7yt12yet41c8": 129.5,
+        "size_mv7yt12y9hp909": 139.5,
+        "size_mv7yt12yhqr9ca": 150,
+        "size_mv7yt12yi8grib": 160,
+        "size_mv7yt12yqi8v3c": 170,
+        "size_mv7yt12yd4yb7d": 180.5
+      },
+      "manual": {}
+    },
+    {
+      "name": "neck_base",
+      "label": "Neck base",
+      "kind": "circumference",
+      "rule": {
+        "type": "none"
+      },
+      "table": {
+        "size_mv7yt12yvtodm3": 33,
+        "size_mv7yt12ymzb3r4": 34.75,
+        "size_mv7yt12ytbg535": 35.75,
+        "size_mv7yt12y4kue06": 37.75,
+        "size_mv7yt12yuwo2u7": 39,
+        "size_mv7yt12yet41c8": 41,
+        "size_mv7yt12y9hp909": 42.5,
+        "size_mv7yt12yhqr9ca": 45,
+        "size_mv7yt12yi8grib": 47.75,
+        "size_mv7yt12yqi8v3c": 50.25,
+        "size_mv7yt12yd4yb7d": 52.75
+      },
+      "manual": {}
+    },
+    {
+      "name": "back_neck_width",
+      "label": "Back neck width",
+      "kind": "length",
+      "rule": {
+        "type": "none"
+      },
+      "table": {
+        "size_mv7yt12yvtodm3": 11.75,
+        "size_mv7yt12ymzb3r4": 12.5,
+        "size_mv7yt12ytbg535": 13.5,
+        "size_mv7yt12y4kue06": 14,
+        "size_mv7yt12yuwo2u7": 14.5,
+        "size_mv7yt12yet41c8": 15,
+        "size_mv7yt12y9hp909": 16,
+        "size_mv7yt12yhqr9ca": 16.5,
+        "size_mv7yt12yi8grib": 17,
+        "size_mv7yt12yqi8v3c": 18,
+        "size_mv7yt12yd4yb7d": 18.5
+      },
+      "manual": {}
+    },
+    {
+      "name": "back_shoulder_width",
+      "label": "Back shoulder width",
+      "kind": "length",
+      "rule": {
+        "type": "none"
+      },
+      "table": {
+        "size_mv7yt12yvtodm3": 35.5,
+        "size_mv7yt12ymzb3r4": 37.25,
+        "size_mv7yt12ytbg535": 38.25,
+        "size_mv7yt12y4kue06": 40,
+        "size_mv7yt12yuwo2u7": 41.75,
+        "size_mv7yt12yet41c8": 43.25,
+        "size_mv7yt12y9hp909": 44.75,
+        "size_mv7yt12yhqr9ca": 46.75,
+        "size_mv7yt12yi8grib": 48.25,
+        "size_mv7yt12yqi8v3c": 49.75,
+        "size_mv7yt12yd4yb7d": 51.5
+      },
+      "manual": {}
+    },
+    {
+      "name": "back_shoulder_width_broad",
+      "label": "Back shoulder width (broad)",
+      "kind": "length",
+      "rule": {
+        "type": "none"
+      },
+      "table": {
+        "size_mv7yt12yvtodm3": 39.75,
+        "size_mv7yt12ymzb3r4": 41,
+        "size_mv7yt12ytbg535": 42.25,
+        "size_mv7yt12y4kue06": 43.75,
+        "size_mv7yt12yuwo2u7": 45.25,
+        "size_mv7yt12yet41c8": 47,
+        "size_mv7yt12y9hp909": 48.75,
+        "size_mv7yt12yhqr9ca": 50.5,
+        "size_mv7yt12yi8grib": 52,
+        "size_mv7yt12yqi8v3c": 53.75,
+        "size_mv7yt12yd4yb7d": 55.25
+      },
+      "manual": {}
+    },
+    {
+      "name": "cross_back",
+      "label": "Cross back",
+      "kind": "length",
+      "rule": {
+        "type": "none"
+      },
+      "table": {
+        "size_mv7yt12yvtodm3": 32.75,
+        "size_mv7yt12ymzb3r4": 34,
+        "size_mv7yt12ytbg535": 35.25,
+        "size_mv7yt12y4kue06": 36.75,
+        "size_mv7yt12yuwo2u7": 38.25,
+        "size_mv7yt12yet41c8": 40,
+        "size_mv7yt12y9hp909": 41.75,
+        "size_mv7yt12yhqr9ca": 43.5,
+        "size_mv7yt12yi8grib": 45,
+        "size_mv7yt12yqi8v3c": 46.75,
+        "size_mv7yt12yd4yb7d": 48.25
+      },
+      "manual": {}
+    },
+    {
+      "name": "cross_back_broad",
+      "label": "Cross back (broad)",
+      "kind": "length",
+      "rule": {
+        "type": "none"
+      },
+      "table": {
+        "size_mv7yt12yvtodm3": 36.75,
+        "size_mv7yt12ymzb3r4": 37.75,
+        "size_mv7yt12ytbg535": 39,
+        "size_mv7yt12y4kue06": 40.75,
+        "size_mv7yt12yuwo2u7": 42.25,
+        "size_mv7yt12yet41c8": 43.75,
+        "size_mv7yt12y9hp909": 45.25,
+        "size_mv7yt12yhqr9ca": 47.25,
+        "size_mv7yt12yi8grib": 49,
+        "size_mv7yt12yqi8v3c": 50.5,
+        "size_mv7yt12yd4yb7d": 52
+      },
+      "manual": {}
+    },
+    {
+      "name": "cross_front",
+      "label": "Cross front",
+      "kind": "length",
+      "rule": {
+        "type": "none"
+      },
+      "table": {
+        "size_mv7yt12yvtodm3": 30.5,
+        "size_mv7yt12ymzb3r4": 32.25,
+        "size_mv7yt12ytbg535": 33.25,
+        "size_mv7yt12y4kue06": 34.75,
+        "size_mv7yt12yuwo2u7": 36.5,
+        "size_mv7yt12yet41c8": 37.75,
+        "size_mv7yt12y9hp909": 39.75,
+        "size_mv7yt12yhqr9ca": 41.25,
+        "size_mv7yt12yi8grib": 42.75,
+        "size_mv7yt12yqi8v3c": 44.75,
+        "size_mv7yt12yd4yb7d": 46
+      },
+      "manual": {}
+    },
+    {
+      "name": "shoulder_girth",
+      "label": "Shoulder girth",
+      "kind": "circumference",
+      "rule": {
+        "type": "none"
+      },
+      "table": {
+        "size_mv7yt12yvtodm3": 90.25,
+        "size_mv7yt12ymzb3r4": 97,
+        "size_mv7yt12ytbg535": 103.25,
+        "size_mv7yt12y4kue06": 109.5,
+        "size_mv7yt12yuwo2u7": 115.75,
+        "size_mv7yt12yet41c8": 120.75,
+        "size_mv7yt12y9hp909": 125.75,
+        "size_mv7yt12yhqr9ca": 130.75,
+        "size_mv7yt12yi8grib": 135.75,
+        "size_mv7yt12yqi8v3c": 140.75,
+        "size_mv7yt12yd4yb7d": 146.25
+      },
+      "manual": {}
+    },
+    {
+      "name": "back_waist_length",
+      "label": "Back waist length",
+      "kind": "length",
+      "rule": {
+        "type": "none"
+      },
+      "table": {
+        "size_mv7yt12yvtodm3": 39.75,
+        "size_mv7yt12ymzb3r4": 40.5,
+        "size_mv7yt12ytbg535": 40.5,
+        "size_mv7yt12y4kue06": 41.5,
+        "size_mv7yt12yuwo2u7": 41.5,
+        "size_mv7yt12yet41c8": 42,
+        "size_mv7yt12y9hp909": 42,
+        "size_mv7yt12yhqr9ca": 42.5,
+        "size_mv7yt12yi8grib": 42.5,
+        "size_mv7yt12yqi8v3c": 43,
+        "size_mv7yt12yd4yb7d": 43
+      },
+      "manual": {}
+    },
+    {
+      "name": "armhole_depth",
+      "label": "Armhole depth",
+      "kind": "length",
+      "rule": {
+        "type": "none"
+      },
+      "table": {
+        "size_mv7yt12yvtodm3": 16.5,
+        "size_mv7yt12ymzb3r4": 16.75,
+        "size_mv7yt12ytbg535": 18.25,
+        "size_mv7yt12y4kue06": 18.75,
+        "size_mv7yt12yuwo2u7": 20,
+        "size_mv7yt12yet41c8": 20.75,
+        "size_mv7yt12y9hp909": 21.75,
+        "size_mv7yt12yhqr9ca": 22.5,
+        "size_mv7yt12yi8grib": 23.75,
+        "size_mv7yt12yqi8v3c": 24.5,
+        "size_mv7yt12yd4yb7d": 25.75
+      },
+      "manual": {}
+    },
+    {
+      "name": "shoulder_drop",
+      "label": "Shoulder drop",
+      "kind": "length",
+      "rule": {
+        "type": "none"
+      },
+      "table": {
+        "size_mv7yt12yvtodm3": 3.5,
+        "size_mv7yt12ymzb3r4": 4.25,
+        "size_mv7yt12ytbg535": 4.25,
+        "size_mv7yt12y4kue06": 4.375,
+        "size_mv7yt12yuwo2u7": 4.5,
+        "size_mv7yt12yet41c8": 4.5,
+        "size_mv7yt12y9hp909": 4.5,
+        "size_mv7yt12yhqr9ca": 4.5,
+        "size_mv7yt12yi8grib": 4.5,
+        "size_mv7yt12yqi8v3c": 4.75,
+        "size_mv7yt12yd4yb7d": 4.75
+      },
+      "manual": {}
+    },
+    {
+      "name": "back_neck_drop",
+      "label": "Back neck drop",
+      "kind": "length",
+      "rule": {
+        "type": "none"
+      },
+      "table": {
+        "size_mv7yt12yvtodm3": 2.125,
+        "size_mv7yt12ymzb3r4": 2.5,
+        "size_mv7yt12ytbg535": 2.5,
+        "size_mv7yt12y4kue06": 2.5,
+        "size_mv7yt12yuwo2u7": 2.5,
+        "size_mv7yt12yet41c8": 2.75,
+        "size_mv7yt12y9hp909": 2.75,
+        "size_mv7yt12yhqr9ca": 3,
+        "size_mv7yt12yi8grib": 3.25,
+        "size_mv7yt12yqi8v3c": 3.25,
+        "size_mv7yt12yd4yb7d": 3.5
+      },
+      "manual": {}
+    },
+    {
+      "name": "front_neck_drop",
+      "label": "Front neck drop",
+      "kind": "length",
+      "rule": {
+        "type": "none"
+      },
+      "table": {
+        "size_mv7yt12yvtodm3": 6.25,
+        "size_mv7yt12ymzb3r4": 7,
+        "size_mv7yt12ytbg535": 7,
+        "size_mv7yt12y4kue06": 7.5,
+        "size_mv7yt12yuwo2u7": 7.5,
+        "size_mv7yt12yet41c8": 8.5,
+        "size_mv7yt12y9hp909": 8.5,
+        "size_mv7yt12yhqr9ca": 9,
+        "size_mv7yt12yi8grib": 9,
+        "size_mv7yt12yqi8v3c": 9.5,
+        "size_mv7yt12yd4yb7d": 9.5
+      },
+      "manual": {}
+    },
+    {
+      "name": "waist_to_high_hip",
+      "label": "Waist to high hip",
+      "kind": "length",
+      "rule": {
+        "type": "none"
+      },
+      "table": {
+        "size_mv7yt12yvtodm3": 11.5,
+        "size_mv7yt12ymzb3r4": 11.5,
+        "size_mv7yt12ytbg535": 11.5,
+        "size_mv7yt12y4kue06": 11.5,
+        "size_mv7yt12yuwo2u7": 11.5,
+        "size_mv7yt12yet41c8": 11.5,
+        "size_mv7yt12y9hp909": 11.5,
+        "size_mv7yt12yhqr9ca": 11.5,
+        "size_mv7yt12yi8grib": 11.5,
+        "size_mv7yt12yqi8v3c": 11.5,
+        "size_mv7yt12yd4yb7d": 11.5
+      },
+      "manual": {}
+    },
+    {
+      "name": "waist_to_full_hip",
+      "label": "Waist to full hip",
+      "kind": "length",
+      "rule": {
+        "type": "none"
+      },
+      "table": {
+        "size_mv7yt12yvtodm3": 21,
+        "size_mv7yt12ymzb3r4": 21,
+        "size_mv7yt12ytbg535": 21,
+        "size_mv7yt12y4kue06": 21,
+        "size_mv7yt12yuwo2u7": 21,
+        "size_mv7yt12yet41c8": 21,
+        "size_mv7yt12y9hp909": 21,
+        "size_mv7yt12yhqr9ca": 21,
+        "size_mv7yt12yi8grib": 21,
+        "size_mv7yt12yqi8v3c": 21,
+        "size_mv7yt12yd4yb7d": 21
+      },
+      "manual": {}
+    },
+    {
+      "name": "scye_circumference",
+      "label": "Scye circumference",
+      "kind": "circumference",
+      "rule": {
+        "type": "none"
+      },
+      "table": {
+        "size_mv7yt12yvtodm3": 35.25,
+        "size_mv7yt12ymzb3r4": 36.75,
+        "size_mv7yt12ytbg535": 39.25,
+        "size_mv7yt12y4kue06": 42,
+        "size_mv7yt12yuwo2u7": 44.5,
+        "size_mv7yt12yet41c8": 47,
+        "size_mv7yt12y9hp909": 49.5,
+        "size_mv7yt12yhqr9ca": 52,
+        "size_mv7yt12yi8grib": 54.5,
+        "size_mv7yt12yqi8v3c": 57.25,
+        "size_mv7yt12yd4yb7d": 59.75
+      },
+      "manual": {}
+    },
+    {
+      "name": "bicep",
+      "label": "Bicep",
+      "kind": "circumference",
+      "rule": {
+        "type": "none"
+      },
+      "table": {
+        "size_mv7yt12yvtodm3": 25,
+        "size_mv7yt12ymzb3r4": 27.25,
+        "size_mv7yt12ytbg535": 30,
+        "size_mv7yt12y4kue06": 33.5,
+        "size_mv7yt12yuwo2u7": 36.5,
+        "size_mv7yt12yet41c8": 39.5,
+        "size_mv7yt12y9hp909": 43,
+        "size_mv7yt12yhqr9ca": 46.5,
+        "size_mv7yt12yi8grib": 50.5,
+        "size_mv7yt12yqi8v3c": 54.25,
+        "size_mv7yt12yd4yb7d": 58
+      },
+      "manual": {}
+    },
+    {
+      "name": "wrist",
+      "label": "Wrist",
+      "kind": "circumference",
+      "rule": {
+        "type": "none"
+      },
+      "table": {
+        "size_mv7yt12yvtodm3": 13.75,
+        "size_mv7yt12ymzb3r4": 14.75,
+        "size_mv7yt12ytbg535": 15.5,
+        "size_mv7yt12y4kue06": 16.25,
+        "size_mv7yt12yuwo2u7": 17,
+        "size_mv7yt12yet41c8": 18.25,
+        "size_mv7yt12y9hp909": 18.75,
+        "size_mv7yt12yhqr9ca": 19.5,
+        "size_mv7yt12yi8grib": 20.5,
+        "size_mv7yt12yqi8v3c": 21.25,
+        "size_mv7yt12yd4yb7d": 21.75
+      },
+      "manual": {}
+    },
+    {
+      "name": "arm_length",
+      "label": "Arm length",
+      "kind": "length",
+      "rule": {
+        "type": "none"
+      },
+      "table": {
+        "size_mv7yt12yvtodm3": 47,
+        "size_mv7yt12ymzb3r4": 47,
+        "size_mv7yt12ytbg535": 47,
+        "size_mv7yt12y4kue06": 47,
+        "size_mv7yt12yuwo2u7": 47,
+        "size_mv7yt12yet41c8": 47,
+        "size_mv7yt12y9hp909": 47,
+        "size_mv7yt12yhqr9ca": 47,
+        "size_mv7yt12yi8grib": 47,
+        "size_mv7yt12yqi8v3c": 47,
+        "size_mv7yt12yd4yb7d": 47
+      },
+      "manual": {}
+    },
+    {
+      "name": "dart_height_ab",
+      "label": "Dart height (A/B cup)",
+      "kind": "length",
+      "rule": {
+        "type": "none"
+      },
+      "table": {
+        "size_mv7yt12yvtodm3": 2,
+        "size_mv7yt12ymzb3r4": 2,
+        "size_mv7yt12ytbg535": 2,
+        "size_mv7yt12y4kue06": 2,
+        "size_mv7yt12yuwo2u7": 2,
+        "size_mv7yt12yet41c8": 2,
+        "size_mv7yt12y9hp909": 2,
+        "size_mv7yt12yhqr9ca": 2,
+        "size_mv7yt12yi8grib": 2,
+        "size_mv7yt12yqi8v3c": 2,
+        "size_mv7yt12yd4yb7d": 2
+      },
+      "manual": {}
+    },
+    {
+      "name": "dart_height_cd",
+      "label": "Dart height (C/D cup)",
+      "kind": "length",
+      "rule": {
+        "type": "none"
+      },
+      "table": {
+        "size_mv7yt12yvtodm3": 3.75,
+        "size_mv7yt12ymzb3r4": 3.75,
+        "size_mv7yt12ytbg535": 3.75,
+        "size_mv7yt12y4kue06": 3.75,
+        "size_mv7yt12yuwo2u7": 3.75,
+        "size_mv7yt12yet41c8": 3.75,
+        "size_mv7yt12y9hp909": 3.75,
+        "size_mv7yt12yhqr9ca": 3.75,
+        "size_mv7yt12yi8grib": 3.75,
+        "size_mv7yt12yqi8v3c": 3.75,
+        "size_mv7yt12yd4yb7d": 3.75
+      },
+      "manual": {}
+    },
+    {
+      "name": "dart_height_ef",
+      "label": "Dart height (E/F cup)",
+      "kind": "length",
+      "rule": {
+        "type": "none"
+      },
+      "table": {
+        "size_mv7yt12yvtodm3": 5.5,
+        "size_mv7yt12ymzb3r4": 5.5,
+        "size_mv7yt12ytbg535": 5.5,
+        "size_mv7yt12y4kue06": 5.5,
+        "size_mv7yt12yuwo2u7": 5.5,
+        "size_mv7yt12yet41c8": 5.5,
+        "size_mv7yt12y9hp909": 5.5,
+        "size_mv7yt12yhqr9ca": 5.5,
+        "size_mv7yt12yi8grib": 5.5,
+        "size_mv7yt12yqi8v3c": 5.5,
+        "size_mv7yt12yd4yb7d": 5.5
+      },
+      "manual": {}
+    },
+    {
+      "name": "dart_height_gh",
+      "label": "Dart height (G/H cup)",
+      "kind": "length",
+      "rule": {
+        "type": "none"
+      },
+      "table": {
+        "size_mv7yt12yvtodm3": 7.5,
+        "size_mv7yt12ymzb3r4": 7.5,
+        "size_mv7yt12ytbg535": 7.5,
+        "size_mv7yt12y4kue06": 7.5,
+        "size_mv7yt12yuwo2u7": 7.5,
+        "size_mv7yt12yet41c8": 7.5,
+        "size_mv7yt12y9hp909": 7.5,
+        "size_mv7yt12yhqr9ca": 7.5,
+        "size_mv7yt12yi8grib": 7.5,
+        "size_mv7yt12yqi8v3c": 7.5,
+        "size_mv7yt12yd4yb7d": 7.5
+      },
+      "manual": {}
+    },
+    {
+      "name": "apex_to_apex_b",
+      "label": "Apex to apex (B cup)",
+      "kind": "length",
+      "rule": {
+        "type": "none"
+      },
+      "table": {
+        "size_mv7yt12yvtodm3": 13,
+        "size_mv7yt12ymzb3r4": 15,
+        "size_mv7yt12ytbg535": 17,
+        "size_mv7yt12y4kue06": 19,
+        "size_mv7yt12yuwo2u7": 21,
+        "size_mv7yt12yet41c8": 23,
+        "size_mv7yt12y9hp909": 25,
+        "size_mv7yt12yhqr9ca": 27,
+        "size_mv7yt12yi8grib": 28.75,
+        "size_mv7yt12yqi8v3c": 30.75,
+        "size_mv7yt12yd4yb7d": 33
+      },
+      "manual": {}
+    },
+    {
+      "name": "apex_to_apex_d",
+      "label": "Apex to apex (D cup)",
+      "kind": "length",
+      "rule": {
+        "type": "none"
+      },
+      "table": {
+        "size_mv7yt12yvtodm3": 14,
+        "size_mv7yt12ymzb3r4": 16,
+        "size_mv7yt12ytbg535": 18,
+        "size_mv7yt12y4kue06": 20,
+        "size_mv7yt12yuwo2u7": 21.75,
+        "size_mv7yt12yet41c8": 23.5,
+        "size_mv7yt12y9hp909": 26,
+        "size_mv7yt12yhqr9ca": 28,
+        "size_mv7yt12yi8grib": 29.5,
+        "size_mv7yt12yqi8v3c": 31.5,
+        "size_mv7yt12yd4yb7d": 33.5
+      },
+      "manual": {}
+    },
+    {
+      "name": "apex_to_apex_f",
+      "label": "Apex to apex (F cup)",
+      "kind": "length",
+      "rule": {
+        "type": "none"
+      },
+      "table": {
+        "size_mv7yt12yvtodm3": 14.5,
+        "size_mv7yt12ymzb3r4": 16.5,
+        "size_mv7yt12ytbg535": 18.75,
+        "size_mv7yt12y4kue06": 21,
+        "size_mv7yt12yuwo2u7": 22.5,
+        "size_mv7yt12yet41c8": 24.5,
+        "size_mv7yt12y9hp909": 26.5,
+        "size_mv7yt12yhqr9ca": 28.5,
+        "size_mv7yt12yi8grib": 30.5,
+        "size_mv7yt12yqi8v3c": 32.5,
+        "size_mv7yt12yd4yb7d": 34.5
+      },
+      "manual": {}
+    },
+    {
+      "name": "apex_to_apex_h",
+      "label": "Apex to apex (H cup)",
+      "kind": "length",
+      "rule": {
+        "type": "none"
+      },
+      "table": {
+        "size_mv7yt12yvtodm3": 15.5,
+        "size_mv7yt12ymzb3r4": 17.5,
+        "size_mv7yt12ytbg535": 19.5,
+        "size_mv7yt12y4kue06": 21.5,
+        "size_mv7yt12yuwo2u7": 23.5,
+        "size_mv7yt12yet41c8": 25.5,
+        "size_mv7yt12y9hp909": 27.5,
+        "size_mv7yt12yhqr9ca": 29.5,
+        "size_mv7yt12yi8grib": 31.5,
+        "size_mv7yt12yqi8v3c": 33,
+        "size_mv7yt12yd4yb7d": 35
+      },
+      "manual": {}
+    },
+    {
+      "name": "waist_to_underarm",
+      "label": "Waist to underarm",
+      "kind": "length",
+      "rule": {
+        "type": "expression",
+        "expr": "back_neck_drop + back_waist_length - shoulder_drop - armhole_depth"
+      },
+      "table": {},
+      "manual": {},
+      "note": "Vertical distance from the waist up to the underarm: HPS → waist (back_neck_drop + back_waist_length) minus HPS → underarm (shoulder_drop + armhole_depth)."
+    },
+    {
+      "name": "cap_height",
+      "label": "Sleeve cap height",
+      "kind": "length",
+      "rule": {
+        "type": "expression",
+        "expr": "round(armhole_depth * 0.65, 0.5)"
+      },
+      "table": {},
+      "manual": {},
+      "estimate": true,
+      "note": "Set-in sleeve cap height (not used by the set-in template, which fits the cap to the armhole)."
+    },
+    {
+      "name": "underarm_co",
+      "label": "Underarm cast-on",
+      "kind": "length",
+      "rule": {
+        "type": "expression",
+        "expr": "round(upper_chest * 0.05, 0.5)"
+      },
+      "table": {},
+      "manual": {},
+      "estimate": true,
+      "note": "Width cast on at each underarm to join front and back (cm, front and back together: half each). Top-down, shoulders-first tops."
+    },
+    {
+      "name": "cap_ease",
+      "label": "Sleeve cap ease",
+      "kind": "length",
+      "rule": {
+        "type": "expression",
+        "expr": "1.5"
+      },
+      "table": {},
+      "manual": {},
+      "estimate": true,
+      "note": "How much longer the cap edge is than the armhole it is sewn into (cm, both sides together)."
+    },
+    {
+      "name": "waist_shift",
+      "label": "Waist shift (back → front)",
+      "kind": "length",
+      "rule": {
+        "type": "expression",
+        "expr": "(bust - waist) / 4"
+      },
+      "table": {},
+      "manual": {},
+      "estimate": true,
+      "note": "Share of the bust-to-waist narrowing taken by the back: back waist = waist/2 + ease/2 − waist_shift, front waist = waist/2 + ease/2 + waist_shift."
+    }
+  ],
+  "ease": {
+    "global": 5,
+    "per": {}
+  },
+  "fit": {
+    "cup": "cd"
+  },
+  "panels": [
+    {
+      "id": "panel_mv7yt12zkh5auk",
+      "name": "Back",
+      "template": "back",
+      "direction": "top-down",
+      "startEdge": "bottom",
+      "inTheRound": false,
+      "selvedge": {
+        "left": 1,
+        "right": 1
+      },
+      "shapingInset": 2,
+      "rounding": {
+        "parity": "even",
+        "rowParity": "any"
+      },
+      "pattern": {
+        "name": "stockinette",
+        "multiple": 1,
+        "offset": 0
+      },
+      "sections": [],
+      "waypoints": [
+        {
+          "id": "wp_mv7yt12zwdx4yl",
+          "name": "hem",
+          "height": {
+            "expr": "0",
+            "overrides": {}
+          },
+          "symmetric": true,
+          "width": {
+            "expr": "hem_circ / 2 + ease / 2",
+            "overrides": {}
+          },
+          "left": {
+            "expr": "(hem_circ / 2 + ease / 2) / 2",
+            "overrides": {}
+          },
+          "right": {
+            "expr": "(hem_circ / 2 + ease / 2) / 2",
+            "overrides": {}
+          }
+        },
+        {
+          "id": "wp_mv7yt12zd1s6bm",
+          "name": "waist",
+          "height": {
+            "expr": "hem_drop",
+            "overrides": {}
+          },
+          "symmetric": true,
+          "width": {
+            "expr": "waist / 2 + ease / 2 - waist_shift",
+            "overrides": {}
+          },
+          "left": {
+            "expr": "(waist / 2 + ease / 2 - waist_shift) / 2",
+            "overrides": {}
+          },
+          "right": {
+            "expr": "(waist / 2 + ease / 2 - waist_shift) / 2",
+            "overrides": {}
+          }
+        },
+        {
+          "id": "wp_mv7yt12z4fsian",
+          "name": "underarm",
+          "height": {
+            "expr": "waist.height + waist_to_underarm",
+            "overrides": {}
+          },
+          "symmetric": true,
+          "width": {
+            "expr": "upper_chest / 2 + ease / 2",
+            "overrides": {}
+          },
+          "left": {
+            "expr": "(upper_chest / 2 + ease / 2) / 2",
+            "overrides": {}
+          },
+          "right": {
+            "expr": "(upper_chest / 2 + ease / 2) / 2",
+            "overrides": {}
+          }
+        },
+        {
+          "id": "wp_mv7yt12zjuw6qo",
+          "name": "armhole_bo",
+          "height": {
+            "expr": "underarm.height + 2 * row_h",
+            "overrides": {}
+          },
+          "symmetric": true,
+          "width": {
+            "expr": "underarm.width - 2 * round(underarm_co / 2 / st_w) * st_w",
+            "overrides": {}
+          },
+          "left": {
+            "expr": "(underarm.width - 2 * round(underarm_co / 2 / st_w) * st_w) / 2",
+            "overrides": {}
+          },
+          "right": {
+            "expr": "(underarm.width - 2 * round(underarm_co / 2 / st_w) * st_w) / 2",
+            "overrides": {}
+          }
+        },
+        {
+          "id": "wp_mv7yt12zos8h8p",
+          "name": "armhole_end",
+          "height": {
+            "expr": "underarm.height + armhole_depth * 0.6",
+            "overrides": {}
+          },
+          "symmetric": true,
+          "width": {
+            "expr": "cross_back_w + 1",
+            "overrides": {}
+          },
+          "left": {
+            "expr": "(cross_back_w + 1) / 2",
+            "overrides": {}
+          },
+          "right": {
+            "expr": "(cross_back_w + 1) / 2",
+            "overrides": {}
+          }
+        },
+        {
+          "id": "wp_mv7yt12zgfjabq",
+          "name": "shoulder",
+          "height": {
+            "expr": "underarm.height + armhole_depth",
+            "overrides": {}
+          },
+          "symmetric": true,
+          "width": {
+            "expr": "shoulder_w",
+            "overrides": {}
+          },
+          "left": {
+            "expr": "(shoulder_w) / 2",
+            "overrides": {}
+          },
+          "right": {
+            "expr": "(shoulder_w) / 2",
+            "overrides": {}
+          }
+        },
+        {
+          "id": "wp_mv7yt12z27okmr",
+          "name": "neck_side",
+          "height": {
+            "expr": "shoulder.height + shoulder_drop",
+            "overrides": {}
+          },
+          "symmetric": true,
+          "width": {
+            "expr": "back_neck_width",
+            "overrides": {}
+          },
+          "left": {
+            "expr": "(back_neck_width) / 2",
+            "overrides": {}
+          },
+          "right": {
+            "expr": "(back_neck_width) / 2",
+            "overrides": {}
+          }
+        }
+      ],
+      "segments": [
+        {
+          "fromWaypoint": "wp_mv7yt12zwdx4yl",
+          "left": {
+            "kind": "auto",
+            "side": "rs",
+            "align": "end",
+            "order": "spread",
+            "rhythm": {
+              "type": "auto"
+            },
+            "perSide": 1
+          },
+          "right": {
+            "kind": "auto",
+            "side": "rs",
+            "align": "end",
+            "order": "spread",
+            "rhythm": {
+              "type": "auto"
+            },
+            "perSide": 1
+          },
+          "mirror": true,
+          "manual": {}
+        },
+        {
+          "fromWaypoint": "wp_mv7yt12zd1s6bm",
+          "left": {
+            "kind": "auto",
+            "side": "rs",
+            "align": "end",
+            "order": "spread",
+            "rhythm": {
+              "type": "auto"
+            },
+            "perSide": 1
+          },
+          "right": {
+            "kind": "auto",
+            "side": "rs",
+            "align": "end",
+            "order": "spread",
+            "rhythm": {
+              "type": "auto"
+            },
+            "perSide": 1
+          },
+          "mirror": true,
+          "manual": {}
+        },
+        {
+          "fromWaypoint": "wp_mv7yt12z4fsian",
+          "left": {
+            "kind": "steps",
+            "steps": null,
+            "maxPerStep": 99,
+            "align": "start"
+          },
+          "right": {
+            "kind": "steps",
+            "steps": null,
+            "maxPerStep": 99,
+            "align": "start"
+          },
+          "mirror": true,
+          "manual": {}
+        },
+        {
+          "fromWaypoint": "wp_mv7yt12zjuw6qo",
+          "left": {
+            "kind": "auto",
+            "side": "any",
+            "align": "start",
+            "order": "shortFirst",
+            "rhythm": {
+              "type": "auto"
+            },
+            "perSide": 1
+          },
+          "right": {
+            "kind": "auto",
+            "side": "any",
+            "align": "start",
+            "order": "shortFirst",
+            "rhythm": {
+              "type": "auto"
+            },
+            "perSide": 1
+          },
+          "mirror": true,
+          "manual": {}
+        },
+        {
+          "fromWaypoint": "wp_mv7yt12zos8h8p",
+          "left": {
+            "kind": "auto",
+            "side": "rs",
+            "align": "center",
+            "order": "spread",
+            "rhythm": {
+              "type": "auto"
+            },
+            "perSide": 1
+          },
+          "right": {
+            "kind": "auto",
+            "side": "rs",
+            "align": "center",
+            "order": "spread",
+            "rhythm": {
+              "type": "auto"
+            },
+            "perSide": 1
+          },
+          "mirror": true,
+          "manual": {}
+        },
+        {
+          "fromWaypoint": "wp_mv7yt12zgfjabq",
+          "left": {
+            "kind": "shortrows",
+            "steps": null,
+            "maxPerStep": 8,
+            "style": "german",
+            "align": "end"
+          },
+          "right": {
+            "kind": "shortrows",
+            "steps": null,
+            "maxPerStep": 8,
+            "style": "german",
+            "align": "end"
+          },
+          "mirror": true,
+          "manual": {}
+        }
+      ],
+      "neckline": null,
+      "layout": {
+        "x": 0,
+        "y": 0,
+        "rotation": 0
+      },
+      "notes": "Shoulders first: cast on at the shoulders and work flat to the underarm; the front shoulders are picked up from this cast-on edge."
+    },
+    {
+      "id": "panel_mv7yt12zvfauls",
+      "name": "Front",
+      "template": "front",
+      "direction": "top-down",
+      "startEdge": "bottom",
+      "inTheRound": false,
+      "selvedge": {
+        "left": 1,
+        "right": 1
+      },
+      "shapingInset": 2,
+      "rounding": {
+        "parity": "even",
+        "rowParity": "any"
+      },
+      "pattern": {
+        "name": "stockinette",
+        "multiple": 1,
+        "offset": 0
+      },
+      "sections": [],
+      "waypoints": [
+        {
+          "id": "wp_mv7yt12zwzxkat",
+          "name": "hem",
+          "height": {
+            "expr": "0",
+            "overrides": {}
+          },
+          "symmetric": true,
+          "width": {
+            "expr": "hem_circ / 2 + ease / 2",
+            "overrides": {}
+          },
+          "left": {
+            "expr": "(hem_circ / 2 + ease / 2) / 2",
+            "overrides": {}
+          },
+          "right": {
+            "expr": "(hem_circ / 2 + ease / 2) / 2",
+            "overrides": {}
+          }
+        },
+        {
+          "id": "wp_mv7yt12zem8uau",
+          "name": "waist",
+          "height": {
+            "expr": "hem_drop",
+            "overrides": {}
+          },
+          "symmetric": true,
+          "width": {
+            "expr": "waist / 2 + ease / 2 + waist_shift",
+            "overrides": {}
+          },
+          "left": {
+            "expr": "(waist / 2 + ease / 2 + waist_shift) / 2",
+            "overrides": {}
+          },
+          "right": {
+            "expr": "(waist / 2 + ease / 2 + waist_shift) / 2",
+            "overrides": {}
+          }
+        },
+        {
+          "id": "wp_mv7yt12z5dw0yv",
+          "name": "underarm",
+          "height": {
+            "expr": "waist.height + waist_to_underarm",
+            "overrides": {}
+          },
+          "symmetric": true,
+          "width": {
+            "expr": "upper_chest / 2 + ease / 2 + bust_side_w",
+            "overrides": {}
+          },
+          "left": {
+            "expr": "(upper_chest / 2 + ease / 2 + bust_side_w) / 2",
+            "overrides": {}
+          },
+          "right": {
+            "expr": "(upper_chest / 2 + ease / 2 + bust_side_w) / 2",
+            "overrides": {}
+          }
+        },
+        {
+          "id": "wp_mv7yt12z418orw",
+          "name": "armhole_bo",
+          "height": {
+            "expr": "underarm.height + 2 * row_h",
+            "overrides": {}
+          },
+          "symmetric": true,
+          "width": {
+            "expr": "underarm.width - 2 * round(underarm_co / 2 / st_w) * st_w",
+            "overrides": {}
+          },
+          "left": {
+            "expr": "(underarm.width - 2 * round(underarm_co / 2 / st_w) * st_w) / 2",
+            "overrides": {}
+          },
+          "right": {
+            "expr": "(underarm.width - 2 * round(underarm_co / 2 / st_w) * st_w) / 2",
+            "overrides": {}
+          }
+        },
+        {
+          "id": "wp_mv7yt12zb0u35x",
+          "name": "armhole_end",
+          "height": {
+            "expr": "underarm.height + armhole_depth * 0.75",
+            "overrides": {}
+          },
+          "symmetric": true,
+          "width": {
+            "expr": "cross_front + 1",
+            "overrides": {}
+          },
+          "left": {
+            "expr": "(cross_front + 1) / 2",
+            "overrides": {}
+          },
+          "right": {
+            "expr": "(cross_front + 1) / 2",
+            "overrides": {}
+          }
+        },
+        {
+          "id": "wp_mv7yt12zgps4vy",
+          "name": "shoulder",
+          "height": {
+            "expr": "underarm.height + armhole_depth",
+            "overrides": {}
+          },
+          "symmetric": true,
+          "width": {
+            "expr": "shoulder_w",
+            "overrides": {}
+          },
+          "left": {
+            "expr": "(shoulder_w) / 2",
+            "overrides": {}
+          },
+          "right": {
+            "expr": "(shoulder_w) / 2",
+            "overrides": {}
+          }
+        },
+        {
+          "id": "wp_mv7yt12zt4om3z",
+          "name": "neck_side",
+          "height": {
+            "expr": "shoulder.height + shoulder_drop",
+            "overrides": {}
+          },
+          "symmetric": true,
+          "width": {
+            "expr": "back_neck_width",
+            "overrides": {}
+          },
+          "left": {
+            "expr": "(back_neck_width) / 2",
+            "overrides": {}
+          },
+          "right": {
+            "expr": "(back_neck_width) / 2",
+            "overrides": {}
+          }
+        }
+      ],
+      "segments": [
+        {
+          "fromWaypoint": "wp_mv7yt12zwzxkat",
+          "left": {
+            "kind": "auto",
+            "side": "rs",
+            "align": "end",
+            "order": "spread",
+            "rhythm": {
+              "type": "auto"
+            },
+            "perSide": 1
+          },
+          "right": {
+            "kind": "auto",
+            "side": "rs",
+            "align": "end",
+            "order": "spread",
+            "rhythm": {
+              "type": "auto"
+            },
+            "perSide": 1
+          },
+          "mirror": true,
+          "manual": {}
+        },
+        {
+          "fromWaypoint": "wp_mv7yt12zem8uau",
+          "left": {
+            "kind": "auto",
+            "side": "rs",
+            "align": "end",
+            "order": "spread",
+            "rhythm": {
+              "type": "auto"
+            },
+            "perSide": 1
+          },
+          "right": {
+            "kind": "auto",
+            "side": "rs",
+            "align": "end",
+            "order": "spread",
+            "rhythm": {
+              "type": "auto"
+            },
+            "perSide": 1
+          },
+          "mirror": true,
+          "manual": {}
+        },
+        {
+          "fromWaypoint": "wp_mv7yt12z5dw0yv",
+          "left": {
+            "kind": "steps",
+            "steps": null,
+            "maxPerStep": 99,
+            "align": "start"
+          },
+          "right": {
+            "kind": "steps",
+            "steps": null,
+            "maxPerStep": 99,
+            "align": "start"
+          },
+          "mirror": true,
+          "manual": {}
+        },
+        {
+          "fromWaypoint": "wp_mv7yt12z418orw",
+          "left": {
+            "kind": "auto",
+            "side": "any",
+            "align": "start",
+            "order": "shortFirst",
+            "rhythm": {
+              "type": "auto"
+            },
+            "perSide": 1
+          },
+          "right": {
+            "kind": "auto",
+            "side": "any",
+            "align": "start",
+            "order": "shortFirst",
+            "rhythm": {
+              "type": "auto"
+            },
+            "perSide": 1
+          },
+          "mirror": true,
+          "manual": {}
+        },
+        {
+          "fromWaypoint": "wp_mv7yt12zb0u35x",
+          "left": {
+            "kind": "auto",
+            "side": "rs",
+            "align": "center",
+            "order": "spread",
+            "rhythm": {
+              "type": "auto"
+            },
+            "perSide": 1
+          },
+          "right": {
+            "kind": "auto",
+            "side": "rs",
+            "align": "center",
+            "order": "spread",
+            "rhythm": {
+              "type": "auto"
+            },
+            "perSide": 1
+          },
+          "mirror": true,
+          "manual": {}
+        },
+        {
+          "fromWaypoint": "wp_mv7yt12zgps4vy",
+          "left": {
+            "kind": "shortrows",
+            "steps": null,
+            "maxPerStep": 8,
+            "style": "german",
+            "align": "end"
+          },
+          "right": {
+            "kind": "shortrows",
+            "steps": null,
+            "maxPerStep": 8,
+            "style": "german",
+            "align": "end"
+          },
+          "mirror": true,
+          "manual": {}
+        }
+      ],
+      "neckline": {
+        "shape": "round",
+        "width": {
+          "expr": "back_neck_width",
+          "overrides": {}
+        },
+        "depth": {
+          "expr": "front_neck_drop",
+          "overrides": {}
+        },
+        "centre": "bindoff",
+        "centreWidth": {
+          "expr": "back_neck_width * 0.4",
+          "overrides": {}
+        },
+        "side": "rs"
+      },
+      "layout": {
+        "x": 0,
+        "y": 0,
+        "rotation": 0
+      },
+      "notes": "Shoulders first: each shoulder is picked up from the back, worked flat with the neck increases; the centre is cast on to join the two sides, and the underarms are cast on to join the back.",
+      "bust": {
+        "method": "shortrows",
+        "width": {
+          "expr": "(bust - upper_chest) * 1.0",
+          "overrides": {}
+        },
+        "length": {
+          "expr": "dart_height",
+          "overrides": {}
+        },
+        "frontWidth": true,
+        "lengthNoWidth": {
+          "expr": "dart_height + (bust - upper_chest) * 0.25",
+          "overrides": {}
+        },
+        "apexCorrection": {
+          "expr": "hps_to_apex * 0.05",
+          "overrides": {}
+        },
+        "sideWidth": true,
+        "apexHeight": {
+          "expr": "shoulder.height + shoulder_drop - (hps_to_apex - bust_apex_corr)",
+          "overrides": {}
+        },
+        "apexOffset": {
+          "expr": "apex_to_apex / 2",
+          "overrides": {}
+        },
+        "shortRows": {
+          "style": "german",
+          "pairs": null,
+          "order": "shortening",
+          "zoneWidth": {
+            "expr": "max(6, bust_l * 2.5)",
+            "overrides": {}
+          }
+        },
+        "dart": {
+          "placement": "side",
+          "tipGap": {
+            "expr": "2.5",
+            "overrides": {}
+          }
+        },
+        "vertical": {
+          "bottom": {
+            "expr": "waist.height",
+            "overrides": {}
+          },
+          "gap": {
+            "expr": "2",
+            "overrides": {}
+          },
+          "top": {
+            "expr": "underarm.height + armhole_depth * 0.5",
+            "overrides": {}
+          }
+        },
+        "manual": {}
+      },
+      "startFrom": "pickup"
+    },
+    {
+      "id": "panel_mv7yt130mz4b412",
+      "name": "Sleeve",
+      "template": "sleeve-set-in",
+      "direction": "top-down",
+      "startEdge": "bottom",
+      "inTheRound": false,
+      "selvedge": {
+        "left": 1,
+        "right": 1
+      },
+      "shapingInset": 2,
+      "rounding": {
+        "parity": "even",
+        "rowParity": "any"
+      },
+      "pattern": {
+        "name": "stockinette",
+        "multiple": 1,
+        "offset": 0
+      },
+      "sections": [
+        {
+          "id": "sec_mv7yt130oemc519",
+          "name": "Cuff rib",
+          "fromHeight": {
+            "expr": "0",
+            "overrides": {}
+          },
+          "toHeight": {
+            "expr": "5",
+            "overrides": {}
+          },
+          "pattern": {
+            "name": "2x2 rib",
+            "multiple": 4,
+            "offset": 2
+          }
+        }
+      ],
+      "waypoints": [
+        {
+          "id": "wp_mv7yt130a0x2313",
+          "name": "cuff",
+          "height": {
+            "expr": "0",
+            "overrides": {}
+          },
+          "symmetric": true,
+          "width": {
+            "expr": "wrist + ease.wrist",
+            "overrides": {}
+          },
+          "left": {
+            "expr": "(wrist + ease.wrist) / 2",
+            "overrides": {}
+          },
+          "right": {
+            "expr": "(wrist + ease.wrist) / 2",
+            "overrides": {}
+          }
+        },
+        {
+          "id": "wp_mv7yt130224rc14",
+          "name": "underarm",
+          "height": {
+            "expr": "arm_length",
+            "overrides": {}
+          },
+          "symmetric": true,
+          "width": {
+            "expr": "bicep + ease.bicep",
+            "overrides": {}
+          },
+          "left": {
+            "expr": "(bicep + ease.bicep) / 2",
+            "overrides": {}
+          },
+          "right": {
+            "expr": "(bicep + ease.bicep) / 2",
+            "overrides": {}
+          }
+        },
+        {
+          "id": "wp_mv7yt1303oqww15",
+          "name": "cap_bo",
+          "height": {
+            "expr": "underarm.height + 2 * row_h",
+            "overrides": {}
+          },
+          "symmetric": true,
+          "width": {
+            "expr": "underarm.width - 0.4 * (upper_chest / 2 + ease / 2 - cross_back_w - 1)",
+            "overrides": {}
+          },
+          "left": {
+            "expr": "(underarm.width - 0.4 * (upper_chest / 2 + ease / 2 - cross_back_w - 1)) / 2",
+            "overrides": {}
+          },
+          "right": {
+            "expr": "(underarm.width - 0.4 * (upper_chest / 2 + ease / 2 - cross_back_w - 1)) / 2",
+            "overrides": {}
+          }
+        },
+        {
+          "id": "wp_mv7yt130umqhu16",
+          "name": "cap_low",
+          "height": {
+            "expr": "cap_bo.height + 2",
+            "overrides": {}
+          },
+          "symmetric": true,
+          "width": {
+            "expr": "cap_bo.width - 5",
+            "overrides": {}
+          },
+          "left": {
+            "expr": "(cap_bo.width - 5) / 2",
+            "overrides": {}
+          },
+          "right": {
+            "expr": "(cap_bo.width - 5) / 2",
+            "overrides": {}
+          }
+        },
+        {
+          "id": "wp_mv7yt130ufar117",
+          "name": "cap_high",
+          "height": {
+            "expr": "cap_top.height - 2",
+            "overrides": {}
+          },
+          "symmetric": true,
+          "width": {
+            "expr": "cap_top.width + 5",
+            "overrides": {}
+          },
+          "left": {
+            "expr": "(cap_top.width + 5) / 2",
+            "overrides": {}
+          },
+          "right": {
+            "expr": "(cap_top.width + 5) / 2",
+            "overrides": {}
+          }
+        },
+        {
+          "id": "wp_mv7yt1308ct6j18",
+          "name": "cap_top",
+          "height": {
+            "expr": "cap_bo.height + sqrt(((armhole_len + cap_ease) / 2 * 0.966 - (underarm.width - cap_bo.width) / 2) ^ 2 - ((cap_bo.width - cap_top.width) / 2) ^ 2)",
+            "overrides": {}
+          },
+          "symmetric": true,
+          "width": {
+            "expr": "max(8, bicep * 0.22)",
+            "overrides": {}
+          },
+          "left": {
+            "expr": "(max(8, bicep * 0.22)) / 2",
+            "overrides": {}
+          },
+          "right": {
+            "expr": "(max(8, bicep * 0.22)) / 2",
+            "overrides": {}
+          }
+        }
+      ],
+      "segments": [
+        {
+          "fromWaypoint": "wp_mv7yt130a0x2313",
+          "left": {
+            "kind": "auto",
+            "side": "rs",
+            "align": "center",
+            "order": "spread",
+            "rhythm": {
+              "type": "auto"
+            },
+            "perSide": 1
+          },
+          "right": {
+            "kind": "auto",
+            "side": "rs",
+            "align": "center",
+            "order": "spread",
+            "rhythm": {
+              "type": "auto"
+            },
+            "perSide": 1
+          },
+          "mirror": true,
+          "manual": {}
+        },
+        {
+          "fromWaypoint": "wp_mv7yt130224rc14",
+          "left": {
+            "kind": "steps",
+            "steps": null,
+            "maxPerStep": 99,
+            "align": "start"
+          },
+          "right": {
+            "kind": "steps",
+            "steps": null,
+            "maxPerStep": 99,
+            "align": "start"
+          },
+          "mirror": true,
+          "manual": {}
+        },
+        {
+          "fromWaypoint": "wp_mv7yt1303oqww15",
+          "left": {
+            "kind": "auto",
+            "side": "any",
+            "align": "start",
+            "order": "spread",
+            "rhythm": {
+              "type": "auto"
+            },
+            "perSide": 1
+          },
+          "right": {
+            "kind": "auto",
+            "side": "any",
+            "align": "start",
+            "order": "spread",
+            "rhythm": {
+              "type": "auto"
+            },
+            "perSide": 1
+          },
+          "mirror": true,
+          "manual": {}
+        },
+        {
+          "fromWaypoint": "wp_mv7yt130umqhu16",
+          "left": {
+            "kind": "auto",
+            "side": "any",
+            "align": "end",
+            "order": "spread",
+            "rhythm": {
+              "type": "auto"
+            },
+            "perSide": 1
+          },
+          "right": {
+            "kind": "auto",
+            "side": "any",
+            "align": "end",
+            "order": "spread",
+            "rhythm": {
+              "type": "auto"
+            },
+            "perSide": 1
+          },
+          "mirror": true,
+          "manual": {}
+        },
+        {
+          "fromWaypoint": "wp_mv7yt130ufar117",
+          "left": {
+            "kind": "auto",
+            "side": "any",
+            "align": "end",
+            "order": "spread",
+            "rhythm": {
+              "type": "auto"
+            },
+            "perSide": 1
+          },
+          "right": {
+            "kind": "auto",
+            "side": "any",
+            "align": "end",
+            "order": "spread",
+            "rhythm": {
+              "type": "auto"
+            },
+            "perSide": 1
+          },
+          "mirror": true,
+          "manual": {}
+        }
+      ],
+      "neckline": null,
+      "layout": {
+        "x": 0,
+        "y": 0,
+        "rotation": 0
+      },
+      "notes": ""
+    }
+  ],
+  "settings": {
+    "seamToleranceCm": 1,
+    "pickUp": {
+      "stitches": 3,
+      "rows": 4
+    }
+  },
+  "createdAt": "2026-10-14T00:00:00.000Z",
+  "updatedAt": "2026-10-14T00:00:00.000Z",
+  "joins": [
+    {
+      "id": "join_mv7yt12zo1gzw10",
+      "name": "Front shoulders picked up from the back",
+      "tag": "pickup",
+      "edges": [
+        {
+          "panelId": "panel_mv7yt12zvfauls",
+          "edge": {
+            "kind": "top"
+          }
+        }
+      ],
+      "partner": [],
+      "ratio": null,
+      "note": "Pick up along the back shoulders (cast-on edge), one stitch per cast-on stitch; work each front shoulder flat."
+    },
+    {
+      "id": "join_mv7yt12zgw6yf11",
+      "name": "Underarm cast-on",
+      "tag": "caston",
+      "edges": [
+        {
+          "panelId": "panel_mv7yt12zvfauls",
+          "edge": {
+            "kind": "side",
+            "side": "left",
+            "from": "wp_mv7yt12z5dw0yv",
+            "to": "wp_mv7yt12z418orw"
+          }
+        },
+        {
+          "panelId": "panel_mv7yt12zvfauls",
+          "edge": {
+            "kind": "side",
+            "side": "right",
+            "from": "wp_mv7yt12z5dw0yv",
+            "to": "wp_mv7yt12z418orw"
+          }
+        }
+      ],
+      "partner": [
+        {
+          "panelId": "panel_mv7yt12zkh5auk",
+          "edge": {
+            "kind": "side",
+            "side": "right",
+            "from": "wp_mv7yt12z4fsian",
+            "to": "wp_mv7yt12zjuw6qo"
+          }
+        },
+        {
+          "panelId": "panel_mv7yt12zkh5auk",
+          "edge": {
+            "kind": "side",
+            "side": "left",
+            "from": "wp_mv7yt12z4fsian",
+            "to": "wp_mv7yt12zjuw6qo"
+          }
+        }
+      ],
+      "ratio": null,
+      "note": "Cast on half the underarm stitches on the front and half on the back to join them."
+    }
+  ]
+}

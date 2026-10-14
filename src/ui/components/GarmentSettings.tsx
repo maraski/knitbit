@@ -1,0 +1,66 @@
+import { useEffect, useState } from 'react';
+import { CONSTRUCTIONS, CONTIGUOUS_CREDIT, OPENINGS, parseTags, setConstruction, setOpening } from '../../engine/garment';
+import type { Construction, FrontOpening, Project } from '../../engine/model';
+
+interface Props {
+  project: Project;
+  update: (fn: (p: Project) => Project, key?: string | null) => void;
+}
+
+/** Project → Garment: construction, front opening, tags and the export credit line. */
+export function GarmentSettings({ project, update }: Props) {
+  const g = project.garment;
+  const construction = CONSTRUCTIONS.find((c) => c.id === g.construction)!;
+  const opening = OPENINGS.find((o) => o.id === g.opening)!;
+  return (
+    <>
+      <h4>Garment</h4>
+      <div className="field">
+        <label>Construction</label>
+        <select value={g.construction} onChange={(e) => update((p) => setConstruction(p, e.target.value as Construction))}>
+          {CONSTRUCTIONS.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+        </select>
+      </div>
+      <div className="field">
+        <label>Front opening</label>
+        <select value={g.opening} onChange={(e) => update((p) => setOpening(p, e.target.value as FrontOpening))}>
+          {OPENINGS.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
+        </select>
+      </div>
+      <p className="hint">
+        {construction.description} {opening.description}
+      </p>
+      {(g.construction !== 'panels' || g.opening !== 'closed') && <p className="hint warn">Recorded for now: the generator and cardigan fronts are not built yet.</p>}
+      <TagsField project={project} update={update} />
+      <label className="check">
+        <input type="checkbox" checked={project.settings.exportCredit !== false} onChange={(e) => update((p) => ({ ...p, settings: { ...p.settings, exportCredit: e.target.checked } }))} />
+        Credit the construction method in export footers
+      </label>
+      {g.construction === 'contiguous' && <p className="hint credit">{CONTIGUOUS_CREDIT}</p>}
+    </>
+  );
+}
+
+function TagsField({ project, update }: Props) {
+  const text = project.tags.join(', ');
+  const [draft, setDraft] = useState(text);
+  useEffect(() => setDraft(text), [text]);
+  const commit = () => {
+    const tags = parseTags(draft);
+    if (tags.join(', ') !== text) update((p) => ({ ...p, tags }));
+    else setDraft(text);
+  };
+  return (
+    <div className="field">
+      <label>Tags</label>
+      <input
+        type="text"
+        value={draft}
+        placeholder="comma separated"
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+      />
+    </div>
+  );
+}
