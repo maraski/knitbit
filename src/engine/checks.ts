@@ -1,6 +1,7 @@
 // Project-wide checks: every panel in every size, collected for the check panel.
 
 import { joinReport, sameEdge, type PanelCache } from './joins';
+import { fitChecks } from './fitChecks';
 import type { Id, Project } from './model';
 import { computePanel, type Issue } from './panel';
 
@@ -18,8 +19,11 @@ export function projectChecks(project: Project): Check[] {
     const computed = project.panels.map((panel) => ({ panel, c: computePanel(project, panel, size.id) }));
     const cache: PanelCache = new Map(computed.map(({ panel, c }) => [`${panel.id}|${size.id}`, c]));
     out.push(...joinChecks(project, size.id, size.name, cache));
+    const fit = fitChecks(project, size.id, computed, cache);
+    const replaced = new Set(fit.flatMap((f) => (f.replaces ? [f.replaces] : [])));
+    for (const { replaces: _, ...f } of fit) out.push({ ...f, sizeId: size.id, sizeName: size.name });
     for (const { panel, c } of computed) {
-      for (const issue of c.issues) out.push({ panelId: panel.id, panelName: panel.name, sizeId: size.id, sizeName: size.name, issue });
+      for (const issue of c.issues) if (!replaced.has(issue)) out.push({ panelId: panel.id, panelName: panel.name, sizeId: size.id, sizeName: size.name, issue });
     }
     // Panels joined in the round below a waypoint are knitted together there: their rounds must match.
     const joined = computed.filter(({ panel, c }) => panel.joinAt && !panel.inTheRound && c.ok && c.roundRows);

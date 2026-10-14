@@ -36,7 +36,7 @@ npm run typecheck
   - `grading.ts`: size and measurement operations (rename everywhere, increment rules, base size, zigzag check).
   - `symbols.ts`: the stitch symbol set and what each does as a shaping marker.
   - `manual.ts`: hand-editing shaping markers (move, add, remove, retype, reset).
-  - `checks.ts`: project-wide checks for the check panel.
+  - `checks.ts`: project-wide checks for the check panel; `fitChecks.ts`: the checks from the sizing data (below).
   - `bust.ts`: bust shaping (formulas with numbers plugged in, short-row wedges, horizontal and vertical darts).
   - `joins.ts`: measuring tagged edges, seam comparison, pick-up suggestions. `edges.ts`: edge length along the outline.
   - `waypointDrag.ts`: proportional waypoint height/width edits, linked panels, match.
@@ -427,6 +427,20 @@ Sleeves** pickers for the current size. Each region of each size follows the siz
 row's values become **manual values** of the new size (the existing per-size overrides, so you type over them in the
 grid), its per-size panel overrides are copied, and formulas recompute. Custom sizes are marked *custom*, are left out
 of the zigzag check, count as their row when comparing sizes, and can use region sizing like any size.
+
+## Checks from the sizing data
+
+Shown in the check panel with everything else (`src/engine/fitChecks.ts`). Settings are under Project → *Checks*.
+
+| Check | When | Severity |
+|---|---|---|
+| Lower body far from the upper body | Region sizing on and a size's lower body is more than **2** table sizes (editable) from its upper body; custom sizes count as their seed row | warning |
+| More shaping than the rows allow, where regions meet | A segment between regions with different sizes can't fit its increases/decreases; restates the panel's own error with the sizes that meet there | error |
+| Hem narrower than bust + ease | **Off by default.** The Back + Front hem widths (or an in-the-round body's) add up to less than the chosen bust plus `ease`: it may not pull over the bust. With the high-hip hem and C/D it flags most sizes by 1–2.5 cm | warning |
+| Armhole shorter than the scye | Front + Back armhole edges (underarm → shoulder) are shorter than `scye_circumference` | warning |
+| Neckband shorter than the neck base | A neckband strip is shorter than `neck_base` | warning |
+
+The sample garment (Back, Front, set-in Sleeve, Neckband) has no warnings in any size with the defaults.
 
 ## Measurements
 

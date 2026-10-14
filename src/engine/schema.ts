@@ -255,7 +255,7 @@ const project = obj({
   panels: arr(panel),
   joins: optional(arr(obj({ id: str, name: str, tag: oneOf('seam', 'pickup', 'live', 'bindoff', 'caston', 'free'), edges: arr(edgeRef), partner: arr(edgeRef), ratio: nullable(obj({ stitches: num, rows: num })), note: str }))),
   symbols: optional(arr(obj({ id: str, label: str, abbr: str, color: str, change: num }))),
-  settings: obj({ seamToleranceCm: num, pickUp: obj({ stitches: num, rows: num }), regionSizing: optional(bool) }),
+  settings: obj({ seamToleranceCm: num, pickUp: obj({ stitches: num, rows: num }), regionSizing: optional(bool), regionGapLimit: optional(num), hemCheck: optional(bool) }),
   createdAt: str,
   updatedAt: str,
 });

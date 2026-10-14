@@ -337,6 +337,10 @@ export interface ProjectSettings {
   pickUp: { stitches: number; rows: number }; // default 3 sts per 4 rows
   /** Upper body, lower body and sleeves may take their measurements from different sizes (per size). Off by default. */
   regionSizing?: boolean;
+  /** Region sizing check: flag a lower body more than this many sizes from the upper body (default 2). */
+  regionGapLimit?: number;
+  /** Check that the hem is at least the bust plus ease around (off by default). */
+  hemCheck?: boolean;
 }
 
 /** A stitch symbol the knitter defines (drawn as a coloured cell with its abbreviation). */
