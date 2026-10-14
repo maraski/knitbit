@@ -48,7 +48,7 @@ const bustCup = (cup: string, letters: string) =>
     'circumference',
     'upper',
     `Fullest part of the bust, ${letters} cup`,
-    `Circumference at the fullest part of the bust, for a ${letters} cup. Cup sizes are based on modern bra cup sizing.`,
+    `Circumference at the fullest part of the bust, for cup size ${letters}. Cup sizes are based on modern bra cup sizing.`,
   );
 
 const dartHeight = (cup: string, letters: string) =>
@@ -58,7 +58,7 @@ const dartHeight = (cup: string, letters: string) =>
     'bust',
     'upper',
     `Suggested horizontal-dart height, ${letters} cup`,
-    `Suggested height to add with horizontal bust darts for a ${letters} cup, based on volume and assuming some width is also added at the front.`,
+    `Suggested height to add with horizontal bust darts for cup size ${letters}, based on volume and assuming some width is also added at the front.`,
   );
 
 const apexToApex = (letter: string) =>
@@ -68,7 +68,7 @@ const apexToApex = (letter: string) =>
     'bust',
     'upper',
     `Horizontal width between the apexes, ${letter.toUpperCase()} cup`,
-    `Horizontal width between the bust apexes, for a ${letter.toUpperCase()} cup.`,
+    `Horizontal width between the bust apexes, for cup size ${letter.toUpperCase()}.`,
   );
 
 export const DICTIONARY: MeasurementDef[] = [

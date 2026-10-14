@@ -8,6 +8,14 @@ M9), `6ee297f` (M10 + bust/princess options), `89c2318` (painted stitches, shapi
 
 ---
 
+> **Sizing migration (2026-10-13/14, branch `claude/ysolda-sizing-migration-17addf`):** the sizing data was replaced
+> by an adapted Ysolda Teague designer size chart (11 sizes, bust by cup), schema 2 with a migration of the old
+> measurement names, fit choices (cup / hem / broad back), region sizing and custom sizes, a cup-based bust helper and
+> new checks. Measurement names in this document from before then are the old ones (`full_hip` → `hip_seat_straight`,
+> `cross_chest_back` → `cross_back`, `shoulder_slope` → `shoulder_drop`, `neck_width` → `back_neck_width`, …); the
+> README is current: see its *Sizing tables*, *Region sizing*, *Bust shaping*, *Checks from the sizing data* and
+> *Loading and migrations* sections.
+
 ## 1. Project goal and architecture
 
 ### Goal

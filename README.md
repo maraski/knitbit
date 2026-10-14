@@ -4,6 +4,11 @@ A local-only visualizer for knitted panel shaping in women's tops: schematics, s
 shaping placement, bust shaping and stitch charts. It does not write pattern text and does not decide
 how panels are joined.
 
+**Sizing**: an 11-size table of body measurements (4XS–4X, cm) with bust by cup (A/B to G/H), hips straight or curvy,
+and bust dart data; a measurement dictionary with tooltips; project-wide fit choices (cup, hem level, broad back);
+optional region sizing (upper body, lower body and sleeves from different sizes) and custom one-off sizes. See
+*Sizing tables*, *Region sizing*, *Bust shaping* and *Project JSON → Loading and migrations*.
+
 **Sizing data credit:** Body measurements adapted from Ysolda Teague's designer size chart, ysolda.com/designer-size-chart.
 The adapted table (`samples/sizing_table_ysolda_cm.csv`) is for personal use and should not be redistributed as a chart.
 
@@ -28,7 +33,11 @@ npm run typecheck
   - `distribute.ts`: spreads increases/decreases over rows (auto, fixed rhythm, mixed rhythm) and across a row.
   - `model.ts`: project data types and factories.
   - `measurements.ts`: per-size measurement resolution and the expression scope.
-  - `seed.ts`: project from a sizing table, plus estimated measurements.
+  - `seed.ts`: project from a sizing table, plus estimated and derived measurements.
+  - `dictionary.ts`: the measurement dictionary (category, region, definition, tooltip for every sizing-table column).
+  - `fit.ts`: fit choices (cup, hem, broad back) and the names they derive (`bust`, `hem_circ`, `shoulder_w` …).
+  - `legacy.ts`: old measurement names and the schema 1 → 2 migration.
+  - `regions.ts`, `regionShaping.ts`: region sizing (upper / lower / sleeves per size) and the segments between regions.
   - `schema.ts`: JSON validation, migrations, load/save. `history.ts`: undo/redo. `autosave.ts`: localStorage safety net.
   - `panel.ts`: computes one panel in one size (rows, stitches, shaping events, neckline, outline, issues).
   - `templates.ts`: panel templates (back, front with 4 necklines, 3 sleeves, rectangle, neckband; bottom-up or top-down).
@@ -44,7 +53,8 @@ npm run typecheck
   - `free.ts`: painted stitches (paint, erase, repeat, mirror, copy to all sizes). `lines.ts`: shaping lines.
   - `chart.ts`: the stitch chart grid built from a computed panel (cells, short rows, repeats, legend, column folding).
 - `src/ui/`: React views.
-- `samples/`: sample sizing tables (`sizing_table_cm.csv`, `sizing_table_cm.json`, same data).
+- `samples/`: the sample sizing table (`sizing_table_ysolda_cm.csv`, and `.json` with the same data).
+- `src/engine/fixtures/`: test data: the old sample table and a schema-1 project file.
 
 ## Expression syntax
 
@@ -54,7 +64,7 @@ Waypoint dimensions and custom measurements are expressions. They evaluate to **
 |---|---|
 | Numbers (cm) | `12.5`, `.5` |
 | Unit suffixes | `2in`, `2 in`, `2"`, `15mm`, `3cm` |
-| Measurements | `upper_chest`, `cross_chest_back`, `neck_width` |
+| Measurements | `upper_chest`, `cross_back`, `back_neck_width`; fit names such as `bust`, `hem_circ`, `shoulder_w` (see Templates) |
 | Gauge | `row_h` (height of one row), `st_w` (width of one stitch), e.g. `underarm.height + 2 * row_h` |
 | Dotted names | `ease.bust` |
 | Operators | `+ - * / ^` and parentheses; `^` is right-associative; unary minus binds looser than `^` (`-2^2 = -4`) |
@@ -66,8 +76,8 @@ Examples:
 ```
 upper_chest/2 + ease/4
 (bust - upper_chest) * 0.5
-max(neck_width, 15) + 1in
-round(cross_chest_back * 0.45, 0.5)
+max(back_neck_width, 15) + 1in
+round(cross_back * 0.45, 0.5)
 ```
 
 Names must start with a letter or underscore. `cm`, `mm`, `in` and the function names are reserved.
@@ -481,24 +491,31 @@ Saved files are `*.knitbit.json`. All lengths are in cm, whatever the display un
   "id": "project_…", "name": "My top",
   "units": "metric" | "imperial",              // display only
   "gauge": { "stitches": 22, "rows": 30, "basis": "10cm" | "4in" },
-  "sizes": [{ "id": "size_…", "name": "M" }],  // in grading order
+  "sizes": [{ "id": "size_…", "name": "M",       // in grading order
+              "estimated": true,                  // optional: the table row is an estimate
+              "regions": { "lower": "size_…" },   // optional: region sizing (upper | lower | sleeves → size id)
+              "custom": { "seededFrom": "M" } }], // optional: a one-off size ("me")
   "baseSizeId": "size_…",
   "measurements": [{
-    "name": "bust", "label": "Bust", "kind": "circumference" | "length",
+    "name": "bust_cd_cup", "label": "Bust (C/D cup)", "kind": "circumference" | "length",
     "rule": { "type": "none" }
-          | { "type": "increment", "baseValue": 124.5, "defaultStep": 10, "steps": { "<sizeId>": 12 } }
-          | { "type": "expression", "expr": "cross_chest_back + 3" },
-    "table":  { "<sizeId>": 124.5 },            // imported values
+          | { "type": "increment", "baseValue": 122, "defaultStep": 10, "steps": { "<sizeId>": 12 } }
+          | { "type": "expression", "expr": "cross_back + 3" },
+    "table":  { "<sizeId>": 122 },              // imported values
     "manual": { "<sizeId>": 126 },              // overrides
-    "estimate": true, "note": "…"               // optional
+    "estimate": true, "note": "…",              // optional
+    "region": "upper" | "lower" | "sleeves"     // optional: overrides the dictionary's region
   }],
   "ease": { "global": 5, "per": { "bust": 8 } },
-  "fit": { "cup": "cd" },              // which bust column `bust` follows: ab | cd | ef | gh | custom (bust_custom)
+  "fit": { "cup": "cd",                        // which bust column `bust` follows: ab | cd | ef | gh | custom (bust_custom)
+           "hem": "high_hip",                  // optional: high_hip | hip_seat_straight | hip_seat_curvy
+           "broadBack": false },               // optional
   "panels": [Panel],
   "joins": [Join],                             // optional
   "symbols": [{ "id": "custom_…", "label": "Twisted decrease", "abbr": "tw",
                 "color": "#f2d17a", "change": -1 }],   // optional: your own chart symbols
-  "settings": { "seamToleranceCm": 1, "pickUp": { "stitches": 3, "rows": 4 } },
+  "settings": { "seamToleranceCm": 1, "pickUp": { "stitches": 3, "rows": 4 },
+                "regionSizing": false, "regionGapLimit": 2, "hemCheck": false },   // last three optional
   "createdAt": "ISO date", "updatedAt": "ISO date"
 }
 ```
@@ -531,6 +548,16 @@ A **Panel**:
   }],
   "neckline": null | { "shape": "round" | "v" | "square" | "boat", "width": Dim, "depth": Dim,
                        "centre": "bindoff" | "hold", "centreWidth": Dim, "side": "rs" | "any" },
+  "bust": null | {                              // optional; front panels (see Bust shaping)
+    "method": "shortrows" | "horizontal-dart" | "vertical-dart" | "none",
+    "width": Dim, "length": Dim, "frontWidth": true, "lengthNoWidth": Dim,   // frontWidth, lengthNoWidth optional
+    "sideWidth": true, "apexHeight": Dim, "apexOffset": Dim, "apexCorrection": Dim,   // apexCorrection optional
+    "shortRows": { "style": "german", "pairs": null, "order": "shortening", "zoneWidth": Dim,
+                   "span": "zone", "start": "centred", "edgeSts": null },              // last three optional
+    "dart": { "placement": "side" | "underarm", "tipGap": Dim },
+    "vertical": { "bottom": Dim, "gap": Dim, "top": Dim },
+    "manual": { "<sizeId>": { "left": [3, 6], "right": [3, 6], "incRows": [], "decRows": [] } }
+  },
   "princess": null | { "position": Dim, "sides": "both" | "one" },   // optional
   "freeStitches": [{ "id": "st_…", "sizeId": "size_…", "row": 40, "x": -8.5,      // optional; x = cell's left edge
                      "symbol": "k2tog", "mirror": true }],                       //   in sts from the row's centre
@@ -553,8 +580,8 @@ A **Panel**:
 - `{ "kind": "shortrows", "steps": … | null, "maxPerStep": 5, "style": "wrap-turn"|"german" }`
 - `{ "kind": "straight" }`
 
-Fields will be added as later milestones land (join tags, bust shaping, symbols). New optional fields don't
-change the schema version; incompatible changes bump `schemaVersion` and add a migration.
+New optional fields don't change the schema version; incompatible changes bump `schemaVersion` and add a migration
+(schema 2 renamed measurements for the Ysolda table and added `fit`).
 
 ### Loading and migrations
 
@@ -619,6 +646,77 @@ columns averaged; 4XS estimated). Every column is described in the measurement d
 (`src/engine/dictionary.ts`), which supplies the labels and the tooltips shown in the app. `legacy_…` columns are
 from an older table, kept for reference only and never used in calculations.
 
+#### Columns
+
+`size` (the size name) and `source` (`table` or `estimated`), then these body measurements, all in cm. *Region* is the
+body region used by region sizing. The definitions are the tooltips shown in the app.
+
+**Circumference**
+
+| Column | Region | Definition |
+|---|---|---|
+| `upper_chest` | upper | Circumference of the chest at underarm level. |
+| `bust_ab_cup` | upper | Circumference at the fullest part of the bust, for cup size A/B. Cup sizes are based on modern bra cup sizing. |
+| `bust_cd_cup` | upper | Circumference at the fullest part of the bust, for cup size C/D. Cup sizes are based on modern bra cup sizing. |
+| `bust_ef_cup` | upper | Circumference at the fullest part of the bust, for cup size E/F. Cup sizes are based on modern bra cup sizing. |
+| `bust_gh_cup` | upper | Circumference at the fullest part of the bust, for cup size G/H. Cup sizes are based on modern bra cup sizing. |
+| `waist` | lower | Circumference at the natural waist. |
+| `high_hip` | lower | Circumference at about the level of the hip bones. |
+| `hip_seat_straight` | lower | Circumference at the fullest part of the seat, for a straighter figure. |
+| `hip_seat_curvy` | lower | Circumference at the fullest part of the seat, for a curvier figure. |
+| `neck_base` | upper | Circumference around the base of the neck. Used as a check for neckbands. |
+| `shoulder_girth` | upper | Circumference measure of the shoulder area. |
+| `scye_circumference` | upper | From the underarm to the shoulder point and back to the underarm. A sanity check for set-in sleeves. |
+| `bicep` | sleeves | Circumference at the largest part of the upper arm. |
+| `wrist` | sleeves | Circumference at the wrist bone. Garments need wearing ease here so the cuff fits over the hand. |
+
+**Widths**
+
+| Column | Region | Definition |
+|---|---|---|
+| `back_neck_width` | upper | Straight across between where the neck meets the shoulder on each side. HPS = high point shoulder, where the side of the neck meets the shoulder. |
+| `back_shoulder_width` | upper | Between the shoulder points, straight across the back. |
+| `back_shoulder_width_broad` | upper | Between the shoulder points, straight across the back, for a broader back. |
+| `cross_back` | upper | Width across the back between the break points (the top of the arm/torso crease). |
+| `cross_back_broad` | upper | Width across the back between the break points (the top of the arm/torso crease), for a broader back. |
+| `cross_front` | upper | Width across the front between the break points (the top of the arm/torso crease). |
+
+**Lengths and drops**
+
+| Column | Region | Definition |
+|---|---|---|
+| `hps_to_apex` | upper | From the HPS to the bust apex. HPS = high point shoulder, where the side of the neck meets the shoulder. |
+| `back_waist_length` | upper | From the cervical bone at the back of the neck to the waist. |
+| `armhole_depth` | upper | Vertical distance from the shoulder point to the underarm. |
+| `shoulder_drop` | upper | Vertical distance from the HPS level down to the shoulder point. HPS = high point shoulder, where the side of the neck meets the shoulder. |
+| `back_neck_drop` | upper | Vertical distance from the HPS level down to the cervical bone. HPS = high point shoulder, where the side of the neck meets the shoulder. |
+| `front_neck_drop` | upper | Vertical distance from the HPS level down to the collarbone at centre front. HPS = high point shoulder, where the side of the neck meets the shoulder. |
+| `waist_to_high_hip` | lower | From the waist to the high hip, measured at the side of the body. |
+| `waist_to_full_hip` | lower | From the waist to the full hip (seat), measured at the side of the body. |
+| `arm_length` | sleeves | From the underarm to the wrist with the arm straight. |
+
+**Bust shaping**
+
+| Column | Region | Definition |
+|---|---|---|
+| `dart_height_ab` | upper | Suggested height to add with horizontal bust darts for cup size A/B, based on volume and assuming some width is also added at the front. |
+| `dart_height_cd` | upper | Suggested height to add with horizontal bust darts for cup size C/D, based on volume and assuming some width is also added at the front. |
+| `dart_height_ef` | upper | Suggested height to add with horizontal bust darts for cup size E/F, based on volume and assuming some width is also added at the front. |
+| `dart_height_gh` | upper | Suggested height to add with horizontal bust darts for cup size G/H, based on volume and assuming some width is also added at the front. |
+| `apex_to_apex_b` | upper | Horizontal width between the bust apexes, for cup size B. |
+| `apex_to_apex_d` | upper | Horizontal width between the bust apexes, for cup size D. |
+| `apex_to_apex_f` | upper | Horizontal width between the bust apexes, for cup size F. |
+| `apex_to_apex_h` | upper | Horizontal width between the bust apexes, for cup size H. |
+
+**Legacy (reference only)**
+
+| Column | Region | Definition |
+|---|---|---|
+| `legacy_bust_merged` | upper | From the old sizing table, kept for reference only. Not used in calculations. |
+| `legacy_full_hip` | lower | From the old sizing table, kept for reference only. Not used in calculations. |
+| `legacy_cross_chest_back` | upper | From the old sizing table, kept for reference only. Not used in calculations. |
+| `legacy_waist_to_armhole` | upper | From the old sizing table, kept for reference only. Not used in calculations. |
+
 **CSV** (comma, semicolon or tab separated; quoted fields allowed; a header row is required):
 
 ```csv
@@ -630,9 +728,9 @@ M,table,114.5,119.5,122,…,109.25,120.5,…
 **JSON**, in any of these shapes:
 
 ```json
-[{ "size": "M", "bust": 124.5, "waist": 114.5 }, …]
-{ "sizes": [{ "size": "M", "bust": 124.5 }, …] }
-{ "M": { "bust": 124.5, "waist": 114.5 }, "L": { … } }
+[{ "size": "M", "upper_chest": 114.5, "waist": 109.25 }, …]
+{ "sizes": [{ "size": "M", "upper_chest": 114.5 }, …] }
+{ "M": { "upper_chest": 114.5, "waist": 109.25 }, "L": { … } }
 ```
 
 ### Column mapping
