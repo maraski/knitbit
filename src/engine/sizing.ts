@@ -2,8 +2,10 @@
 // One row per size; one column per measurement; one column holds the size name.
 
 import { parseCsv, type CsvTable } from './csv';
+import { dictionaryEntry, isEstimatedSource, isLegacyColumn, SOURCE_COLUMN } from './dictionary';
 import { isValidName } from './expr';
 import { removeSize } from './grading';
+import { resolveMeasurements } from './measurements';
 import { newId, newMeasurement, type Id, type Measurement, type Project } from './model';
 import { STANDARD_COLUMNS } from './seed';
 import { CM_PER_INCH } from './units';
@@ -59,16 +61,23 @@ function isObj(v: unknown): v is Record<string, unknown> {
 export type ColumnTarget =
   | { kind: 'ignore' }
   | { kind: 'size' }
+  /** Where each row came from ("table" / "estimated"); estimated rows are marked on the size. */
+  | { kind: 'source' }
   | { kind: 'measurement'; name: string } // existing or new; new ones are created on import
   ;
 
 const SYNONYMS: Record<string, string[]> = {
   size: ['size', 'sizes', 'name', 'size_name'],
   upper_chest: ['upper_chest', 'upper_bust', 'high_bust', 'upper_torso', 'highbust', 'upperchest'],
-  bust: ['bust', 'full_bust', 'chest', 'bust_circumference'],
+  // A single bust column: kept as the custom bust (choose "custom" as the cup to use it).
+  bust_custom: ['bust', 'full_bust', 'chest', 'bust_circumference'],
   waist: ['waist', 'natural_waist', 'waist_circumference'],
-  full_hip: ['full_hip', 'hip', 'hips', 'low_hip', 'fullhip'],
-  cross_chest_back: ['cross_chest_back', 'cross_back', 'back_width', 'cross_chest', 'across_back'],
+  hip_seat_straight: ['full_hip', 'hip', 'hips', 'low_hip', 'fullhip', 'seat'],
+  high_hip: ['high_hip', 'upper_hip', 'highhip'],
+  cross_back: ['cross_chest_back', 'cross_back', 'back_width', 'across_back'],
+  cross_front: ['cross_chest', 'cross_front', 'across_front', 'front_width'],
+  back_shoulder_width: ['shoulder_width', 'shoulder_to_shoulder_width', 'across_shoulders'],
+  back_neck_width: ['neck_width'],
   waist_to_armhole: ['waist_to_armhole', 'waist_to_underarm', 'side_length', 'underarm_to_waist'],
   back_waist_length: ['back_waist_length', 'back_waist', 'nape_to_waist', 'back_length'],
   armhole_depth: ['armhole_depth', 'armhole', 'armscye_depth'],
@@ -96,16 +105,32 @@ export function nameFromHeader(header: string, taken: Set<string>): string {
   return name;
 }
 
-/** Guess what each column is: the size column, a known measurement, or a new measurement. */
+/**
+ * Guess what each column is: the size column, the row source, a known measurement, or a new measurement.
+ * Exact header names (dictionary or existing measurements) win; legacy columns are left unmapped.
+ */
 export function suggestMapping(table: CsvTable, project: Project): ColumnTarget[] {
   const existing = project.measurements;
   const taken = new Set(existing.map((m) => m.name));
   let sizeFound = false;
+  let sourceFound = false;
+  const exact = new Set<string>();
   return table.headers.map((h, i) => {
     const n = normalize(h);
     if (!sizeFound && (SYNONYMS.size.includes(n) || (i === 0 && looksLikeSizeColumn(table, i)))) {
       sizeFound = true;
       return { kind: 'size' };
+    }
+    if (!sourceFound && h.trim().toLowerCase() === SOURCE_COLUMN) {
+      sourceFound = true;
+      return { kind: 'source' };
+    }
+    if (isLegacyColumn(h.trim())) return { kind: 'ignore' };
+    const header = h.trim();
+    if (!exact.has(header) && (dictionaryEntry(header) || existing.some((m) => m.name === header))) {
+      exact.add(header);
+      taken.add(header);
+      return { kind: 'measurement', name: header };
     }
     const direct = existing.find((m) => m.name === n || normalize(m.label) === n);
     if (direct) return { kind: 'measurement', name: direct.name };
@@ -143,6 +168,7 @@ export interface ImportReport {
   sizesAdded: string[];
   sizesRemoved: string[];
   measurementsCreated: string[];
+  estimatedSizes: string[]; // rows marked "estimated" in the source column
   valuesSet: number;
   warnings: string[];
 }
@@ -151,6 +177,7 @@ export function validateMapping(table: CsvTable, mapping: ColumnTarget[]): strin
   const errors: string[] = [];
   const sizeCols = mapping.filter((m) => m.kind === 'size').length;
   if (sizeCols !== 1) errors.push(sizeCols === 0 ? 'Choose which column holds the size names.' : 'Only one column can be the size column.');
+  if (mapping.filter((m) => m.kind === 'source').length > 1) errors.push('Only one column can be the row source.');
   const names = mapping.flatMap((m) => (m.kind === 'measurement' ? [m.name] : []));
   const dup = names.find((n, i) => names.indexOf(n) !== i);
   if (dup) errors.push(`Two columns are mapped to "${dup}".`);
@@ -167,7 +194,7 @@ export function validateMapping(table: CsvTable, mapping: ColumnTarget[]): strin
 }
 
 export function applyImport(project: Project, table: CsvTable, mapping: ColumnTarget[], opts: ImportOptions): { project: Project; report: ImportReport } {
-  const report: ImportReport = { sizesMatched: [], sizesAdded: [], sizesRemoved: [], measurementsCreated: [], valuesSet: 0, warnings: [] };
+  const report: ImportReport = { sizesMatched: [], sizesAdded: [], sizesRemoved: [], measurementsCreated: [], estimatedSizes: [], valuesSet: 0, warnings: [] };
   let d = structuredClone(project);
   const sizeIdx = mapping.findIndex((m) => m.kind === 'size');
   const factor = opts.units === 'in' ? CM_PER_INCH : 1;
@@ -203,6 +230,19 @@ export function applyImport(project: Project, table: CsvTable, mapping: ColumnTa
   }
   if (!d.sizes.some((s) => s.id === d.baseSizeId)) d.baseSizeId = d.sizes[0].id;
 
+  // Row source: mark estimated rows on their size.
+  const sourceIdx = mapping.findIndex((m) => m.kind === 'source');
+  if (sourceIdx >= 0) {
+    table.rows.forEach((r, ri) => {
+      const s = d.sizes.find((x) => x.id === rowSizeIds[ri]);
+      if (!s) return;
+      if (isEstimatedSource(r[sourceIdx] ?? '')) {
+        s.estimated = true;
+        report.estimatedSizes.push(s.name);
+      } else delete s.estimated;
+    });
+  }
+
   // Measurements.
   mapping.forEach((target, col) => {
     if (target.kind !== 'measurement') return;
@@ -230,6 +270,11 @@ export function applyImport(project: Project, table: CsvTable, mapping: ColumnTa
     }
   });
 
+  // New sizes get values only from the table and from rules: say which measurements still have none.
+  for (const s of d.sizes.filter((x) => report.sizesAdded.includes(x.name))) {
+    const missing = Object.keys(resolveMeasurements(d, s.id).errors);
+    if (missing.length) report.warnings.push(`New size ${s.name} has no value for ${missing.join(', ')}; type one in the grid or give ${missing.length > 1 ? 'them' : 'it'} a grading rule.`);
+  }
   return { project: d, report };
 }
 
@@ -240,5 +285,6 @@ export function describeReport(r: ImportReport): string[] {
   if (r.sizesAdded.length) lines.push(`Added sizes: ${r.sizesAdded.join(', ')}.`);
   if (r.sizesRemoved.length) lines.push(`Removed sizes: ${r.sizesRemoved.join(', ')}.`);
   if (r.measurementsCreated.length) lines.push(`New measurements: ${r.measurementsCreated.join(', ')}.`);
+  if (r.estimatedSizes.length) lines.push(`Estimated rows (marked “est.”): ${r.estimatedSizes.join(', ')}.`);
   return [...lines, ...r.warnings];
 }

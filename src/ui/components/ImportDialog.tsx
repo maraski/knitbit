@@ -3,7 +3,8 @@ import type { CsvTable } from '../../engine/csv';
 import type { Project } from '../../engine/model';
 import { applyImport, describeReport, readSizingTable, suggestMapping, validateMapping, type ColumnTarget, type ImportOptions } from '../../engine/sizing';
 import { pickTextFile } from '../fileio';
-import sampleCsv from '../../../samples/sizing_table_cm.csv?raw';
+import sampleCsv from '../../../samples/sizing_table_ysolda_cm.csv?raw';
+import { isLegacyColumn } from '../../engine/dictionary';
 
 interface Props {
   project: Project;
@@ -37,6 +38,7 @@ export function ImportDialog({ project, onCancel, onImport }: Props) {
     const next = [...mapping];
     if (value === '__ignore') next[i] = { kind: 'ignore' };
     else if (value === '__size') next[i] = { kind: 'size' };
+    else if (value === '__source') next[i] = { kind: 'source' };
     else if (value === '__new') next[i] = { kind: 'measurement', name: source!.table.headers[i].toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'measurement' };
     else next[i] = { kind: 'measurement', name: value };
     setMapping(next);
@@ -59,6 +61,11 @@ export function ImportDialog({ project, onCancel, onImport }: Props) {
         {!source && (
           <div className="modal-body">
             <p>One row per size, one column per measurement, and a column with the size names. CSV or JSON.</p>
+            <p className="hint">
+              Columns named like the measurement dictionary (e.g. <code>upper_chest</code>, <code>bust_cd_cup</code>) are mapped automatically; a
+              <code> source</code> column marks rows that say “estimated”. <code>legacy_…</code> columns are left unmapped. The sample table is
+              adapted from Ysolda Teague’s designer size chart (personal use; see About).
+            </p>
             <div className="button-row">
               <button
                 onClick={async () => {
@@ -68,7 +75,7 @@ export function ImportDialog({ project, onCancel, onImport }: Props) {
               >
                 Choose file…
               </button>
-              <button onClick={() => load('sizing_table_cm.csv', sampleCsv)}>Use the sample table</button>
+              <button onClick={() => load('sizing_table_ysolda_cm.csv', sampleCsv)}>Use the sample table</button>
             </div>
             <div className="field">
               <label>…or paste CSV / JSON</label>
@@ -91,14 +98,15 @@ export function ImportDialog({ project, onCancel, onImport }: Props) {
                   <tr>
                     {source.table.headers.map((h, i) => (
                       <th key={i}>
-                        <div className="small">{h}</div>
+                        <div className="small">{h}{isLegacyColumn(h) && <span className="tag" title="Legacy column: reference only, not used in calculations">legacy</span>}</div>
                         <select
-                          value={mapping[i].kind === 'ignore' ? '__ignore' : mapping[i].kind === 'size' ? '__size' : (mapping[i] as { name: string }).name}
+                          value={mapping[i].kind === 'ignore' ? '__ignore' : mapping[i].kind === 'size' ? '__size' : mapping[i].kind === 'source' ? '__source' : (mapping[i] as { name: string }).name}
                           onChange={(e) => setTarget(i, e.target.value)}
                           className={mapping[i].kind === 'ignore' ? 'muted' : ''}
                         >
                           <option value="__ignore">Ignore</option>
                           <option value="__size">Size name</option>
+                          <option value="__source">Row source (table / estimated)</option>
                           {mapping[i].kind === 'measurement' && !known.includes((mapping[i] as { name: string }).name) && (
                             <option value={(mapping[i] as { name: string }).name}>New: {(mapping[i] as { name: string }).name}</option>
                           )}

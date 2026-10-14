@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { DEFAULT_REGION_GAP } from '../../engine/fitChecks';
+import { FitSettings } from './FitSettings';
 import { convertGauge, type GaugeBasis } from '../../engine/gauge';
 import { newId, type Id, type Project } from '../../engine/model';
 import { ensureEstimates } from '../../engine/seed';
@@ -176,6 +178,12 @@ function PanelList({ project, panelId, update, selectPanel }: Props) {
             </select>
           </label>
         )}
+        {def.options.includes('shoulderFlare') && (
+          <label className="check" title="After the armhole decreases reach the cross back/front, widen again to the shoulder width at the shoulder line.">
+            <input type="checkbox" checked={opts.shoulderFlare ?? true} onChange={(e) => setOpts({ ...opts, shoulderFlare: e.target.checked })} />
+            Widen to the shoulder width above the armhole
+          </label>
+        )}
         {shouldersFirst && <p className="hint">Underarms: half the cast-on on the front, half on the back (Underarm cast-on, an estimated measurement).</p>}
         {def.options.includes('joinInRound') && (
           <label className="check">
@@ -268,6 +276,38 @@ function ProjectSettings({ project, update }: Props) {
           </select>
         </div>
       </div>
+      <FitSettings project={project} update={update} />
+      <h4>Region sizing</h4>
+      <label className="check">
+        <input
+          type="checkbox"
+          checked={!!project.settings.regionSizing}
+          onChange={(e) => update((p) => ({ ...p, settings: { ...p.settings, regionSizing: e.target.checked } }))}
+        />
+        Upper body, lower body and sleeves sized separately
+      </label>
+      <p className="hint">
+        Each size gets Upper body / Lower body / Sleeves pickers (in the toolbar), all following the size itself until you change them.
+        The shaping between regions follows from the waypoints and is labelled on the schematic. Turning this off keeps your choices.
+      </p>
+      <h4>Checks</h4>
+      <div className="field">
+        <label>Flag a lower body more than … sizes from the upper body</label>
+        <input
+          className="num"
+          type="number"
+          min={0}
+          step={1}
+          value={project.settings.regionGapLimit ?? DEFAULT_REGION_GAP}
+          onChange={(e) => update((p) => ({ ...p, settings: { ...p.settings, regionGapLimit: Math.max(0, Math.round(Number(e.target.value))) } }), 'settings.regionGap')}
+        />
+        <div className="hint">Region sizing only.</div>
+      </div>
+      <label className="check">
+        <input type="checkbox" checked={!!project.settings.hemCheck} onChange={(e) => update((p) => ({ ...p, settings: { ...p.settings, hemCheck: e.target.checked } }))} />
+        Flag a hem narrower than the bust plus ease
+      </label>
+      <p className="hint">Off by default: with the high-hip hem it flags most sizes by 1–2.5 cm, and the hem is easy to change.</p>
       <h4>Ease</h4>
       <div className="field">
         <label>Total circumference ease (cm)</label>

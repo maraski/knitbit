@@ -169,7 +169,7 @@ function PanelProps({ ctx }: { ctx: PropsContext }) {
         <button
           onClick={() => {
             set((p) => {
-              p.neckline = { shape: 'round', width: dim('neck_width'), depth: dim('back_neck_depth'), centre: 'bindoff', centreWidth: dim('neck_width - 2'), side: 'rs' };
+              p.neckline = { shape: 'round', width: dim('back_neck_width'), depth: dim('back_neck_drop'), centre: 'bindoff', centreWidth: dim('back_neck_width - 2'), side: 'rs' };
             });
             ctx.select({ kind: 'neckline' });
           }}

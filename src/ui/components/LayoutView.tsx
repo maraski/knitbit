@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { SizeName, sizeText } from './EstMark';
 import { JOIN_TAGS } from '../../engine/joins';
 import { alignShift, arrangeT, bbox, isUnarranged, localOutline, place, toLocal, type AlignRef, type Placement, type Rotation } from '../../engine/layout';
 import type { Id, Project } from '../../engine/model';
@@ -287,7 +288,7 @@ export function SizeLegend({ project, sizes, current, align }: { project: Projec
         .map(({ s, i }) => (
           <span key={s.id} className={s.id === current ? 'current' : ''}>
             <i style={{ background: sizeColor(i, project.sizes.length) }} />
-            {s.name}
+            <SizeName project={project} size={s} />
           </span>
         ))}
     </div>
@@ -298,7 +299,7 @@ export function SizeLegend({ project, sizes, current, align }: { project: Projec
 function SizeGridLayout({ project, placements, compare, computed, size }: { project: Project; placements: Record<Id, Placement>; compare: Id[]; computed: (p: Id, s: Id) => ComputedPanel; size: { w: number; h: number } }) {
   const cells = compare.map((sid) => ({
     sid,
-    name: project.sizes.find((s) => s.id === sid)?.name ?? '',
+    name: (() => { const s = project.sizes.find((z) => z.id === sid); return s ? sizeText(s, project) : ''; })(),
     shapes: project.panels.flatMap((panel) => {
       const c = computed(panel.id, sid);
       const at = placements[panel.id];

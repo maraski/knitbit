@@ -6,15 +6,25 @@ import type { Gauge } from './gauge';
 import type { Parity } from './rounding';
 import type { Units } from './units';
 
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 export type Id = string;
 
 // ---------- sizes & measurements ----------
 
+export type BodyRegion = 'upper' | 'lower' | 'sleeves';
+
 export interface Size {
   id: Id;
   name: string; // e.g. "3XS", "M", "2X"
+  estimated?: boolean; // the sizing-table row is an estimate (its source column says "estimated")
+  /**
+   * Region sizing (when the project turns it on): which size each body region takes its measurements from.
+   * A missing region follows this size.
+   */
+  regions?: Partial<Record<BodyRegion, Id>>;
+  /** A one-off size (e.g. "me") with its own measurements, seeded from a table row (by size name). */
+  custom?: { seededFrom: string };
 }
 
 /** How a measurement gets values for sizes that have neither a table value nor a manual override. */
@@ -22,7 +32,7 @@ export type GradingRule =
   | { type: 'none' }
   /** Base value at the project's base size; `steps[sizeId]` = change from the previous size to that size. */
   | { type: 'increment'; baseValue: number; defaultStep: number; steps: Record<Id, number> }
-  /** Derived from other measurements, e.g. `cross_chest_back + 3`. */
+  /** Derived from other measurements, e.g. `cross_back + 3`. */
   | { type: 'expression'; expr: string };
 
 export interface Measurement {
@@ -34,10 +44,26 @@ export interface Measurement {
   manual: Record<Id, number>; // per-size manual overrides (win over everything)
   estimate?: boolean; // seeded estimate the user should check
   note?: string;
+  /** Body region for region sizing; default from the measurement dictionary, else upper body. */
+  region?: BodyRegion;
 }
 
 /** Where a resolved measurement value came from (shown as a subtle indicator). */
 export type ValueSource = 'table' | 'rule' | 'manual';
+
+/** Which bust column of the sizing table `bust` (and `apex_to_apex`, `dart_height`) follow; custom = `bust_custom`. */
+export type CupChoice = 'ab' | 'cd' | 'ef' | 'gh' | 'custom';
+
+export type HemChoice = 'high_hip' | 'hip_seat_straight' | 'hip_seat_curvy';
+
+/** Project-level choices that pick sizing-table columns for the names templates use. */
+export interface FitChoices {
+  cup: CupChoice;
+  /** Which circumference the hem follows (`hem_circ`) and the matching waist-to-hem length (`hem_drop`). Default high hip. */
+  hem?: HemChoice;
+  /** Use the broad-back columns for `shoulder_w` and `cross_back_w`. */
+  broadBack?: boolean;
+}
 
 /** Ease is total circumference ease in cm, split between panels by the expressions that use it. */
 export interface EaseSettings {
@@ -187,7 +213,15 @@ export type BustMethod = 'shortrows' | 'horizontal-dart' | 'vertical-dart' | 'no
 export interface BustShaping {
   method: BustMethod;
   width: DimExpr; // W: extra width over the bust (total)
-  length: DimExpr; // L: extra length at centre front
+  length: DimExpr; // L: extra length at centre front (when width is added at the front)
+  /**
+   * Short rows / horizontal dart: extra width is added at the front (default). Off: W = 0 and L comes from
+   * `lengthNoWidth`, which is longer because the length has to hold all the bust volume. Vertical darts always add width.
+   */
+  frontWidth?: boolean;
+  lengthNoWidth?: DimExpr;
+  /** Bust point: subtracted from hps_to_apex, which is measured over the bust and so is longer than the vertical drop. */
+  apexCorrection?: DimExpr;
   sideWidth: boolean; // short rows / horizontal dart: also add W at the side seams (bust_side_w = W)
   apexHeight: DimExpr; // bust point height, up from the garment's lower edge
   apexOffset: DimExpr; // bust point distance from centre front
@@ -200,6 +234,12 @@ export interface BustShaping {
     span?: 'zone' | 'apex-to-side';
     /** Where the short rows start: centred on the bust point's height, or right at it. */
     start?: 'centred' | 'apex';
+    /**
+     * Stitches between the side edge and the outermost turn. Null/absent = automatic (2 sts, or the selvedge + 1;
+     * bust point → side seam: the last turn one step before the edge). A number puts the outermost turn exactly there
+     * and spaces the turns evenly up to it; 0 turns right at the side seam (flat rows keep at least 1 st).
+     */
+    edgeSts?: number | null;
   };
   dart: { placement: 'side' | 'underarm'; tipGap: DimExpr };
   vertical: { bottom: DimExpr; gap: DimExpr; top: DimExpr };
@@ -207,17 +247,23 @@ export interface BustShaping {
   manual: Record<Id, { left?: number[]; right?: number[]; incRows?: number[]; decRows?: number[] }>;
 }
 
+/** Bust length when no width is added at the front: the dart height plus a quarter of the bust difference. */
+export const DEFAULT_LENGTH_NO_WIDTH = 'dart_height + (bust - upper_chest) * 0.25';
+
 export function defaultBust(): BustShaping {
   return {
     method: 'shortrows',
     width: dim('(bust - upper_chest) * 1.0'),
-    length: dim('max(0, (bust - upper_chest) - 0) * 0.5'),
+    length: dim('dart_height'),
+    frontWidth: true,
+    lengthNoWidth: dim(DEFAULT_LENGTH_NO_WIDTH),
+    apexCorrection: dim('hps_to_apex * 0.05'),
     sideWidth: true,
-    apexHeight: dim('shoulder.height + shoulder_slope - bust_point_depth'),
+    apexHeight: dim('shoulder.height + shoulder_drop - (hps_to_apex - bust_apex_corr)'),
     apexOffset: dim('apex_to_apex / 2'),
     shortRows: { style: 'german', pairs: null, order: 'shortening', zoneWidth: dim('max(6, bust_l * 2.5)') },
     dart: { placement: 'side', tipGap: dim(2.5) },
-    vertical: { bottom: dim('waist.height + 2.5'), gap: dim(2), top: dim('underarm.height + armhole_depth * 0.5') },
+    vertical: { bottom: dim('waist.height'), gap: dim(2), top: dim('underarm.height + armhole_depth * 0.5') },
     manual: {},
   };
 }
@@ -289,6 +335,12 @@ export interface Join {
 export interface ProjectSettings {
   seamToleranceCm: number;
   pickUp: { stitches: number; rows: number }; // default 3 sts per 4 rows
+  /** Upper body, lower body and sleeves may take their measurements from different sizes (per size). Off by default. */
+  regionSizing?: boolean;
+  /** Region sizing check: flag a lower body more than this many sizes from the upper body (default 2). */
+  regionGapLimit?: number;
+  /** Check that the hem is at least the bust plus ease around (off by default). */
+  hemCheck?: boolean;
 }
 
 /** A stitch symbol the knitter defines (drawn as a coloured cell with its abbreviation). */
@@ -310,6 +362,7 @@ export interface Project {
   baseSizeId: Id;
   measurements: Measurement[];
   ease: EaseSettings;
+  fit: FitChoices;
   panels: Panel[];
   joins?: Join[];
   symbols?: CustomSymbol[];
@@ -390,6 +443,7 @@ export function newProject(name = 'Untitled top'): Project {
     baseSizeId: size.id,
     measurements: [],
     ease: { global: 5, per: {} },
+    fit: { cup: 'cd' },
     panels: [],
     settings: { seamToleranceCm: 1, pickUp: { stitches: 3, rows: 4 } },
     createdAt: now,

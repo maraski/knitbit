@@ -1,4 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
+import { fitAliases, fitAliasList } from '../../engine/fit';
+import { SizeName } from './EstMark';
+import { measurementTooltip } from '../../engine/dictionary';
 import { trendFlags, validateNewName, addMeasurement } from '../../engine/grading';
 import { resolveMeasurements, type ResolvedMeasurements } from '../../engine/measurements';
 import type { Id, Measurement, Project } from '../../engine/model';
@@ -31,6 +34,11 @@ export function MeasurementsView({ project, update, selected, onSelect, currentS
       if (f.length) out[m.name] = Object.fromEntries(f.map((x) => [x.sizeId, x.message]));
     }
     return out;
+  }, [project]);
+
+  const derived = useMemo(() => {
+    const live = fitAliases(project);
+    return fitAliasList(project).filter((a) => a.name in live);
   }, [project]);
 
   const [newName, setNewName] = useState('');
@@ -76,7 +84,7 @@ export function MeasurementsView({ project, update, selected, onSelect, currentS
               <th>Rule</th>
               {project.sizes.map((s) => (
                 <th key={s.id} className={`sz${s.id === currentSizeId ? ' current' : ''}`} onClick={() => onSize(s.id)} title="Show this size">
-                  {s.name}
+                  <SizeName project={project} size={s} />
                   {s.id === project.baseSizeId && <span className="base-mark" title="Base size">●</span>}
                 </th>
               ))}
@@ -86,9 +94,9 @@ export function MeasurementsView({ project, update, selected, onSelect, currentS
             {project.measurements.map((m) => (
               <tr key={m.name} className={selected === m.name ? 'selected' : ''} onClick={() => onSelect(m.name)}>
                 <td className="sticky">
-                  <code>{m.name}</code>
+                  <code title={measurementTooltip(m)}>{m.name}</code>
                   {m.estimate && <span className="tag">est.</span>}
-                  <div className="muted small">{m.label}</div>
+                  <div className="muted small" title={measurementTooltip(m)}>{m.label}</div>
                 </td>
                 <td className="rule small muted">{ruleText(m, units)}</td>
                 {project.sizes.map((s) => {
@@ -96,7 +104,11 @@ export function MeasurementsView({ project, update, selected, onSelect, currentS
                   const err = resolved[s.id].errors[m.name];
                   const flag = flags[m.name]?.[s.id];
                   return (
-                    <td key={s.id} className={`cell${v ? ` src-${v.source}` : ''}${s.id === currentSizeId ? ' current' : ''}`} title={err ?? flag ?? (v ? `From ${v.source}` : '')}>
+                    <td
+                      key={s.id}
+                      className={`cell${v ? ` src-${v.source}` : ''}${v?.from ? ' from-other' : ''}${s.id === currentSizeId ? ' current' : ''}`}
+                      title={err ?? flag ?? (v ? `From ${v.source}${v.from ? ` of size ${project.sizes.find((z) => z.id === v.from)?.name} (region sizing; typing here sets this size's own value)` : ''}` : '')}
+                    >
                       <Cell
                         value={v ? v.value : null}
                         manual={v?.source === 'manual'}
@@ -105,6 +117,24 @@ export function MeasurementsView({ project, update, selected, onSelect, currentS
                         error={!!err}
                       />
                       {flag && <span className="flag-mark">▴</span>}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+            {derived.map((a) => (
+              <tr key={a.name} className="derived-row" title={`${a.description}: follows ${a.expr} (${a.choice}). Change it under Project → Fit.`}>
+                <td className="sticky">
+                  <code>{a.name}</code>
+                  <span className="tag tag-derived">fit</span>
+                  <div className="muted small">{a.description}</div>
+                </td>
+                <td className="rule small muted">= {a.expr}</td>
+                {project.sizes.map((s) => {
+                  const v = resolved[s.id].values[a.name];
+                  return (
+                    <td key={s.id} className={`cell derived${s.id === currentSizeId ? ' current' : ''}`}>
+                      {v ? fmtNum(roundTo(toDisplay(v.value, units), 2)) : '—'}
                     </td>
                   );
                 })}

@@ -54,7 +54,7 @@ describe('templates', () => {
     const front = computePanel(p, fromTemplate('front'), M);
     const at = (c: typeof back, n: string) => c.waypoints.find((w) => w.name === n)!;
     for (const n of ['hem', 'waist', 'underarm', 'shoulder']) expect(at(front, n).row, n).toBe(at(back, n).row);
-    expect(at(front, 'waist').widthCm - at(back, 'waist').widthCm).toBeCloseTo(5, 6); // (124.5 − 114.5)/4 × 2
+    expect(at(front, 'waist').widthCm - at(back, 'waist').widthCm).toBeCloseTo(6.375, 6); // (122 − 109.25)/4 × 2
   });
 
   it('necklines differ as expected', () => {
@@ -122,7 +122,7 @@ describe('joined panel checks', () => {
     const ok = projectChecks(p).filter((c) => /joined/i.test(c.issue.message));
     expect(ok.filter((c) => c.issue.severity === 'warning')).toEqual([]);
     expect(ok.some((c) => c.issue.severity === 'info')).toBe(true); // front has more waist shaping than the back
-    front.waypoints.find((w) => w.name === 'underarm')!.height.expr = 'hem_to_waist + waist_to_armhole + 2';
+    front.waypoints.find((w) => w.name === 'underarm')!.height.expr = 'waist.height + waist_to_underarm + 2';
     const bad = projectChecks(p).filter((c) => c.issue.severity === 'warning' && /different numbers of rounds/.test(c.issue.message));
     expect(bad.length).toBe(p.sizes.length * 2);
   });

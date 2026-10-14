@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { detectDelimiter, parseCsv } from './csv';
-import { SAMPLE_CSV } from './testFixtures';
+import { LEGACY_CSV } from './testFixtures';
 
 describe('parseCsv', () => {
   it('parses the sample sizing table', () => {
-    const t = parseCsv(SAMPLE_CSV);
+    const t = parseCsv(LEGACY_CSV);
     expect(t.headers[0]).toBe('size');
     expect(t.headers).toContain('armhole_depth');
     expect(t.rows).toHaveLength(10);

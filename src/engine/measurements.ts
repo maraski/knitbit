@@ -2,11 +2,15 @@
 // Precedence per size: manual override → table value → grading rule.
 
 import { evaluate, resolveDefinitions, scopeFrom, type Result } from './expr';
+import { customCupNames, fitAliases } from './fit';
+import { regionOf, regionSources } from './regions';
 import type { DimExpr, Id, Measurement, Project, ValueSource } from './model';
 
 export interface ResolvedValue {
   value: number;
   source: ValueSource;
+  /** Region sizing: the size the value was taken from, when it isn't the size being resolved. */
+  from?: Id;
 }
 
 export interface ResolvedMeasurements {
@@ -46,13 +50,19 @@ export function resolveMeasurements(project: Project, sizeId: Id): ResolvedMeasu
   const base: Record<string, number> = easeScope(project);
   const defs: Record<string, string> = {};
 
+  // Region sizing: each measurement may come from another size (its region's source). This size's own manual
+  // value still wins; expression rules are evaluated over the mixed values.
+  const sources = regionSources(project, sizeId);
   for (const m of project.measurements) {
+    const src = sources[regionOf(m)];
+    const from = src !== sizeId ? { from: src } : {};
     if (sizeId in m.manual) values[m.name] = { value: m.manual[sizeId], source: 'manual' };
-    else if (sizeId in m.table) values[m.name] = { value: m.table[sizeId], source: 'table' };
+    else if (src in m.manual) values[m.name] = { value: m.manual[src], source: 'manual', ...from };
+    else if (src in m.table) values[m.name] = { value: m.table[src], source: 'table', ...from };
     else if (m.rule.type === 'increment') {
-      const v = incrementValue(project, m, sizeId);
+      const v = incrementValue(project, m, src);
       if (v === undefined) errors[m.name] = 'Base size not found';
-      else values[m.name] = { value: v, source: 'rule' };
+      else values[m.name] = { value: v, source: 'rule', ...from };
     } else if (m.rule.type === 'expression') {
       defs[m.name] = m.rule.expr;
     } else {
@@ -60,12 +70,22 @@ export function resolveMeasurements(project: Project, sizeId: Id): ResolvedMeasu
     }
     if (values[m.name]) base[m.name] = values[m.name].value;
   }
+  // Names that follow the project's fit choices (e.g. `bust` = the chosen cup column).
+  const aliases = fitAliases(project);
+  Object.assign(defs, aliases);
 
   const resolved = resolveDefinitions(defs, base);
   for (const name of Object.keys(defs)) {
     if (name in resolved.errors) errors[name] = resolved.errors[name];
-    else values[name] = { value: resolved.values[name], source: 'rule' };
+    else if (name in aliases) {
+      const t = values[aliases[name]];
+      values[name] = { value: resolved.values[name], source: t?.source ?? 'rule', ...(t?.from ? { from: t.from } : {}) };
+    } else values[name] = { value: resolved.values[name], source: 'rule' };
   }
+  // Custom bust: dart height and apex width from the nearest cup, per size.
+  const plain = Object.fromEntries(Object.entries(values).map(([k, v]) => [k, v.value]));
+  const custom = customCupNames(project, plain);
+  if (custom) for (const [name, col] of Object.entries(custom.names)) values[name] = { ...values[col], source: 'rule' };
   return { values, errors };
 }
 

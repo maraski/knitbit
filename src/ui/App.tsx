@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { CascadePicker } from './components/CascadePicker';
+import { sizeText } from './components/EstMark';
 import type { Id } from '../engine/model';
 import { buildScope } from '../engine/measurements';
 import { computePanel, resolvePanelDims, type ComputedPanel } from '../engine/panel';
@@ -23,12 +25,12 @@ import { downloadText, pickTextFile, safeFilename } from './fileio';
 import { markerActions } from './markerActions';
 import { panelJoins } from '../engine/joins';
 import { PANEL_SELECTION, type Selection } from './selection';
-import { sampleProject, useProjectStore, type Notice } from './store';
+import { mergeSampleTable, migrationNotice, sampleProject, useProjectStore, type Notice } from './store';
 
 const VIEW_KEY = 'knitbit.view.v1';
 type CenterView = 'schematic' | 'chart' | 'layout' | 'measurements';
 
-function readView(): { sizeId?: Id; panelId?: Id; center?: CenterView; mode?: SizeMode; compare?: Id[]; align?: AlignRef } {
+function readView(): { sizeId?: Id; panelId?: Id; center?: CenterView; mode?: SizeMode; compare?: Id[]; align?: AlignRef; cascade?: Id[] | null } {
   try {
     return JSON.parse(localStorage.getItem(VIEW_KEY) ?? '{}');
   } catch {
@@ -49,6 +51,8 @@ export function App() {
   const wpDragStart = useRef<{ key: string; value: number } | null>(null);
   const [compareRaw, setCompare] = useState<Id[] | null>(view.compare ?? null); // null = all sizes
   const [align, setAlign] = useState<AlignRef>(view.align ?? 'hem');
+  const [cascadeRaw, setCascade] = useState<Id[] | null>(view.cascade ?? null); // sizes that follow waypoint drags; null = all
+  const cascade = cascadeRaw?.filter((id) => project.sizes.some((s) => s.id === id));
   const compare = (compareRaw ?? project.sizes.map((s) => s.id)).filter((id) => project.sizes.some((s) => s.id === id));
   const [measSel, setMeasSel] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
@@ -59,11 +63,11 @@ export function App() {
 
   useEffect(() => {
     try {
-      localStorage.setItem(VIEW_KEY, JSON.stringify({ sizeId: size?.id, panelId: panel?.id, center, mode: sizeMode, compare: compareRaw, align }));
+      localStorage.setItem(VIEW_KEY, JSON.stringify({ sizeId: size?.id, panelId: panel?.id, center, mode: sizeMode, compare: compareRaw, align, cascade: cascadeRaw }));
     } catch {
       /* ignore */
     }
-  }, [size?.id, panel?.id, center, sizeMode, compareRaw, align]);
+  }, [size?.id, panel?.id, center, sizeMode, compareRaw, align, cascadeRaw]);
 
   // One cache of computed panels per project version, shared by every view.
   const computedFor = useMemo(() => {
@@ -103,7 +107,8 @@ export function App() {
     store.replace(r.project);
     setSizeId(r.project.baseSizeId);
     selectPanel(r.project.panels[0]?.id ?? null);
-    const lines = [...(r.migratedFrom !== null ? [`Upgraded from schema ${r.migratedFrom}.`] : []), ...r.warnings];
+    if (r.migratedFrom !== null) return store.setNotice(migrationNotice(`Opened ${f.name}`, r.migratedFrom, r.migrationNotes, r.warnings));
+    const lines = r.warnings;
     store.setNotice(lines.length ? { kind: 'warning', title: `Opened ${f.name}`, lines } : { kind: 'info', title: `Opened ${f.name}`, lines: [] });
   };
   const newProject = () => {
@@ -153,7 +158,7 @@ export function App() {
             if (w.id === first.id) return;
             const h = scope[`${w.key}.height`];
             if (h === undefined) return;
-            update((p) => dragHeight(p, panel.id, w.id, size.id, h + ((k === 'arrowup' ? 1 : -1) * step) / computed.rowsPerCm, mode), key);
+            update((p) => dragHeight(p, panel.id, w.id, size.id, h + ((k === 'arrowup' ? 1 : -1) * step) / computed.rowsPerCm, mode, cascade), key);
           } else {
             const sign = k === 'arrowright' ? 1 : -1;
             const parts = w.symmetric ? (['width'] as const) : (['left', 'right'] as const);
@@ -163,7 +168,7 @@ export function App() {
                 const v = scope[`${w.key}.${part}`];
                 if (v === undefined) continue;
                 const d = (sign * step * (part === 'width' ? 2 : 1)) / computed.stitchesPerCm;
-                q = dragWidth(q, panel.id, w.id, size.id, part, Math.max(0.5, v + d), mode);
+                q = dragWidth(q, panel.id, w.id, size.id, part, Math.max(0.5, v + d), mode, cascade);
               }
               return q;
             }, key);
@@ -201,7 +206,17 @@ export function App() {
         onOpen={open}
         onSave={save}
       />
-      {store.notice && <NoticeBar notice={store.notice} onClose={() => store.setNotice(null)} />}
+      {store.notice && (
+        <NoticeBar
+          notice={store.notice}
+          onClose={() => store.setNotice(null)}
+          onAction={() => {
+            const r = mergeSampleTable(project);
+            store.update(() => r.project);
+            store.setNotice({ kind: 'info', title: 'Merged the Ysolda sizing table (undo to go back)', lines: r.summary });
+          }}
+        />
+      )}
       <div className="main">
         <Sidebar
           project={project}
@@ -247,7 +262,7 @@ export function App() {
               <>
                 <strong>{panel.name}</strong>
                 <span className="muted">
-                  · size {size?.name} · {panel.direction === 'top-down' ? 'row 1 at top' : 'row 1 at bottom'}
+                  · size {size ? sizeText(size, project) : ''} · {panel.direction === 'top-down' ? 'row 1 at top' : 'row 1 at bottom'}
                   {panel.direction === 'side-to-side' ? ' · worked side to side (chart in knitting orientation)' : ''}
                 </span>
               </>
@@ -256,11 +271,12 @@ export function App() {
               <>
                 <strong>{panel.name}</strong>
                 <span className="muted">
-                  · size {size?.name} · {panel.direction}
+                  · size {size ? sizeText(size, project) : ''} · {panel.direction}
                   {panel.direction === 'top-down' ? ' (row 1 at top)' : panel.direction === 'bottom-up' ? ' (row 1 at bottom)' : ''}
                   {panel.inTheRound ? ' · in the round' : panel.joinAt ? ' · round below ' + (panel.waypoints.find((w) => w.id === panel.joinAt)?.name ?? '?') : ''}
                 </span>
                 <span className="spacer" />
+                {sizeMode === 'single' && size && <CascadePicker project={project} currentSizeId={size.id} cascade={cascade ?? null} setCascade={setCascade} />}
                 {sizeMode === 'single' && <Legend />}
                 {sizeMode === 'single' && panel.direction !== 'side-to-side' && (
                   <button className={drawLine ? 'active' : ''} onClick={() => setDrawLine(!drawLine)} title="Draw a shaping line: click its two ends (Esc cancels)">
@@ -296,7 +312,7 @@ export function App() {
               onSelect={setSelection}
               markers={markers}
               update={update}
-              grid={sizeMode === 'grid' ? compare.map((sid) => ({ computed: computedFor(panel.id, sid), name: project.sizes.find((s) => s.id === sid)?.name ?? '' })) : undefined}
+              grid={sizeMode === 'grid' ? compare.map((sid) => ({ computed: computedFor(panel.id, sid), name: (() => { const s = project.sizes.find((z) => z.id === sid); return s ? sizeText(s, project) : ''; })() })) : undefined}
             />
           ) : center === 'measurements' ? (
             <MeasurementsView
@@ -329,11 +345,11 @@ export function App() {
                 const mode = sizeOnly ? 'size' : 'all';
                 if (ch.kind === 'height') {
                   const h0 = (scope[`${w.key}.height`] ?? w.heightCm) - w.heightCm;
-                  update((p) => dragHeight(p, panel.id, wpId, size.id, ch.h + h0, mode), key);
+                  update((p) => dragHeight(p, panel.id, wpId, size.id, ch.h + h0, mode, cascade), key);
                 } else {
                   if (wpDragStart.current?.key !== key) wpDragStart.current = { key, value: scope[`${w.key}.${ch.part}`] ?? 0 };
                   const start = wpDragStart.current.value;
-                  if (start > 0) update((p) => dragWidth(p, panel.id, wpId, size.id, ch.part, start * ch.factor, mode), key);
+                  if (start > 0) update((p) => dragWidth(p, panel.id, wpId, size.id, ch.part, start * ch.factor, mode, cascade), key);
                 }
               }}
               drawLine={drawLine && sizeMode === 'single'}
@@ -369,9 +385,9 @@ export function App() {
             <JoinProps project={project} joinId={selection.id} sizeId={size?.id ?? ''} units={project.units} update={update} onDone={() => setSelection(PANEL_SELECTION)} />
           ) : center === 'measurements' ? (
             measSel ? (
-              <MeasurementProps ctx={{ project, update, sizeId: size?.id ?? '', onSelect: setMeasSel }} name={measSel} />
+              <MeasurementProps ctx={{ project, update, sizeId: size?.id ?? '', onSelect: setMeasSel, onSize: setSizeId }} name={measSel} />
             ) : (
-              <SizesProps ctx={{ project, update, sizeId: size?.id ?? '', onSelect: setMeasSel }} />
+              <SizesProps ctx={{ project, update, sizeId: size?.id ?? '', onSelect: setMeasSel, onSize: setSizeId }} />
             )
           ) : ctx ? (
             <Properties ctx={ctx} selection={selection} />
@@ -406,7 +422,7 @@ function Legend() {
   );
 }
 
-function NoticeBar({ notice, onClose }: { notice: Notice; onClose: () => void }) {
+function NoticeBar({ notice, onClose, onAction }: { notice: Notice; onClose: () => void; onAction: () => void }) {
   return (
     <div className={`notice notice-${notice.kind}`} role={notice.kind === 'error' ? 'alert' : 'status'}>
       <div className="notice-head">
@@ -414,6 +430,7 @@ function NoticeBar({ notice, onClose }: { notice: Notice; onClose: () => void })
         <button onClick={onClose} aria-label="Dismiss">×</button>
       </div>
       {notice.lines.length > 0 && <ul>{notice.lines.map((l, i) => <li key={i}>{l}</li>)}</ul>}
+      {notice.action && <button className="notice-action" onClick={onAction}>{notice.action.label}</button>}
     </div>
   );
 }

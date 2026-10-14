@@ -1,10 +1,13 @@
 // Seeding a project from a sizing table, plus estimated measurements the table doesn't have.
 
 import type { CsvTable } from './csv';
+import { DICTIONARY, isEstimatedSource, isLegacyColumn, SOURCE_COLUMN } from './dictionary';
+import { fitAliases } from './fit';
+import { LEGACY_RENAMES, migrateV1toV2 } from './legacy';
 import { newId, newMeasurement, newProject, type Measurement, type Project, type Size } from './model';
 
-/** Labels and kinds for the standard sizing-table columns. */
-export const STANDARD_COLUMNS: Record<string, { label: string; kind: Measurement['kind'] }> = {
+/** Labels and kinds for the old (pre-Ysolda) sizing-table columns, still found in older projects and tables. */
+const OLD_COLUMNS: Record<string, { label: string; kind: Measurement['kind'] }> = {
   upper_chest: { label: 'Upper chest', kind: 'circumference' },
   bust: { label: 'Bust', kind: 'circumference' },
   waist: { label: 'Waist', kind: 'circumference' },
@@ -18,18 +21,42 @@ export const STANDARD_COLUMNS: Record<string, { label: string; kind: Measurement
   arm_length: { label: 'Arm length', kind: 'length' },
 };
 
+/** Labels and kinds for the standard sizing-table columns: the measurement dictionary plus the old names. */
+export const STANDARD_COLUMNS: Record<string, { label: string; kind: Measurement['kind'] }> = {
+  ...OLD_COLUMNS,
+  ...Object.fromEntries(DICTIONARY.map((d) => [d.name, { label: d.label, kind: d.kind }])),
+};
+
+/**
+ * Measurements the templates use that the sizing table derives rather than lists: seeded as editable expression
+ * rules when every column they need is there and the name is not.
+ */
+export const DERIVED_FROM_NEW: Record<string, { label: string; expr: string; needs: string[]; note: string }> = {
+  waist_to_underarm: {
+    label: 'Waist to underarm',
+    expr: 'back_neck_drop + back_waist_length - shoulder_drop - armhole_depth',
+    needs: ['back_neck_drop', 'back_waist_length', 'shoulder_drop', 'armhole_depth'],
+    note: 'Vertical distance from the waist up to the underarm: HPS → waist (back_neck_drop + back_waist_length) minus HPS → underarm (shoulder_drop + armhole_depth).',
+  },
+};
+
+function derivedMeasurement(name: string): Measurement {
+  const d = DERIVED_FROM_NEW[name];
+  return { ...newMeasurement(name, d.label, 'length'), rule: { type: 'expression', expr: d.expr }, note: d.note };
+}
+
 /**
  * Measurements not in the sizing table, seeded as graded estimates (cm). All flagged `estimate`
- * so the UI can mark them for checking. Expressions refer to table columns.
+ * so the UI can mark them for checking. Expressions refer to table columns. The new sizing table has most of these;
+ * the estimates are only seeded for tables that lack them (e.g. older tables).
  */
 export const ESTIMATED_MEASUREMENTS: { name: string; label: string; expr: string; note: string }[] = [
-  { name: 'shoulder_width', label: 'Shoulder width', expr: 'round(cross_chest_back + 3, 0.5)', note: 'Shoulder point to shoulder point across the back.' },
-  { name: 'neck_width', label: 'Back neck width', expr: 'round(13 + upper_chest * 0.03, 0.5)', note: 'Width of the neck opening at the top of the back.' },
-  { name: 'back_neck_depth', label: 'Back neck depth', expr: '2', note: 'Drop of the back neckline below the shoulder line.' },
-  { name: 'front_neck_depth', label: 'Front neck depth', expr: 'round(5.5 + upper_chest * 0.02, 0.5)', note: 'Crew-neck depth below the shoulder line.' },
-  { name: 'shoulder_slope', label: 'Shoulder slope', expr: 'round(1.5 + upper_chest * 0.012, 0.5)', note: 'Height difference between the neck side and the shoulder point.' },
-  { name: 'hem_to_waist', label: 'Hem to waist', expr: '15', note: 'Length of the body below the natural waist.' },
-  { name: 'bust_point_depth', label: 'Shoulder to bust point', expr: 'round(20 + bust * 0.07, 0.5)', note: 'High point of shoulder down to the bust apex.' },
+  { name: 'back_shoulder_width', label: 'Back shoulder width', expr: 'round(cross_back + 3, 0.5)', note: 'Shoulder point to shoulder point across the back.' },
+  { name: 'back_neck_width', label: 'Back neck width', expr: 'round(13 + upper_chest * 0.03, 0.5)', note: 'Width of the neck opening at the top of the back.' },
+  { name: 'back_neck_drop', label: 'Back neck drop', expr: '2', note: 'Drop of the back neckline below the shoulder line.' },
+  { name: 'front_neck_drop', label: 'Front neck drop', expr: 'round(5.5 + upper_chest * 0.02, 0.5)', note: 'Crew-neck depth below the shoulder line.' },
+  { name: 'shoulder_drop', label: 'Shoulder drop', expr: 'round(1.5 + upper_chest * 0.012, 0.5)', note: 'Height difference between the neck side and the shoulder point.' },
+  { name: 'hps_to_apex', label: 'HPS to apex', expr: 'round(20 + bust * 0.07, 0.5)', note: 'High point of shoulder down to the bust apex.' },
   { name: 'apex_to_apex', label: 'Apex to apex', expr: 'round(14 + bust * 0.04, 0.5)', note: 'Horizontal distance between bust points.' },
   { name: 'cap_height', label: 'Sleeve cap height', expr: 'round(armhole_depth * 0.65, 0.5)', note: 'Set-in sleeve cap height (not used by the set-in template, which fits the cap to the armhole).' },
   { name: 'underarm_co', label: 'Underarm cast-on', expr: 'round(upper_chest * 0.05, 0.5)', note: 'Width cast on at each underarm to join front and back (cm, front and back together: half each). Top-down, shoulders-first tops.' },
@@ -53,8 +80,11 @@ export function estimatedMeasurements(): Measurement[] {
 
 /** Add any estimated measurements that are missing (e.g. when a template needs one an older project lacks). */
 export function ensureEstimates(project: Project, names: string[]): { project: Project; added: string[] } {
-  const have = new Set(project.measurements.map((m) => m.name));
-  const add = estimatedMeasurements().filter((m) => names.includes(m.name) && !have.has(m.name));
+  const have = new Set([...project.measurements.map((m) => m.name), ...Object.keys(fitAliases(project))]);
+  const derived = Object.entries(DERIVED_FROM_NEW)
+    .filter(([n, d]) => names.includes(n) && !have.has(n) && d.needs.every((x) => have.has(x)))
+    .map(([n]) => derivedMeasurement(n));
+  const add = [...derived, ...estimatedMeasurements().filter((m) => names.includes(m.name) && !have.has(m.name))];
   if (!add.length) return { project, added: [] };
   return { project: { ...project, measurements: [...project.measurements, ...add] }, added: add.map((m) => m.name) };
 }
@@ -73,14 +103,15 @@ export function projectFromTable(table: CsvTable, name = 'Untitled top', baseSiz
   const project = newProject(name);
   const sizeCol = table.headers.findIndex((h) => h.toLowerCase() === 'size');
   const col = sizeCol >= 0 ? sizeCol : 0;
+  const sourceCol = table.headers.findIndex((h, i) => i !== col && h.toLowerCase() === SOURCE_COLUMN);
 
-  const sizes: Size[] = table.rows.map((r) => ({ id: newId('size'), name: r[col] }));
+  const sizes: Size[] = table.rows.map((r) => ({ id: newId('size'), name: r[col], ...(sourceCol >= 0 && isEstimatedSource(r[sourceCol] ?? '') ? { estimated: true } : {}) }));
   project.sizes = sizes;
   project.baseSizeId = (sizes.find((s) => s.name === baseSizeName) ?? sizes[Math.floor(sizes.length / 2)])?.id ?? '';
 
   project.measurements = table.headers
     .map((h, i) => [h, i] as const)
-    .filter(([, i]) => i !== col)
+    .filter(([h, i]) => i !== col && i !== sourceCol && !isLegacyColumn(h))
     .map(([h, i]) => {
       const std = STANDARD_COLUMNS[h];
       const m = newMeasurement(h, std?.label ?? h, std?.kind ?? 'length');
@@ -93,7 +124,22 @@ export function projectFromTable(table: CsvTable, name = 'Untitled top', baseSiz
       return m;
     });
 
-  const existing = new Set(project.measurements.map((m) => m.name));
-  project.measurements.push(...estimatedMeasurements().filter((m) => !existing.has(m.name)));
-  return { project, warnings };
+  // An older table (single bust column, old names): map it to the new names like an old project file.
+  let seeded: Project = project;
+  if (project.measurements.some((m) => m.name === 'bust' || m.name in LEGACY_RENAMES)) {
+    const notes: string[] = [];
+    seeded = migrateV1toV2(project, notes);
+    warnings.push(...notes);
+  }
+
+  const existing = new Set(seeded.measurements.map((m) => m.name));
+  for (const [n, d] of Object.entries(DERIVED_FROM_NEW)) {
+    if (existing.has(n) || !d.needs.every((x) => existing.has(x))) continue;
+    seeded.measurements.push(derivedMeasurement(n));
+    existing.add(n);
+  }
+  const covered = new Set([...existing, ...Object.keys(fitAliases(seeded))]);
+  seeded.measurements.push(...estimatedMeasurements().filter((e) => !covered.has(e.name)));
+  return { project: seeded, warnings };
 }
+

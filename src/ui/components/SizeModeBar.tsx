@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { SizeName } from './EstMark';
 import type { AlignRef } from '../../engine/layout';
 import type { Id, Project } from '../../engine/model';
 import { sizeColor } from '../sizeColors';
@@ -55,7 +56,7 @@ export function SizeModeBar({ project, mode, setMode, compare, setCompare, align
                     onChange={(e) => setCompare(e.target.checked ? project.sizes.filter((x) => x.id === s.id || compare.includes(x.id)).map((x) => x.id) : compare.filter((x) => x !== s.id))}
                   />
                   <i className="swatch" style={{ background: sizeColor(i, project.sizes.length) }} />
-                  {s.name}
+                  <SizeName project={project} size={s} />
                 </label>
               ))}
             </div>

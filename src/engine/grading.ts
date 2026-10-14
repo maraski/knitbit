@@ -4,7 +4,7 @@
 
 import { isValidName, parseExpression, references, renameReferences } from './expr';
 import { resolveMeasurements } from './measurements';
-import { newId, newMeasurement, type DimExpr, type GradingRule, type Id, type Measurement, type Panel, type Project, type Size } from './model';
+import { newId, newMeasurement, type BodyRegion, type DimExpr, type GradingRule, type Id, type Measurement, type Panel, type Project, type Size } from './model';
 
 function clone(p: Project): Project {
   return structuredClone(p);
@@ -32,7 +32,11 @@ function allDims(panel: Panel): DimExpr[] {
   for (const s of panel.sections) out.push(s.fromHeight, s.toHeight);
   if (panel.neckline) out.push(panel.neckline.width, panel.neckline.depth, panel.neckline.centreWidth);
   const b = panel.bust;
-  if (b) out.push(b.width, b.length, b.apexHeight, b.apexOffset, b.shortRows.zoneWidth, b.dart.tipGap, b.vertical.bottom, b.vertical.gap, b.vertical.top);
+  if (b) {
+    out.push(b.width, b.length, b.apexHeight, b.apexOffset, b.shortRows.zoneWidth, b.dart.tipGap, b.vertical.bottom, b.vertical.gap, b.vertical.top);
+    if (b.lengthNoWidth) out.push(b.lengthNoWidth);
+    if (b.apexCorrection) out.push(b.apexCorrection);
+  }
   if (panel.princess) out.push(panel.princess.position);
   for (const l of panel.shapingLines ?? []) out.push(l.from.height, l.from.x, l.to.height, l.to.x, l.amount);
   return out;
@@ -77,6 +81,12 @@ export function removeSize(p: Project, id: Id): Project {
     delete m.manual[id];
     if (m.rule.type === 'increment') delete m.rule.steps[id];
   }
+  // Region sizing: regions that followed the removed size follow their own size again.
+  for (const s of d.sizes) {
+    if (!s.regions) continue;
+    for (const r of Object.keys(s.regions) as BodyRegion[]) if (s.regions[r] === id) delete s.regions[r];
+    if (!Object.keys(s.regions).length) delete s.regions;
+  }
   for (const panel of d.panels) {
     for (const dim of allDims(panel)) delete dim.overrides[id];
     for (const s of panel.segments) delete s.manual[id];
@@ -85,6 +95,39 @@ export function removeSize(p: Project, id: Id): Project {
     for (const l of panel.shapingLines ?? []) delete l.manual[id];
   }
   return d;
+}
+
+/** Region sizing: let one region of a size take its measurements from another size (or itself again). */
+export function setRegionSize(p: Project, sizeId: Id, region: BodyRegion, source: Id): Project {
+  const d = clone(p);
+  const s = d.sizes.find((x) => x.id === sizeId);
+  if (!s) return p;
+  const regions = { ...(s.regions ?? {}) };
+  if (source === sizeId || !d.sizes.some((x) => x.id === source)) delete regions[region];
+  else regions[region] = source;
+  if (Object.keys(regions).length) s.regions = regions;
+  else delete s.regions;
+  return d;
+}
+
+/**
+ * A one-off size (e.g. "me") seeded from a table row: every measurement that isn't a formula gets the row's value as
+ * a manual value for the new size (edit them in the grid), and the row's per-size panel overrides are copied. Region
+ * choices are not: the size has its own values (they would win anyway). Formula measurements recompute.
+ */
+export function addCustomSize(p: Project, name: string, seedId: Id): { project: Project; size: Size } {
+  const seed = p.sizes.find((s) => s.id === seedId);
+  if (!seed) throw new Error(`No size ${seedId}`);
+  const own = resolveMeasurements({ ...p, settings: { ...p.settings, regionSizing: false } }, seedId).values;
+  const { project: d, size } = addSize(p, name);
+  const s = d.sizes.find((x) => x.id === size.id)!;
+  s.custom = { seededFrom: seed.custom?.seededFrom ?? seed.name };
+  for (const m of d.measurements) {
+    if (m.rule.type === 'expression' || !own[m.name]) continue;
+    m.manual[size.id] = own[m.name].value;
+  }
+  for (const panel of d.panels) for (const dim of allDims(panel)) if (seedId in dim.overrides) dim.overrides[size.id] = dim.overrides[seedId];
+  return { project: d, size: s };
 }
 
 /**
@@ -229,8 +272,12 @@ export interface TrendFlag {
  * (e.g. M is smaller than S while S grew from XS and L grows from M). A measurement that rises and
  * then falls across the range is a grading shape, not a zigzag, and is not flagged. Informational only.
  */
-export function trendFlags(p: Project, name: string): TrendFlag[] {
-  const vals = p.sizes.map((s) => resolveMeasurements(p, s.id).values[name]?.value);
+export function trendFlags(project: Project, name: string): TrendFlag[] {
+  // Table sizes only (a custom size is one person, not a step in the grading), each with its own values (region
+  // sizing mixes sizes on purpose).
+  const p = { ...project, sizes: project.sizes.filter((s) => !s.custom) };
+  const own = { ...project, settings: { ...project.settings, regionSizing: false } };
+  const vals = p.sizes.map((s) => resolveMeasurements(own, s.id).values[name]?.value);
   const sign = (i: number): number => {
     const a = vals[i - 1];
     const b = vals[i];

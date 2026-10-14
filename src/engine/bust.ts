@@ -4,7 +4,7 @@
 import { distributeAuto, splitEvenly, type RowSide, type RowSpan } from './distribute';
 import { evaluate, renameReferences, scopeFrom } from './expr';
 import { evaluateDim } from './measurements';
-import type { BustShaping, DimExpr, Id, Panel } from './model';
+import { DEFAULT_LENGTH_NO_WIDTH, dim, type BustShaping, type DimExpr, type Id, type Panel } from './model';
 import { roundNearest } from './rounding';
 
 export interface BustFormula {
@@ -32,6 +32,8 @@ export interface BustIssue {
 export interface ComputedBust {
   method: BustShaping['method'];
   D: number; // bust − upper_chest, cm
+  /** Short rows / horizontal dart with no extra width at the front: W = 0, L from the no-width formula. */
+  noFrontWidth: boolean;
   width: BustFormula;
   length: BustFormula;
   apex: { row: number; heightCm: number; offsetCm: number; leftX: number; rightX: number };
@@ -74,19 +76,31 @@ function formula(d: DimExpr, sizeId: Id, scope: Record<string, number>): BustFor
   return { expr: d.expr, plugged: plugIn(d.expr, scope), value: r.value.value, overridden: r.value.overridden };
 }
 
+/** Width is added at the front unless the knitter turned it off (short rows and horizontal darts only). */
+export function addsFrontWidth(b: BustShaping): boolean {
+  return b.method === 'vertical-dart' || b.frontWidth !== false;
+}
+
+/** The L formula in use: the usual one, or the longer one when no width is added at the front. */
+export function lengthDim(b: BustShaping): DimExpr {
+  return addsFrontWidth(b) ? b.length : (b.lengthNoWidth ?? dim(DEFAULT_LENGTH_NO_WIDTH));
+}
+
 /**
  * The bust amounts for waypoint expressions. Evaluated against measurements and ease only, so they
  * never depend on the panel's own waypoints.
  */
 export function bustValues(panel: Panel, sizeId: Id, scope: Record<string, number>): Record<string, number> {
   const b = panel.bust;
-  if (!b || b.method === 'none') return { bust_w: 0, bust_l: 0, bust_side_w: 0 };
+  const c = b?.apexCorrection ? evaluateDim(b.apexCorrection, sizeId, scope) : null;
+  const bust_apex_corr = c?.ok ? c.value.value : 0;
+  if (!b || b.method === 'none') return { bust_w: 0, bust_l: 0, bust_side_w: 0, bust_apex_corr };
   const w = evaluateDim(b.width, sizeId, scope);
-  const l = evaluateDim(b.length, sizeId, scope);
-  const W = w.ok ? Math.max(0, w.value.value) : 0;
+  const l = evaluateDim(lengthDim(b), sizeId, scope);
+  const W = w.ok && addsFrontWidth(b) ? Math.max(0, w.value.value) : 0;
   const L = l.ok ? Math.max(0, l.value.value) : 0;
   const side = (b.method === 'shortrows' || b.method === 'horizontal-dart') && b.sideWidth ? W : 0;
-  return { bust_w: W, bust_l: L, bust_side_w: side };
+  return { bust_w: W, bust_l: L, bust_side_w: side, bust_apex_corr };
 }
 
 export interface BustContext {
@@ -113,8 +127,9 @@ export function computeBust(ctx: BustContext): ComputedBust | null {
   const s = ctx.scope;
   const D = (s.bust ?? 0) - (s.upper_chest ?? 0);
 
-  const wf = formula(b.width, ctx.sizeId, s);
-  const lf = formula(b.length, ctx.sizeId, s);
+  const noFrontWidth = !addsFrontWidth(b);
+  const wf = noFrontWidth ? { expr: '0', plugged: '0 (no extra width at the front)', value: 0, overridden: false } : formula(b.width, ctx.sizeId, s);
+  const lf = formula(lengthDim(b), ctx.sizeId, s);
   const hf = evaluateDim(b.apexHeight, ctx.sizeId, s);
   const of = evaluateDim(b.apexOffset, ctx.sizeId, s);
   const errs = [
@@ -124,7 +139,7 @@ export function computeBust(ctx: BustContext): ComputedBust | null {
     !of.ok ? `Bust point offset: ${of.error}` : null,
   ].filter((x): x is string => !!x);
   if (errs.length || 'error' in wf || 'error' in lf || !hf.ok || !of.ok) {
-    return { method: b.method, D, width: blank(b.width), length: blank(b.length), apex: { row: 0, heightCm: 0, offsetCm: 0, leftX: 0, rightX: 0 }, shortRows: null, darts: null, issues: errs.map((m) => ({ severity: 'error', message: m })) };
+    return { method: b.method, D, noFrontWidth, width: blank(b.width), length: blank(lengthDim(b)), apex: { row: 0, heightCm: 0, offsetCm: 0, leftX: 0, rightX: 0 }, shortRows: null, darts: null, issues: errs.map((m) => ({ severity: 'error', message: m })) };
   }
 
   // Garment height (cm) → knit row.
@@ -141,7 +156,7 @@ export function computeBust(ctx: BustContext): ComputedBust | null {
   if (offsetSts >= half - 2) issues.push({ severity: 'warning', message: 'The bust point is at or beyond the side edge; check apex_to_apex.' });
   if (D <= 0) issues.push({ severity: 'info', message: `Bust and upper chest differ by ${fmt(D)} cm; little or no bust shaping is needed.` });
 
-  const out: ComputedBust = { method: b.method, D, width: wf, length: lf, apex, shortRows: null, darts: null, issues };
+  const out: ComputedBust = { method: b.method, D, noFrontWidth, width: wf, length: lf, apex, shortRows: null, darts: null, issues };
   const manual = b.manual[ctx.sizeId];
 
   if (b.method === 'shortrows' || b.method === 'horizontal-dart') {
@@ -175,7 +190,11 @@ export function computeBust(ctx: BustContext): ComputedBust | null {
     const halfR = ctx.rightEdge[after] - cx;
     const hHalf = Math.min(halfL, halfR);
     const live = roundNearest(ctx.rightEdge[after] - ctx.leftEdge[after]);
-    const margin = Math.max(2, ctx.panel.selvedge.left + 1);
+    // Stitches kept between the side edge and the outermost turn: automatic, or the knitter's number (flat rows keep at
+    // least 1 st so the turn is a turn; in the round the front's edge is the side seam, so 0 is allowed).
+    const edgeSts = b.shortRows.edgeSts;
+    const fixedEdge = typeof edgeSts === 'number' && Number.isFinite(edgeSts);
+    const margin = fixedEdge ? Math.max(ctx.isFlatRow(after + 1) ? 1 : 0, Math.round(edgeSts)) : Math.max(2, ctx.panel.selvedge.left + 1);
     let inner: number;
     let outer: number;
     let tipX = 0;
@@ -185,7 +204,9 @@ export function computeBust(ctx: BustContext): ComputedBust | null {
       // side stitches ÷ turns per side, rounded down).
       inner = Math.max(1, Math.round(offsetSts));
       outer = hHalf - margin;
-      step = Math.floor((outer - inner) / n);
+      // Classic: every floor(side sts ÷ turns) sts, the last turn one step before the edge. With a fixed edge
+      // distance the turns are spread evenly from the bust point to exactly that distance from the edge.
+      step = fixedEdge ? (n > 1 ? (outer - inner) / (n - 1) : outer - inner) : Math.floor((outer - inner) / n);
       if (step < 1) {
         issues.push({ severity: 'error', message: `${n} turns per side don't fit between the bust point and the side seam (${Math.max(0, Math.floor(outer - inner))} sts). Reduce the length or stack a second dart.` });
         return out;
@@ -193,7 +214,8 @@ export function computeBust(ctx: BustContext): ComputedBust | null {
     } else if (b.method === 'shortrows') {
       const zw = evaluateDim(b.shortRows.zoneWidth, ctx.sizeId, s);
       const z = (zw.ok ? zw.value.value : 6) * spc;
-      inner = Math.max(1, offsetSts - z / 2);
+      // Never closer than 2 sts to the centre, so the centre short rows still work at least 4 sts.
+      inner = Math.max(2, offsetSts - z / 2);
       outer = Math.min(hHalf - margin, offsetSts + z / 2);
     } else {
       const tg = evaluateDim(b.dart.tipGap, ctx.sizeId, s);
@@ -209,7 +231,11 @@ export function computeBust(ctx: BustContext): ComputedBust | null {
     const uMin = Math.round(hHalf - outer);
     const uMax = Math.round(hHalf - inner);
     let u: number[];
-    if (span === 'apex-to-side') u = Array.from({ length: n }, (_, j) => Math.round(hHalf - (inner + (n - 1 - j) * step)));
+    if (span === 'apex-to-side') {
+      u = fixedEdge
+        ? Array.from({ length: n }, (_, j) => Math.round(hHalf - (n === 1 ? inner : inner + ((n - 1 - j) * (outer - inner)) / (n - 1))))
+        : Array.from({ length: n }, (_, j) => Math.round(hHalf - (inner + (n - 1 - j) * step)));
+    }
     else if (n === 1) u = [Math.round((uMin + uMax) / 2)];
     else {
       const gaps = splitEvenly(uMax - uMin, n - 1, 'spread');

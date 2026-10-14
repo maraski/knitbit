@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { buildScope, evaluateDim, incrementValue, resolveMeasurements } from './measurements';
 import { dim, newMeasurement } from './model';
-import { fixtureProject, sizeId } from './testFixtures';
+import { legacyFixtureProject, sizeId } from './testFixtures';
 
 describe('measurement resolution', () => {
   it('uses table values and marks their source', () => {
-    const p = fixtureProject();
+    const p = legacyFixtureProject();
     const r = resolveMeasurements(p, sizeId(p, 'M'));
     expect(r.values.bust).toEqual({ value: 124.5, source: 'table' });
     expect(r.values.upper_chest.value).toBe(114.5);
@@ -13,24 +13,24 @@ describe('measurement resolution', () => {
   });
 
   it('derives estimates from expression rules', () => {
-    const p = fixtureProject();
+    const p = legacyFixtureProject();
     const r = resolveMeasurements(p, sizeId(p, 'M'));
-    expect(r.values.shoulder_width).toEqual({ value: 41.5, source: 'rule' }); // 38.25 + 3 → 41.5
-    expect(r.values.neck_width.value).toBe(16.5); // 13 + 3.435 → 16.5
+    expect(r.values.back_shoulder_width).toEqual({ value: 41.5, source: 'rule' }); // 38.25 + 3 → 41.5
+    expect(r.values.back_neck_width.value).toBe(16.5); // 13 + 3.435 → 16.5
     expect(r.values.cap_height.value).toBe(14.5); // 22.5 * .65 = 14.625 → 14.5
   });
 
   it('lets manual overrides win, and flows them into dependent rules', () => {
-    const p = fixtureProject();
+    const p = legacyFixtureProject();
     const M = sizeId(p, 'M');
-    p.measurements.find((m) => m.name === 'cross_chest_back')!.manual[M] = 40;
+    p.measurements.find((m) => m.name === 'cross_back')!.manual[M] = 40;
     const r = resolveMeasurements(p, M);
-    expect(r.values.cross_chest_back).toEqual({ value: 40, source: 'manual' });
-    expect(r.values.shoulder_width.value).toBe(43);
+    expect(r.values.cross_back).toEqual({ value: 40, source: 'manual' });
+    expect(r.values.back_shoulder_width.value).toBe(43);
   });
 
   it('grades by increments from the base size, with per-size steps', () => {
-    const p = fixtureProject();
+    const p = legacyFixtureProject();
     const m = { ...newMeasurement('sleeve_ease'), rule: { type: 'increment' as const, baseValue: 5, defaultStep: 1, steps: { [sizeId(p, 'L')]: 2 } } };
     p.measurements.push(m);
     expect(incrementValue(p, m, sizeId(p, 'M'))).toBe(5);
@@ -42,7 +42,7 @@ describe('measurement resolution', () => {
   });
 
   it('reports measurements with no value', () => {
-    const p = fixtureProject();
+    const p = legacyFixtureProject();
     p.measurements.push(newMeasurement('mystery'));
     p.measurements.push({ ...newMeasurement('broken'), rule: { type: 'expression', expr: 'mystery * 2' } });
     const r = resolveMeasurements(p, sizeId(p, 'M'));
@@ -51,7 +51,7 @@ describe('measurement resolution', () => {
   });
 
   it('exposes global and per-measurement ease', () => {
-    const p = fixtureProject();
+    const p = legacyFixtureProject();
     p.ease = { global: 5, per: { bust: 8 } };
     const s = buildScope(p, sizeId(p, 'M'));
     expect(s.ease).toBe(5);
@@ -60,7 +60,7 @@ describe('measurement resolution', () => {
   });
 
   it('evaluates dimensions with per-size overrides', () => {
-    const p = fixtureProject();
+    const p = legacyFixtureProject();
     const M = sizeId(p, 'M');
     const scope = buildScope(p, M);
     const d = dim('upper_chest/2 + ease/4');
@@ -71,7 +71,7 @@ describe('measurement resolution', () => {
   });
 
   it('every size of the sample resolves all measurements', () => {
-    const p = fixtureProject();
+    const p = legacyFixtureProject();
     for (const s of p.sizes) expect(resolveMeasurements(p, s.id).errors).toEqual({});
   });
 });

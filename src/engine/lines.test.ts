@@ -101,7 +101,9 @@ describe('shaping lines', () => {
     const { p, panel } = setup();
     const c = computePanel(p, panel, sizeId(p, 'M'));
     const chart = buildChart(p, panel, c);
-    const ev = c.lines[0].events[0];
+    // A line row without edge shaping on it (edge decreases would add to the count).
+    const edgeRows = new Set(c.segments.flatMap((sg) => [...sg.left.events, ...sg.right.events].map((e) => e.row)));
+    const ev = c.lines[0].events.find((e) => !edgeRows.has(e.row))!;
     const row = chart.rows.find((r) => r.knitRow === ev.row)!;
     expect(row.cells.filter((v) => v === 'ssk' || v === 'k2tog').length).toBe(4);
     for (const r of chart.rows) expect(r.cells.filter((v) => v !== '' && v !== 'bo' && v !== 'hold').length, `row ${r.knitRow}`).toBe(c.counts[r.knitRow]);
