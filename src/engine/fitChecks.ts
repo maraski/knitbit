@@ -4,7 +4,7 @@
 import { measureEdge, type PanelCache } from './joins';
 import { buildScope } from './measurements';
 import type { Id, Panel, Project } from './model';
-import type { ComputedPanel, Issue } from './panel';
+import { armholeSide, type ComputedPanel, type Issue } from './panel';
 import { regionTransitions } from './regionShaping';
 import { regionSizingOn, regionSources, sizesApart } from './regions';
 
@@ -100,7 +100,7 @@ export function fitChecks(project: Project, sizeId: Id, computed: { panel: Panel
       const u = panel?.waypoints.find((w) => w.name === 'underarm');
       const sh = panel?.waypoints.find((w) => w.name === 'shoulder');
       if (!panel || !u || !sh) continue;
-      const m = measureEdge(project, { panelId: panel.id, edge: { kind: 'side', side: 'left', from: u.id, to: sh.id } }, sizeId, project.settings.pickUp, cache);
+      const m = measureEdge(project, { panelId: panel.id, edge: { kind: 'side', side: armholeSide(panel), from: u.id, to: sh.id } }, sizeId, project.settings.pickUp, cache);
       if (m.ok) {
         lengths.push(m.lengthCm);
         panelId ??= panel.id;

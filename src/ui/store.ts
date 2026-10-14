@@ -8,6 +8,7 @@ import type { Project } from '../engine/model';
 import { projectFromTable } from '../engine/seed';
 import { applyImport, describeReport, suggestMapping } from '../engine/sizing';
 import { bodice, sleeve } from '../engine/templates';
+import { syncFrontPairs } from '../engine/cardigan';
 import sampleCsv from '../../samples/sizing_table_ysolda_cm.csv?raw';
 
 export function sampleProject(): Project {
@@ -70,7 +71,8 @@ export function useProjectStore() {
 
   /** Apply an edit. `key` merges rapid edits of the same field into one undo step. */
   const update = useCallback((fn: (p: Project) => Project, key: string | null = null) => {
-    setHistory((h) => commit(h, { ...fn(h.present), updatedAt: new Date().toISOString() }, key));
+    // Linked cardigan fronts follow each other: whichever was edited is copied to the other.
+    setHistory((h) => commit(h, { ...syncFrontPairs(h.present, fn(h.present)), updatedAt: new Date().toISOString() }, key));
   }, []);
 
   /** Replace the whole project (open / new); undoable. */

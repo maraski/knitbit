@@ -48,6 +48,8 @@ export interface ComputedBust {
     tipX: number; // dart: distance of the tip from the centre (sts)
     span: 'zone' | 'apex-to-side';
     step: number; // apex-to-side: stitches between turns (0 otherwise)
+    /** A cardigan front: the short rows turn at this edge only and run to the front edge. */
+    oneSide?: 'left' | 'right';
   } | null;
   darts: {
     leftX: number;

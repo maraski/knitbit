@@ -122,6 +122,8 @@ const stitchPattern = obj({ name: str, multiple: num, offset: num });
 const intList = nullable(arr(num));
 
 const align = oneOf('end', 'start', 'center');
+const edgeId = oneOf('hem', 'cuff', 'neckband', 'frontBands');
+const edgeTreatment = obj({ enabled: bool, depth: dimExpr, stitch: oneOf('rib1x1', 'rib2x2', 'garter', 'seed', 'custom'), custom: stitchPattern, method: oneOf('with-panel', 'later') });
 const segmentMethod = tagged('kind', {
   auto: {
     side: oneOf('any', 'rs', 'ws'),
@@ -149,7 +151,7 @@ const panel = obj({
   shapingInset: num,
   rounding: obj({ parity, rowParity: parity }),
   pattern: stitchPattern,
-  sections: arr(obj({ id: str, name: str, fromHeight: dimExpr, toHeight: dimExpr, pattern: stitchPattern })),
+  sections: arr(obj({ id: str, name: str, fromHeight: dimExpr, toHeight: dimExpr, pattern: stitchPattern, edge: optional(edgeId) })),
   waypoints: arr(obj({ id: str, name: str, height: dimExpr, symmetric: bool, width: dimExpr, left: dimExpr, right: dimExpr })),
   segments: arr(
     obj({
@@ -201,6 +203,8 @@ const panel = obj({
   princess: optional(nullable(obj({ position: dimExpr, sides: oneOf('both', 'one') }))),
   startFrom: optional(oneOf('caston', 'pickup')),
   linkedTo: optional(nullable(str)),
+  edge: optional(edgeId),
+  half: optional(nullable(obj({ side: oneOf('left', 'right'), pair: nullable(str), cfSelvedge: oneOf(0, 1, 2) }))),
   freeStitches: optional(arr(obj({ id: str, sizeId: str, row: num, x: num, symbol: str, mirror: bool }))),
   shapingLines: optional(
     arr(
@@ -256,8 +260,9 @@ const project = obj({
   fit: obj({ cup: oneOf('ab', 'cd', 'ef', 'gh', 'custom'), hem: optional(oneOf('high_hip', 'hip_seat_straight', 'hip_seat_curvy')), broadBack: optional(bool) }),
   garment: obj({ construction: oneOf('panels', 'contiguous'), opening: oneOf('closed', 'cardigan') }),
   tags: arr(str),
+  edges: optional(obj({ hem: edgeTreatment, cuff: edgeTreatment, neckband: edgeTreatment, frontBands: edgeTreatment })),
   panels: arr(panel),
-  joins: optional(arr(obj({ id: str, name: str, tag: oneOf('seam', 'pickup', 'live', 'bindoff', 'caston', 'free'), edges: arr(edgeRef), partner: arr(edgeRef), ratio: nullable(obj({ stitches: num, rows: num })), note: str }))),
+  joins: optional(arr(obj({ id: str, name: str, tag: oneOf('seam', 'pickup', 'live', 'bindoff', 'caston', 'free'), edges: arr(edgeRef), partner: arr(edgeRef), ratio: nullable(obj({ stitches: num, rows: num })), note: str, edge: optional(edgeId) }))),
   symbols: optional(arr(obj({ id: str, label: str, abbr: str, color: str, change: num }))),
   settings: obj({ seamToleranceCm: num, pickUp: obj({ stitches: num, rows: num }), regionSizing: optional(bool), regionGapLimit: optional(num), hemCheck: optional(bool), exportCredit: optional(bool) }),
   createdAt: str,
@@ -302,6 +307,11 @@ export function validateProject(raw: unknown): ValidationResult {
     });
     if (panel.joinAt && !wpIds.has(panel.joinAt)) warnings.push(`Panel "${panel.name}" joins in the round at a waypoint that no longer exists; it is treated as flat.`);
     if (panel.shapingInset < 0) errors.push(`project.panels[${pi}].shapingInset: must be 0 or more.`);
+    const pair = panel.half?.pair;
+    if (pair) {
+      const other = p.panels.find((x) => x.id === pair);
+      if (!other?.half || other.half.side === panel.half!.side) warnings.push(`Panel "${panel.name}" is linked to a front that is missing or on the same side; it is treated as unlinked.`);
+    }
   });
 
   return { errors, warnings };

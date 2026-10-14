@@ -329,6 +329,48 @@ Rows are spread evenly (centred) between the ends; a slanted line moves across a
 rows by hand in the line's table (Reset to auto goes back). Presets: fisheye dart through the bust point, waist dart
 ⅓ in from the side, slanted side-front dart, sway-back dart at the centre back.
 
+## Cardigan fronts
+
+Project → Garment → **Front opening: Cardigan** splits every front (template *front*) into a **Left front** and a
+**Right front**, and works the body flat (a back that was joined in the round becomes flat; sleeves keep their own
+choice). Switching back to *Closed* merges each pair into one front again. The app lists what it changed.
+
+- **One description, two halves.** Each front's waypoints, segments, neckline and bust shaping describe the *whole*
+  front, as if closed at centre front; the panel is the wearer's left or right half of it. So necklines (round, V,
+  square, boat), bust shaping, princess and shaping lines all work as on a pullover front. Seen from the RS, the left
+  front's front edge is its left edge, the right front's its right edge.
+- **Front edge.** Straight, with its own selvedge (*Front-edge selvedge*, default 1). The neckline's centre
+  stitches are taken at the front edge: bottom-up *bind off 8 sts at the front edge, then −11 at the neck edge*;
+  top-down *+11 at the neck edge, then cast on 8 sts at the front edge* (the fronts are never joined).
+- **Rounding.** Each front is rounded on its own: its half width, to the pattern multiple (e.g. a 2×2 rib hem gives
+  4n + 2 sts between the selvedges on each front), plus both selvedges. Parity doesn't apply; the whole front is
+  always even.
+- **Bust short rows** turn at the side edge only: each pair is a turning row worked from the front edge towards the
+  side and a return row back (the left front turns on WS rows, the right front on RS rows).
+- **Mirrored pair.** An edit to either front is copied to the other (names, layout, notes and links stay each
+  front's own). **Unlink** in the panel properties to edit them separately; *mirror with…* relinks by copying.
+- **Joins** follow the split: the front's left side edge belongs to the right front, its right side edge to the
+  left front; lower edge, top and neckline joins go to both fronts.
+- **Checks:** the armhole (`armhole_len`, scye check) is measured on a front's side edge; hem totals add both fronts.
+
+## Edge treatments
+
+Project → **Edges** sets the hem ribbing, cuff ribbing, neckband and (cardigans) front bands for the whole project.
+Each can be switched off and has a height (band width for neck and front bands, an expression with per-size values),
+a stitch (1×1 rib = 2n, 2×2 rib = 4n + 2, garter, seed = 2n + 1, or a custom multiple + offset) and how it is worked:
+
+| | Knit with the panel | Added later |
+|---|---|---|
+| Hem | a *Hem rib* pattern section at the lower edge of the back and fronts | a pick-up join on their lower edges |
+| Cuff | a *Cuff rib* section on the sleeves | a pick-up join on the sleeves' lower edges |
+| Neckband | (not available for necklines yet) | a *Neckband* strip, picked up from every neckline |
+| Front bands | stored; bands and buttons are made by the band helper | stored |
+
+Changing any setting applies them all; things made by a treatment are marked (`edge`) and replaced the next time, so
+nothing is duplicated. Sections you add by hand are left alone, except the templates' *Hem rib* / *Cuff rib*, which
+the treatment takes over. New panels pick up the settings once you have changed them. Defaults: hem off, cuff 2×2
+rib 5 cm with the sleeve, neckband 1×1 rib 2.5 cm added later, front bands 1×1 rib 2.5 cm added later.
+
 ## Short-row segments
 
 A segment shaped with **short rows** keeps all its stitches live: the turns shape the outline (e.g. a shoulder slope)
@@ -513,6 +555,7 @@ Saved files are `*.knitbit.json`. All lengths are in cm, whatever the display un
   "garment": { "construction": "panels" | "contiguous",   // contiguous = top-down contiguous yoke (generator)
                "opening": "closed" | "cardigan" },
   "tags": ["contiguous"],                      // free-form; "contiguous" is added/removed with that construction
+  "edges": { "hem": Edge, "cuff": Edge, "neckband": Edge, "frontBands": Edge },   // optional (see Edge treatments)
   "panels": [Panel],
   "joins": [Join],                             // optional
   "symbols": [{ "id": "custom_…", "label": "Twisted decrease", "abbr": "tw",
@@ -536,7 +579,8 @@ A **Panel**:
   "shapingInset": 2,                            // stitches in from the edge
   "rounding": { "parity": "any" | "even" | "odd", "rowParity": "any" | "even" | "odd" },
   "pattern": { "name": "stockinette", "multiple": 1, "offset": 0 },
-  "sections": [{ "id": "…", "name": "Hem rib", "fromHeight": Dim, "toHeight": Dim, "pattern": { … } }],
+  "sections": [{ "id": "…", "name": "Hem rib", "fromHeight": Dim, "toHeight": Dim, "pattern": { … },
+                 "edge": "hem" }],               // edge optional: made by an edge treatment
   "waypoints": [{
     "id": "wp_…", "name": "waist",
     "height": Dim,                              // up from the garment's lower edge
@@ -571,12 +615,20 @@ A **Panel**:
                      "rowSide": "rs" | "any", "mirror": true, "manual": { "<sizeId>": [12, 16] } }],
   "startFrom": "caston" | "pickup",            // optional: how the first row is made (top-down fronts: pickup)
   "linkedTo": "panel_…" | null,                // optional: linked panel (waypoint drags follow by name)
+  "half": null | { "side": "left" | "right",   // optional: a cardigan front (dimensions = the whole front)
+                   "pair": "panel_…" | null,     //   the mirrored other front; null = unlinked
+                   "cfSelvedge": 0-2 },
+  "edge": "neckband",                          // optional: made by an edge treatment
   "layout": { "x": 0, "y": 0, "rotation": 0 | 90 | 180 | 270 },
   "notes": ""
 }
 ```
 
 `Dim` is `{ "expr": "upper_chest/2 + ease/4", "overrides": { "<sizeId>": 60 } }`: an expression plus per-size fixed values.
+
+`Edge` is `{ "enabled": true, "depth": Dim, "stitch": "rib1x1" | "rib2x2" | "garter" | "seed" | "custom",
+"custom": { "name": "custom", "multiple": 2, "offset": 0 }, "method": "with-panel" | "later" }`. Joins made by an
+edge treatment carry `"edge": "hem" | "cuff" | "neckband" | "frontBands"`.
 
 `Method` is one of:
 - `{ "kind": "auto", "side": "rs"|"ws"|"any", "align": "end"|"start"|"center", "order": "spread"|"shortFirst"|"longFirst", "rhythm": {"type":"auto"} | {"type":"fixed","every":4} | {"type":"mixed","a":4,"b":6}, "perSide": 1 }`

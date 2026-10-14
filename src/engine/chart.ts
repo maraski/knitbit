@@ -8,7 +8,7 @@
 import type { CustomSymbol, FreeStitch, Id, Panel, Project } from './model';
 import { freeCells, freeFor, freeInterior } from './free';
 import { lineX } from './lines';
-import type { ComputedPanel, ComputedSegment, Edge, ShapeEvent } from './panel';
+import { rowCentre, type ComputedPanel, type ComputedSegment, type Edge, type ShapeEvent } from './panel';
 import { defaultSymbol, symbolInfo, type SymbolInfo } from './symbols';
 
 /** '' = no stitch (outside the panel), 'k' = plain stitch, 'h' = held (live, not worked), else a symbol id. */
@@ -185,7 +185,7 @@ export function buildChart(project: Project, panel: Panel, c: ComputedPanel): Ch
           mark(left ? now + inset : now - 1 - inset, defaultSymbol(ev.kind, edge, Math.sign(ev.delta)));
           n -= 1;
         }
-        const centre = (c.leftEdge[r] + c.rightEdge[r]) / 2;
+        const centre = rowCentre(c, r);
         const k = col(centre + (left ? -1 : 1) * c.princess.offset);
         const outer = left ? k - 1 : k;
         const innerK = left ? k : k - 1;
@@ -229,8 +229,8 @@ export function buildChart(project: Project, panel: Panel, c: ComputedPanel): Ch
       const d = c.bust.darts;
       const change = darts[r] - darts[r - 1]; // both darts together
       const per = Math.abs(change) / 2;
-      const centre = (c.leftEdge[r] + c.rightEdge[r]) / 2;
-      const mid = (c.leftEdge[r - 1] + c.rightEdge[r - 1]) / 2;
+      const centre = rowCentre(c, r);
+      const mid = rowCentre(c, r - 1);
       for (const x of [d.leftX, d.rightX]) {
         const k = col(x - mid + centre);
         if (change > 0) {
@@ -248,7 +248,7 @@ export function buildChart(project: Project, panel: Panel, c: ComputedPanel): Ch
       const ev = l.events.find((e) => e.row === r);
       if (!ev) continue;
       const kind = ev.delta < 0 ? 'dec' : 'inc';
-      const centre = (c.leftEdge[r] + c.rightEdge[r]) / 2;
+      const centre = rowCentre(c, r);
       for (const sgn of l.mirror ? [1, -1] : [1]) {
         const x = sgn * lineX(l, r);
         const k = col(centre + x);
@@ -261,7 +261,7 @@ export function buildChart(project: Project, panel: Panel, c: ComputedPanel): Ch
 
     // Painted stitches, drawn over whatever is there (only inside the fabric).
     const free: Record<number, Id> = {};
-    const centreR = (c.leftEdge[r] + c.rightEdge[r]) / 2;
+    const centreR = rowCentre(c, r);
     for (const f of freeByRow.get(r) ?? []) {
       for (const cell of freeCells(f)) {
         const k = col(centreR + cell.x);
@@ -317,15 +317,23 @@ function shortRows(c: ComputedPanel, sr: NonNullable<NonNullable<ComputedPanel['
   const out: ChartRow[] = [];
   sr.pairs.forEach((p, i) => {
     const prevRight = i === 0 ? 0 : sr.pairs[i - 1].rightUnworked;
+    // A cardigan front turns at its side edge only: the turning row runs from the front edge, the return row back to it.
+    const one = sr.oneSide;
     const make = (rs: boolean): ChartRow => {
       const cells: Cell[] = new Array(cols).fill('');
       for (let k = L; k < R; k++) cells[k] = HELD;
       const a = L + p.leftUnworked;
-      const b = rs ? R - prevRight : R - p.rightUnworked;
+      const b = one ? R - p.rightUnworked : rs ? R - prevRight : R - p.rightUnworked;
       for (let k = a; k < b; k++) cells[k] = PLAIN;
-      if (rs) cells[a] = turn;
+      // RS rows run right to left: the right front (side at the left) turns on RS rows, the left front on WS rows.
+      if (one === 'left') {
+        if (rs) cells[a] = turn;
+      } else if (one === 'right') {
+        if (!rs) cells[b - 1] = turn;
+      } else if (rs) cells[a] = turn;
       else cells[b - 1] = turn;
-      const index = 2 * p.index - (rs ? 1 : 0);
+      const first = one === 'right' ? !rs : rs; // worked first in the pair
+      const index = 2 * p.index - (first ? 1 : 0);
       return {
         key: `${after}-sr${index}`,
         knitRow: after,
@@ -341,7 +349,7 @@ function shortRows(c: ComputedPanel, sr: NonNullable<NonNullable<ComputedPanel['
         count: sr.liveStitches,
       };
     };
-    out.push(make(true), make(false));
+    out.push(...(one === 'right' ? [make(false), make(true)] : [make(true), make(false)]));
   });
   return out;
 }

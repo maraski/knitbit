@@ -9,7 +9,7 @@ import { SizeGrid, SizeLegend } from './LayoutView';
 import type { SizeMode } from './SizeModeBar';
 import type { Project } from '../../engine/model';
 import type { EdgeKey, Join, KnitDirection } from '../../engine/model';
-import type { ComputedPanel, ComputedSegment, Edge, Marker, ShapeEvent } from '../../engine/panel';
+import { rowCentre, type ComputedPanel, type ComputedSegment, type Edge, type Marker, type ShapeEvent } from '../../engine/panel';
 import { SYMBOLS, type SymbolId } from '../../engine/symbols';
 import { wedgeBands } from '../../engine/bust';
 import { freeCells } from '../../engine/free';
@@ -234,7 +234,7 @@ export function Schematic({ computed: c, direction, units, selection, onSelect, 
   /** Where a segment's shaping on this row is drawn: the side edge, or the princess line for incs/decs. */
   const shapeX = (seg: ComputedSegment, edge: Edge, row: number, kind: ShapeEvent['kind']) => {
     if (seg.placement !== 'edge' && c.princess && (kind === 'dec' || kind === 'inc')) {
-      return (c.leftEdge[row] + c.rightEdge[row]) / 2 + (edge === 'left' ? -1 : 1) * c.princess.offset;
+      return rowCentre(c, row) + (edge === 'left' ? -1 : 1) * c.princess.offset;
     }
     return edge === 'left' ? c.leftEdge[row] : c.rightEdge[row];
   };
@@ -248,7 +248,7 @@ export function Schematic({ computed: c, direction, units, selection, onSelect, 
     const Y = -(sy - v.oy) / v.scale;
     const g = Math.max(0, Math.min(top, Math.round(Y * rpc)));
     const row = c.topDown ? top - g : g;
-    const centre = (c.leftEdge[row] + c.rightEdge[row]) / 2 / spc;
+    const centre = rowCentre(c, row) / spc;
     return { h: Y, x: X - centre, sx, sy };
   };
   const startWpDrag = (e: React.PointerEvent, w: ComputedPanel['waypoints'][number], kind: 'height' | 'width', part: 'width' | 'left' | 'right') => {
@@ -421,6 +421,7 @@ export function Schematic({ computed: c, direction, units, selection, onSelect, 
                   return <path d={path([...ptsL, ...ptsR.reverse()], true)} className="overlay-wedge" style={{ stroke: color, fill: color }} />;
                 })()}
                 {bust && [bust.apex.leftX, bust.apex.rightX].map((ax, k) => {
+                  if (x.half && (x.half.keep === 'right' ? ax <= x.half.cfX : ax >= x.half.cfX)) return null;
                   const q = toLocal(x, { x: ax, y: bust.apex.row });
                   const sp = L({ x: q.x, y: q.y + shift });
                   return <circle key={k} cx={sp.x} cy={sp.y} r={3} className="overlay-apex" style={{ stroke: color }} />;
@@ -730,7 +731,7 @@ export function Schematic({ computed: c, direction, units, selection, onSelect, 
         {vertical &&
           c.lines.map((l) => {
             const sel = selection.kind === 'line' && selection.id === l.id;
-            const centre = (r: number) => (c.leftEdge[r] + c.rightEdge[r]) / 2;
+            const centre = (r: number) => rowCentre(c, r);
             const twins = l.mirror ? [1, -1] : [1];
             return (
               <g key={l.id} className={`shaping-line${sel ? ' selected' : ''}`} onClick={click({ kind: 'line', id: l.id })}>
@@ -781,7 +782,7 @@ export function Schematic({ computed: c, direction, units, selection, onSelect, 
             .filter((f) => f.sizeId === c.sizeId && f.row >= 1 && f.row <= top)
             .flatMap((f) =>
               freeCells(f).map((cell, k) => {
-                const p = S((c.leftEdge[f.row] + c.rightEdge[f.row]) / 2 + cell.x + 0.5, f.row - 0.5);
+                const p = S(rowCentre(c, f.row) + cell.x + 0.5, f.row - 0.5);
                 return (
                   <rect key={`${f.id}-${k}`} x={p.x - 2} y={p.y - 2} width={4} height={4} className="free-st" fill={bandColor(cell.symbol, project?.symbols) ?? 'var(--muted)'}>
                     <title>{`Painted ${cell.symbol}, row ${f.row}`}</title>
@@ -803,6 +804,8 @@ export function Schematic({ computed: c, direction, units, selection, onSelect, 
           const sel = selection.kind === 'bust';
           const parts: React.ReactNode[] = [];
           const sr = b.shortRows;
+          // A cardigan front shows only what lies on its own half.
+          const onHalf = (x: number) => !c.half || (c.half.keep === 'right' ? x > c.half.cfX : x < c.half.cfX);
           if (sr && sr.pairs.length) {
             // Extra rows exist between each pair's turns: a stepped wedge, 2 rows per pair, in working order
             // (drawn over the rows that follow in knitting order).
@@ -814,9 +817,9 @@ export function Schematic({ computed: c, direction, units, selection, onSelect, 
             parts.push(<path key="wedge" d={path(poly, true)} className={`bust-wedge${sr.kind === 'dart' ? ' dart' : ''}`} />);
             if (sr.kind === 'dart') {
               // Draw the classic dart legs from the side edge to the tip.
-              for (const side of [-1, 1]) {
+              for (const side of c.half ? [c.half.keep === 'right' ? 1 : -1] : [-1, 1]) {
                 const edgeX = side < 0 ? c.leftEdge[base] : c.rightEdge[base];
-                const tipX = (c.leftEdge[base] + c.rightEdge[base]) / 2 + side * sr.tipX;
+                const tipX = rowCentre(c, base) + side * sr.tipX;
                 const a = S(edgeX, base);
                 const t = S(tipX, base + sr.extraRows / 2);
                 const z = S(edgeX, base + sr.extraRows);
@@ -828,6 +831,15 @@ export function Schematic({ computed: c, direction, units, selection, onSelect, 
                 const pr = sr.pairs[k];
                 const pl = S(w.leftX, w.from + 1);
                 const pr2 = S(w.rightX, w.from + 1);
+                if (sr.oneSide) {
+                  const at = sr.oneSide === 'left' ? pl : pr2;
+                  parts.push(
+                    <text key={`o${pr.index}`} x={at.x + (sr.oneSide === 'left' ? -4 : 4)} y={at.y + 3} textAnchor={sr.oneSide === 'left' ? 'end' : 'start'} className="turn-label">
+                      SR{2 * pr.index - 1}–{2 * pr.index} · {pr.rsWorked}
+                    </text>,
+                  );
+                  return;
+                }
                 parts.push(
                   <text key={`l${pr.index}`} x={pl.x - 4} y={pl.y + 3} textAnchor="end" className="turn-label">
                     SR{2 * pr.index - 1} · {pr.rsWorked}
@@ -838,7 +850,7 @@ export function Schematic({ computed: c, direction, units, selection, onSelect, 
                 );
               });
             }
-            const top = S((c.leftEdge[base] + c.rightEdge[base]) / 2, c.topDown ? base : base + sr.extraRows);
+            const top = S(rowCentre(c, base), c.topDown ? base : base + sr.extraRows);
             parts.push(
               <text key="srlabel" x={top.x} y={top.y - 4} textAnchor="middle" className="bust-label">
                 +{sr.extraRows} short rows after row {sr.afterRow} · +{len(sr.extraRows / rpc, units)} at centre front
@@ -848,6 +860,7 @@ export function Schematic({ computed: c, direction, units, selection, onSelect, 
           const d = b.darts;
           if (d) {
             for (const [key, x] of [['l', d.leftX], ['r', d.rightX]] as const) {
+              if (!onHalf(x)) continue;
               const left: Pt[] = [];
               const right: Pt[] = [];
               for (let r = 0; r <= top; r++) {
@@ -863,6 +876,7 @@ export function Schematic({ computed: c, direction, units, selection, onSelect, 
           }
           // Bust points.
           for (const [key, x] of [['l', b.apex.leftX], ['r', b.apex.rightX]] as const) {
+            if (!onHalf(x)) continue;
             const p = S(x, b.apex.row);
             parts.push(
               <g key={`apex${key}`} className="apex">

@@ -12,6 +12,7 @@ export function GarmentSettings({ project, update }: Props) {
   const g = project.garment;
   const construction = CONSTRUCTIONS.find((c) => c.id === g.construction)!;
   const opening = OPENINGS.find((o) => o.id === g.opening)!;
+  const [changes, setChanges] = useState<string[]>([]);
   return (
     <>
       <h4>Garment</h4>
@@ -23,14 +24,28 @@ export function GarmentSettings({ project, update }: Props) {
       </div>
       <div className="field">
         <label>Front opening</label>
-        <select value={g.opening} onChange={(e) => update((p) => setOpening(p, e.target.value as FrontOpening))}>
+        <select
+          value={g.opening}
+          onChange={(e) => {
+            const opening = e.target.value as FrontOpening;
+            const notes: string[] = [];
+            setOpening(project, opening, notes); // to say what changes
+            setChanges(notes);
+            update((p) => setOpening(p, opening));
+          }}
+        >
           {OPENINGS.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
         </select>
       </div>
       <p className="hint">
         {construction.description} {opening.description}
       </p>
-      {(g.construction !== 'panels' || g.opening !== 'closed') && <p className="hint warn">Recorded for now: the generator and cardigan fronts are not built yet.</p>}
+      {changes.length > 0 && (
+        <ul className="hint changes">
+          {changes.map((n, i) => <li key={i}>{n}</li>)}
+        </ul>
+      )}
+      {g.construction !== 'panels' && <p className="hint warn">Recorded for now: the contiguous generator is not built yet.</p>}
       <TagsField project={project} update={update} />
       <label className="check">
         <input type="checkbox" checked={project.settings.exportCredit !== false} onChange={(e) => update((p) => ({ ...p, settings: { ...p.settings, exportCredit: e.target.checked } }))} />

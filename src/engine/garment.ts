@@ -1,6 +1,8 @@
 // Project-level garment options: construction (panels / contiguous top-down) and front opening (closed /
 // cardigan), the tags they add, the credit line exports carry, and the schema 2 → 3 migration.
 
+import { flattenForCardigan, matchOpening } from './cardigan';
+import { applyEdgeTreatments } from './edgeTreatments';
 import type { Construction, FrontOpening, GarmentOptions, Project } from './model';
 
 export const CONSTRUCTIONS: { id: Construction; label: string; description: string }[] = [
@@ -37,9 +39,15 @@ export function setConstruction(p: Project, construction: Construction): Project
   return { ...p, garment: { ...p.garment, construction }, tags };
 }
 
-export function setOpening(p: Project, opening: FrontOpening): Project {
+/**
+ * Switch the front opening. Cardigan: each front becomes a mirrored Left front / Right front pair and the body is
+ * worked flat. Closed: the pairs are merged back into one front. `notes` gets what changed.
+ */
+export function setOpening(p: Project, opening: FrontOpening, notes: string[] = []): Project {
   if (p.garment.opening === opening) return p;
-  return { ...p, garment: { ...p.garment, opening } };
+  const next = matchOpening({ ...p, garment: { ...p.garment, opening } }, opening);
+  notes.push(...next.notes);
+  return opening === 'cardigan' ? flattenForCardigan(next.project, notes) : next.project;
 }
 
 /** Tags from free text: comma separated, trimmed, lower case, no duplicates or blanks. */
@@ -47,6 +55,20 @@ export function parseTags(text: string): string[] {
   const out: string[] = [];
   for (const t of text.split(',').map((x) => x.trim().toLowerCase())) if (t && !out.includes(t)) out.push(t);
   return out;
+}
+
+/**
+ * Bring newly added panels in line with the garment options: cardigan fronts split into a pair, the body flat,
+ * and the edge treatments applied (once the knitter has set them).
+ */
+export function conformToGarment(p: Project, notes: string[] = []): Project {
+  let next = p;
+  if (p.garment.opening === 'cardigan') {
+    const m = matchOpening(p, 'cardigan');
+    notes.push(...m.notes);
+    next = flattenForCardigan(m.project, notes);
+  }
+  return p.edges ? applyEdgeTreatments(next, notes) : next;
 }
 
 /** Lines for the footer of an export (empty when there is nothing to credit or the credit is switched off). */

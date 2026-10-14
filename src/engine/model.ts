@@ -191,6 +191,21 @@ export interface PatternSection {
   fromHeight: DimExpr;
   toHeight: DimExpr;
   pattern: StitchPattern;
+  /** Made by an edge treatment (Project → Edges); re-applying the treatment replaces it. */
+  edge?: EdgeTreatmentId;
+}
+
+/**
+ * One front of a cardigan. The panel's dimensions describe the whole front (both halves, as if closed at centre
+ * front, so necklines and bust shaping work as on a pullover front); the panel is the wearer's left or right half of it.
+ * As seen from the RS, the left front's centre-front edge is its left edge, the right front's its right edge.
+ */
+export interface FrontHalf {
+  side: 'left' | 'right';
+  /** The other front of the pair: edits to either are copied to the other (mirrored). null = unlinked. */
+  pair: Id | null;
+  /** Selvedge stitches at the centre-front edge (the side edge uses the panel's selvedge). */
+  cfSelvedge: number;
 }
 
 export type NecklineShape = 'round' | 'v' | 'square' | 'boat';
@@ -290,6 +305,10 @@ export interface Panel {
   neckline: Neckline | null;
   bust?: BustShaping | null;
   princess?: Princess | null;
+  /** Made by an edge treatment (e.g. the neckband strip); re-applying the treatment updates or removes it. */
+  edge?: EdgeTreatmentId;
+  /** Cardigan front: this panel is one half of the front it describes. */
+  half?: FrontHalf | null;
   /** A panel linked by the knitter (e.g. back ↔ front): dragging a waypoint moves the same-named one there too. */
   linkedTo?: Id | null;
   /** How the first row is made: cast on (default) or picked up from another panel (top-down fronts). */
@@ -299,6 +318,24 @@ export interface Panel {
   layout: { x: number; y: number; rotation: 0 | 90 | 180 | 270 };
   notes: string;
 }
+
+// ---------- edge treatments ----------
+
+export type EdgeTreatmentId = 'hem' | 'cuff' | 'neckband' | 'frontBands';
+export type EdgeStitch = 'rib1x1' | 'rib2x2' | 'garter' | 'seed' | 'custom';
+
+/** A ribbed (or garter, seed…) edge. `depth` is the rib height, or the band width for neck and front bands. */
+export interface EdgeTreatment {
+  enabled: boolean;
+  depth: DimExpr;
+  stitch: EdgeStitch;
+  /** Used when `stitch` is 'custom'. */
+  custom: StitchPattern;
+  /** Knit with the panel (a pattern section, or extra stitches for front bands) or added later (picked up / sewn on). */
+  method: 'with-panel' | 'later';
+}
+
+export type EdgeTreatments = Record<EdgeTreatmentId, EdgeTreatment>;
 
 // ---------- joins (annotation only) ----------
 
@@ -328,6 +365,8 @@ export interface Join {
   partner: EdgeRef[];
   ratio: { stitches: number; rows: number } | null; // pick-up ratio; null = the project default
   note: string;
+  /** Made by an edge treatment (an edge added later); re-applying the treatment replaces it. */
+  edge?: EdgeTreatmentId;
 }
 
 // ---------- project ----------
@@ -382,6 +421,8 @@ export interface Project {
   garment: GarmentOptions;
   /** Free-form labels; some are added for you (e.g. "contiguous" for that construction). */
   tags: string[];
+  /** Hem, cuff, neckband and front-band settings; absent = the defaults, not yet applied to any panel. */
+  edges?: EdgeTreatments;
   panels: Panel[];
   joins?: Join[];
   symbols?: CustomSymbol[];

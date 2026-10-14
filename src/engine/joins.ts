@@ -104,23 +104,28 @@ export function measureEdge(
   const n = c.neck;
   if (!n) return blankMeasure(label, 'This panel has no neckline.');
   const slopeRows = n.atStart ? n.splitRow - 1 : c.totalRows - n.splitRow;
+  // A cardigan front has one neck slope: the edge on its own side (the other one is its straight front edge).
+  const slopeEdge = c.half?.keep === 'left' ? c.neckLeft : c.half ? c.neckRight : c.neckLeft;
+  const slopes = n.oneSide ? 1 : 2;
   const neckRows = Array.from({ length: c.totalRows + 1 }, (_, r) => r).filter((r) => c.neckLeft[r] !== null);
   let slopeLen = 0;
   for (let i = 1; i < neckRows.length; i++) {
     const r = neckRows[i];
     const p = neckRows[i - 1];
-    slopeLen += Math.hypot(Math.abs(c.neckLeft[r]! - c.neckLeft[p]!) / spc, 1 / rpc);
+    slopeLen += Math.hypot(Math.abs(slopeEdge[r]! - slopeEdge[p]!) / spc, 1 / rpc);
   }
   const centreText = panel.neckline?.centre === 'hold' ? 'held' : n.atStart ? 'cast on' : 'bound off';
   const slopePick = roundNearest(slopeRows * perRow);
   return {
     ok: true,
     label,
-    rows: slopeRows * 2,
+    rows: slopeRows * slopes,
     stitches: n.centreSts,
-    lengthCm: n.centreSts / spc + 2 * slopeLen,
-    pickup: n.centreSts + 2 * slopePick,
-    parts: [`centre ${n.centreSts} sts ${centreText}`, `2 slopes of ${slopeRows} rows (${slopePick} each)`],
+    lengthCm: n.centreSts / spc + slopes * slopeLen,
+    pickup: n.centreSts + slopes * slopePick,
+    parts: n.oneSide
+      ? [`${n.centreSts} sts ${centreText} at the front edge`, `1 slope of ${slopeRows} rows (${slopePick})`]
+      : [`centre ${n.centreSts} sts ${centreText}`, `2 slopes of ${slopeRows} rows (${slopePick} each)`],
     rowRange: null,
   };
 }
