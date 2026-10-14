@@ -122,3 +122,47 @@ describe('every method, cup and size', () => {
     }
   });
 });
+
+describe('short rows: distance of the outermost turn from the side edge', () => {
+  const apexToSide = (f: Panel, edgeSts: number | null, joinInRound = false) => {
+    f.bust!.shortRows.span = 'apex-to-side';
+    f.bust!.shortRows.start = 'apex';
+    f.bust!.shortRows.edgeSts = edgeSts;
+    if (joinInRound) f.joinAt = f.waypoints.find((w) => w.name === 'underarm')!.id;
+  };
+  const turns = (p: Project, f: Panel) => {
+    const sr = computePanel(p, f, sizeId(p, 'M')).bust!.shortRows!;
+    return sr.pairs.map((x) => x.leftUnworked).sort((a, b) => a - b);
+  };
+
+  it('0 in the round: the outermost turn is at the side seam, the innermost at the bust point, evenly spaced', () => {
+    const { p, front } = setup('cd', (f) => apexToSide(f, 0, true));
+    const u = turns(p, front);
+    expect(u[0]).toBe(0);
+    const c = computePanel(p, front, sizeId(p, 'M'));
+    const half = (c.rightEdge[c.bust!.shortRows!.afterRow] - c.leftEdge[c.bust!.shortRows!.afterRow]) / 2;
+    expect(Math.abs(half - u[u.length - 1] - c.bust!.apex.offsetCm * c.stitchesPerCm)).toBeLessThanOrEqual(1);
+    const gaps = u.slice(1).map((x, i) => x - u[i]);
+    expect(Math.max(...gaps) - Math.min(...gaps)).toBeLessThanOrEqual(1);
+    expect(c.issues.filter((i) => i.severity === 'error')).toEqual([]);
+  });
+
+  it('flat rows keep at least 1 st; a number puts the outermost turn exactly there', () => {
+    const flat = setup('cd', (f) => apexToSide(f, 0));
+    expect(turns(flat.p, flat.front)[0]).toBe(1);
+    const three = setup('cd', (f) => apexToSide(f, 3));
+    expect(turns(three.p, three.front)[0]).toBe(3);
+  });
+
+  it('blank keeps the classic spacing (the last turn one step before the edge)', () => {
+    const { p, front } = setup('cd', (f) => apexToSide(f, null));
+    const sr = computePanel(p, front, sizeId(p, 'M')).bust!.shortRows!;
+    expect(Number.isInteger(sr.step)).toBe(true);
+    expect(Math.min(...sr.pairs.map((x) => x.leftUnworked))).toBeGreaterThanOrEqual(sr.step);
+  });
+
+  it('applies to horizontal darts too', () => {
+    const { p, front } = setup('cd', (f) => (f.bust!.shortRows.edgeSts = 1), 'horizontal-dart');
+    expect(turns(p, front)[0]).toBe(1);
+  });
+});

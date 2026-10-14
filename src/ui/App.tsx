@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { CascadePicker } from './components/CascadePicker';
 import { sizeText } from './components/EstMark';
 import type { Id } from '../engine/model';
 import { buildScope } from '../engine/measurements';
@@ -29,7 +30,7 @@ import { mergeSampleTable, migrationNotice, sampleProject, useProjectStore, type
 const VIEW_KEY = 'knitbit.view.v1';
 type CenterView = 'schematic' | 'chart' | 'layout' | 'measurements';
 
-function readView(): { sizeId?: Id; panelId?: Id; center?: CenterView; mode?: SizeMode; compare?: Id[]; align?: AlignRef } {
+function readView(): { sizeId?: Id; panelId?: Id; center?: CenterView; mode?: SizeMode; compare?: Id[]; align?: AlignRef; cascade?: Id[] | null } {
   try {
     return JSON.parse(localStorage.getItem(VIEW_KEY) ?? '{}');
   } catch {
@@ -50,6 +51,8 @@ export function App() {
   const wpDragStart = useRef<{ key: string; value: number } | null>(null);
   const [compareRaw, setCompare] = useState<Id[] | null>(view.compare ?? null); // null = all sizes
   const [align, setAlign] = useState<AlignRef>(view.align ?? 'hem');
+  const [cascadeRaw, setCascade] = useState<Id[] | null>(view.cascade ?? null); // sizes that follow waypoint drags; null = all
+  const cascade = cascadeRaw?.filter((id) => project.sizes.some((s) => s.id === id));
   const compare = (compareRaw ?? project.sizes.map((s) => s.id)).filter((id) => project.sizes.some((s) => s.id === id));
   const [measSel, setMeasSel] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
@@ -60,11 +63,11 @@ export function App() {
 
   useEffect(() => {
     try {
-      localStorage.setItem(VIEW_KEY, JSON.stringify({ sizeId: size?.id, panelId: panel?.id, center, mode: sizeMode, compare: compareRaw, align }));
+      localStorage.setItem(VIEW_KEY, JSON.stringify({ sizeId: size?.id, panelId: panel?.id, center, mode: sizeMode, compare: compareRaw, align, cascade: cascadeRaw }));
     } catch {
       /* ignore */
     }
-  }, [size?.id, panel?.id, center, sizeMode, compareRaw, align]);
+  }, [size?.id, panel?.id, center, sizeMode, compareRaw, align, cascadeRaw]);
 
   // One cache of computed panels per project version, shared by every view.
   const computedFor = useMemo(() => {
@@ -155,7 +158,7 @@ export function App() {
             if (w.id === first.id) return;
             const h = scope[`${w.key}.height`];
             if (h === undefined) return;
-            update((p) => dragHeight(p, panel.id, w.id, size.id, h + ((k === 'arrowup' ? 1 : -1) * step) / computed.rowsPerCm, mode), key);
+            update((p) => dragHeight(p, panel.id, w.id, size.id, h + ((k === 'arrowup' ? 1 : -1) * step) / computed.rowsPerCm, mode, cascade), key);
           } else {
             const sign = k === 'arrowright' ? 1 : -1;
             const parts = w.symmetric ? (['width'] as const) : (['left', 'right'] as const);
@@ -165,7 +168,7 @@ export function App() {
                 const v = scope[`${w.key}.${part}`];
                 if (v === undefined) continue;
                 const d = (sign * step * (part === 'width' ? 2 : 1)) / computed.stitchesPerCm;
-                q = dragWidth(q, panel.id, w.id, size.id, part, Math.max(0.5, v + d), mode);
+                q = dragWidth(q, panel.id, w.id, size.id, part, Math.max(0.5, v + d), mode, cascade);
               }
               return q;
             }, key);
@@ -273,6 +276,7 @@ export function App() {
                   {panel.inTheRound ? ' · in the round' : panel.joinAt ? ' · round below ' + (panel.waypoints.find((w) => w.id === panel.joinAt)?.name ?? '?') : ''}
                 </span>
                 <span className="spacer" />
+                {sizeMode === 'single' && size && <CascadePicker project={project} currentSizeId={size.id} cascade={cascade ?? null} setCascade={setCascade} />}
                 {sizeMode === 'single' && <Legend />}
                 {sizeMode === 'single' && panel.direction !== 'side-to-side' && (
                   <button className={drawLine ? 'active' : ''} onClick={() => setDrawLine(!drawLine)} title="Draw a shaping line: click its two ends (Esc cancels)">
@@ -341,11 +345,11 @@ export function App() {
                 const mode = sizeOnly ? 'size' : 'all';
                 if (ch.kind === 'height') {
                   const h0 = (scope[`${w.key}.height`] ?? w.heightCm) - w.heightCm;
-                  update((p) => dragHeight(p, panel.id, wpId, size.id, ch.h + h0, mode), key);
+                  update((p) => dragHeight(p, panel.id, wpId, size.id, ch.h + h0, mode, cascade), key);
                 } else {
                   if (wpDragStart.current?.key !== key) wpDragStart.current = { key, value: scope[`${w.key}.${ch.part}`] ?? 0 };
                   const start = wpDragStart.current.value;
-                  if (start > 0) update((p) => dragWidth(p, panel.id, wpId, size.id, ch.part, start * ch.factor, mode), key);
+                  if (start > 0) update((p) => dragWidth(p, panel.id, wpId, size.id, ch.part, start * ch.factor, mode, cascade), key);
                 }
               }}
               drawLine={drawLine && sizeMode === 'single'}

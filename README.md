@@ -126,7 +126,12 @@ Every size follows **proportionally**:
   `armhole_bo.height + (shoulder.height - armhole_bo.height) * 0.42`, so it keeps its relative place in every size
   (neighbours that refer back to it are skipped to avoid loops; the top or bottom waypoint keeps a fixed distance from
   its neighbour);
-- a dragged **width** multiplies its expression, `(cross_chest_back + 1) * 1.18`; repeated drags fold into one factor.
+- a dragged **width** multiplies its expression, `(cross_back_w + 1) * 1.18`; repeated drags fold into one factor.
+
+**Choose which sizes follow** with *Drags change: …* in the schematic header (a view setting, all sizes by default):
+tick the sizes that should follow the drag. Unticked sizes keep their values: the dragged waypoint (and its linked
+partner) gets a per-size fixed value in those sizes, at the value it had before the drag; sizes that already had a
+fixed value keep it. *This size only* unticks every other size.
 
 Hold **Alt** while dragging to change **this size only** (a per-size fixed value). Typed formulas are replaced when
 you drag (the old one stays in undo).
@@ -248,8 +253,13 @@ resets W, L, the no-width L, the bust point and its correction to the formulas a
 | **Horizontal dart** | Knitted horizontal darts are short rows: turns run from the side seam (or just below the underarm) to a tip that stops short of the bust point (default 2.5 cm). Drawn with dart legs. |
 | **Vertical darts** | Two darts on lines through the bust points. Each adds W/2, 2 stitches per shaping row (one each side of the dart line). They open from `waist.height` to 2 cm below the bust point and close from 2 cm above it to `underarm.height + armhole_depth × 0.5`. When RS rows run out, the shaping moves to every row (noted). The schematic widens accordingly. |
 
-In the saved file these are `bust.shortRows.span` (`"zone"` | `"apex-to-side"`) and `bust.shortRows.start`
-(`"centred"` | `"apex"`), both optional (default zone, centred). The schematic wedge is drawn in working order over
+**Outermost turn: sts from the side edge** (short rows and horizontal darts): blank = automatic (2 sts in; bust point
+→ side seam stops one step before the edge, as in the method above). A number puts the outermost turn exactly that
+many stitches from the side edge and spaces the turns evenly from the bust point to it; **0** turns right at the side
+seam (flat rows keep at least 1 st). The *bust point → side seam* preset sets 0, so the short rows reach the side seams.
+
+In the saved file these are `bust.shortRows.span` (`"zone"` | `"apex-to-side"`), `bust.shortRows.start`
+(`"centred"` | `"apex"`) and `bust.shortRows.edgeSts` (number or null), all optional (default zone, centred, automatic). The schematic wedge is drawn in working order over
 the rows that follow the insertion point, so its wide edge is where the first (longest) short rows are.
 
 For each size the helper lists every turn: stitches worked on the RS and WS short row, and stitches left unworked at

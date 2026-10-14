@@ -188,6 +188,7 @@ const panel = obj({
           zoneWidth: dimExpr,
           span: optional(oneOf('zone', 'apex-to-side')),
           start: optional(oneOf('centred', 'apex')),
+          edgeSts: optional(nullable(num)),
         }),
         dart: obj({ placement: oneOf('side', 'underarm'), tipGap: dimExpr }),
         vertical: obj({ bottom: dimExpr, gap: dimExpr, top: dimExpr }),

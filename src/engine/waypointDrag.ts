@@ -146,14 +146,53 @@ export function partnerWaypoint(project: Project, panel: Panel, wpId: Id): { par
   return pw ? { partner, wp: pw } : undefined;
 }
 
+/**
+ * Sizes that should not follow a drag keep their values: every waypoint dimension whose expression the drag changed
+ * gets a per-size fixed value (its value before the drag) in those sizes, unless it already has one.
+ */
+function pinSizes(before: Project, after: Project, panelIds: Id[], keep: Id[]): Project {
+  if (!keep.length) return after;
+  let out = after;
+  for (const pid of panelIds) {
+    const was = before.panels.find((p) => p.id === pid);
+    const now = out.panels.find((p) => p.id === pid);
+    if (!was || !now) continue;
+    const next = structuredClone(now);
+    let changed = false;
+    for (const w of next.waypoints) {
+      const old = was.waypoints.find((x) => x.id === w.id);
+      if (!old) continue;
+      for (const part of ['height', 'width', 'left', 'right'] as const) {
+        if (old[part].expr === w[part].expr) continue;
+        for (const sid of keep) {
+          if (sid in w[part].overrides) continue;
+          const v = values(before, was, sid)[`${waypointKey(w.name)}.${part}`];
+          if (Number.isFinite(v)) {
+            w[part].overrides = { ...w[part].overrides, [sid]: r4(v) };
+            changed = true;
+          }
+        }
+      }
+    }
+    if (changed) out = withPanel(out, next);
+  }
+  return out;
+}
+
+/** Sizes a drag must leave alone: every size except the dragged one that isn't in `cascade` (undefined = all follow). */
+function notCascaded(project: Project, sizeId: Id, cascade: Id[] | undefined): Id[] {
+  return cascade ? project.sizes.map((s) => s.id).filter((id) => id !== sizeId && !cascade.includes(id)) : [];
+}
+
 const heightOf = (project: Project, panel: Panel, wp: Waypoint, sizeId: Id) => values(project, panel, sizeId)[`${waypointKey(wp.name)}.height`];
 const widthOf = (project: Project, panel: Panel, wp: Waypoint, part: WidthPart, sizeId: Id) => values(project, panel, sizeId)[`${waypointKey(wp.name)}.${part}`];
 
 /**
  * Drag a waypoint's height. A linked partner's waypoint of the same name moves by the same amount (in this size,
- * then proportionally in the others).
+ * then proportionally in the others). `cascade`: the other sizes that follow the drag (undefined = all); the rest keep
+ * their values.
  */
-export function dragHeight(project: Project, panelId: Id, wpId: Id, sizeId: Id, h: number, mode: DragMode): Project {
+export function dragHeight(project: Project, panelId: Id, wpId: Id, sizeId: Id, h: number, mode: DragMode, cascade?: Id[]): Project {
   const panel = project.panels.find((p) => p.id === panelId);
   const wp = panel?.waypoints.find((w) => w.id === wpId);
   if (!panel || !wp) return project;
@@ -164,11 +203,11 @@ export function dragHeight(project: Project, panelId: Id, wpId: Id, sizeId: Id, 
     const ph = heightOf(project, pw.partner, pw.wp, sizeId);
     if (Number.isFinite(ph)) out = withPanel(out, placeHeight(out, pw.partner, pw.wp.id, sizeId, ph + (h - before), mode));
   }
-  return out;
+  return mode === 'all' ? pinSizes(project, out, [panelId, ...(pw ? [pw.partner.id] : [])], notCascaded(project, sizeId, cascade)) : out;
 }
 
-/** Drag a waypoint's width (or half). A linked partner's waypoint changes by the same proportion. */
-export function dragWidth(project: Project, panelId: Id, wpId: Id, sizeId: Id, part: WidthPart, value: number, mode: DragMode): Project {
+/** Drag a waypoint's width (or half). A linked partner's waypoint changes by the same proportion. `cascade`: as dragHeight. */
+export function dragWidth(project: Project, panelId: Id, wpId: Id, sizeId: Id, part: WidthPart, value: number, mode: DragMode, cascade?: Id[]): Project {
   const panel = project.panels.find((p) => p.id === panelId);
   const wp = panel?.waypoints.find((w) => w.id === wpId);
   if (!panel || !wp) return project;
@@ -185,7 +224,7 @@ export function dragWidth(project: Project, panelId: Id, wpId: Id, sizeId: Id, p
       if (pv > 0) out = withPanel(out, placeWidth(out, cur, pw.wp.id, sizeId, pp, pv * f, mode));
     }
   }
-  return out;
+  return mode === 'all' ? pinSizes(project, out, [panelId, ...(pw ? [pw.partner.id] : [])], notCascaded(project, sizeId, cascade)) : out;
 }
 
 /** Make the partner's waypoint match this one (height and/or width), proportionally in every size. */

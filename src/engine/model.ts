@@ -234,6 +234,12 @@ export interface BustShaping {
     span?: 'zone' | 'apex-to-side';
     /** Where the short rows start: centred on the bust point's height, or right at it. */
     start?: 'centred' | 'apex';
+    /**
+     * Stitches between the side edge and the outermost turn. Null/absent = automatic (2 sts, or the selvedge + 1;
+     * bust point → side seam: the last turn one step before the edge). A number puts the outermost turn exactly there
+     * and spaces the turns evenly up to it; 0 turns right at the side seam (flat rows keep at least 1 st).
+     */
+    edgeSts?: number | null;
   };
   dart: { placement: 'side' | 'underarm'; tipGap: DimExpr };
   vertical: { bottom: DimExpr; gap: DimExpr; top: DimExpr };

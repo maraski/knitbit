@@ -91,3 +91,43 @@ describe('dragging waypoints', () => {
     expect(scaleExpr('(waist / 2) * 1.25', 0.8)).toBe('waist / 2');
   });
 });
+
+describe('choosing which sizes follow a drag', () => {
+  it('ticked sizes follow; unticked sizes keep their values (as fixed values)', () => {
+    const { p, back, M } = setup();
+    const L = sizeId(p, 'L');
+    const XS = sizeId(p, 'XS');
+    const end = wpOf(back, 'armhole_end');
+    const before = Object.fromEntries(p.sizes.map((s) => [s.id, val(p, back.id, 'armhole_end.height', s.id)]));
+    const target = before[M] + 2;
+    const all = dragHeight(p, back.id, end.id, M, target, 'all');
+    const some = dragHeight(p, back.id, end.id, M, target, 'all', [L]);
+    expect(val(some, back.id, 'armhole_end.height', M)).toBeCloseTo(target, 2);
+    expect(val(some, back.id, 'armhole_end.height', L)).toBeCloseTo(val(all, back.id, 'armhole_end.height', L), 6);
+    expect(val(some, back.id, 'armhole_end.height', XS)).toBeCloseTo(before[XS], 4);
+    const wp = some.panels[0].waypoints.find((w) => w.id === end.id)!;
+    expect(Object.keys(wp.height.overrides).sort()).toEqual(p.sizes.map((s) => s.id).filter((id) => id !== M && id !== L).sort());
+  });
+
+  it('widths too, and the linked partner keeps the unticked sizes as well', () => {
+    const { p, back, front, M } = setup();
+    const q0 = linkPanels(p, back.id, front.id);
+    const XS = sizeId(q0, 'XS');
+    const w = wpOf(back, 'waist');
+    const b0 = val(q0, back.id, 'waist.width', XS);
+    const f0 = val(q0, front.id, 'waist.width', XS);
+    const q = dragWidth(q0, back.id, w.id, M, 'width', val(q0, back.id, 'waist.width', M) + 4, 'all', []);
+    expect(val(q, back.id, 'waist.width', XS)).toBeCloseTo(b0, 4);
+    expect(val(q, front.id, 'waist.width', XS)).toBeCloseTo(f0, 4);
+    expect(val(q, back.id, 'waist.width', M)).toBeGreaterThan(val(q0, back.id, 'waist.width', M) + 3.9);
+  });
+
+  it('a size that already has a fixed value keeps it', () => {
+    const { p, back, M } = setup();
+    const XS = sizeId(p, 'XS');
+    const end = wpOf(back, 'armhole_end');
+    end.height.overrides[XS] = 33;
+    const q = dragHeight(p, back.id, end.id, M, val(p, back.id, 'armhole_end.height', M) + 1, 'all', []);
+    expect(q.panels[0].waypoints.find((w) => w.id === end.id)!.height.overrides[XS]).toBe(33);
+  });
+});

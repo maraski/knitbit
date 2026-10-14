@@ -190,7 +190,11 @@ export function computeBust(ctx: BustContext): ComputedBust | null {
     const halfR = ctx.rightEdge[after] - cx;
     const hHalf = Math.min(halfL, halfR);
     const live = roundNearest(ctx.rightEdge[after] - ctx.leftEdge[after]);
-    const margin = Math.max(2, ctx.panel.selvedge.left + 1);
+    // Stitches kept between the side edge and the outermost turn: automatic, or the knitter's number (flat rows keep at
+    // least 1 st so the turn is a turn; in the round the front's edge is the side seam, so 0 is allowed).
+    const edgeSts = b.shortRows.edgeSts;
+    const fixedEdge = typeof edgeSts === 'number' && Number.isFinite(edgeSts);
+    const margin = fixedEdge ? Math.max(ctx.isFlatRow(after + 1) ? 1 : 0, Math.round(edgeSts)) : Math.max(2, ctx.panel.selvedge.left + 1);
     let inner: number;
     let outer: number;
     let tipX = 0;
@@ -200,7 +204,9 @@ export function computeBust(ctx: BustContext): ComputedBust | null {
       // side stitches ÷ turns per side, rounded down).
       inner = Math.max(1, Math.round(offsetSts));
       outer = hHalf - margin;
-      step = Math.floor((outer - inner) / n);
+      // Classic: every floor(side sts ÷ turns) sts, the last turn one step before the edge. With a fixed edge
+      // distance the turns are spread evenly from the bust point to exactly that distance from the edge.
+      step = fixedEdge ? (n > 1 ? (outer - inner) / (n - 1) : outer - inner) : Math.floor((outer - inner) / n);
       if (step < 1) {
         issues.push({ severity: 'error', message: `${n} turns per side don't fit between the bust point and the side seam (${Math.max(0, Math.floor(outer - inner))} sts). Reduce the length or stack a second dart.` });
         return out;
@@ -225,7 +231,11 @@ export function computeBust(ctx: BustContext): ComputedBust | null {
     const uMin = Math.round(hHalf - outer);
     const uMax = Math.round(hHalf - inner);
     let u: number[];
-    if (span === 'apex-to-side') u = Array.from({ length: n }, (_, j) => Math.round(hHalf - (inner + (n - 1 - j) * step)));
+    if (span === 'apex-to-side') {
+      u = fixedEdge
+        ? Array.from({ length: n }, (_, j) => Math.round(hHalf - (n === 1 ? inner : inner + ((n - 1 - j) * (outer - inner)) / (n - 1))))
+        : Array.from({ length: n }, (_, j) => Math.round(hHalf - (inner + (n - 1 - j) * step)));
+    }
     else if (n === 1) u = [Math.round((uMin + uMax) / 2)];
     else {
       const gaps = splitEvenly(uMax - uMin, n - 1, 'spread');

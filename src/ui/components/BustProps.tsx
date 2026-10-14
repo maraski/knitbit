@@ -137,6 +137,7 @@ export function BustProps({ ctx }: { ctx: PropsContext }) {
                       x.shortRows.start = 'apex';
                       x.shortRows.order = panel.direction === 'top-down' ? 'lengthening' : 'shortening';
                       x.shortRows.style = 'german';
+                      x.shortRows.edgeSts = 0; // the outermost turn at the side seam (flat rows keep 1 st)
                     })
                   }
                 >
@@ -144,6 +145,7 @@ export function BustProps({ ctx }: { ctx: PropsContext }) {
                 </button>
               </div>
               <ShortRowSettings b={b} set={set} />
+              <EdgeSts b={b} set={set} />
               <div className="row2">
                 <div className="field">
                   <label>Turns span</label>
@@ -164,7 +166,10 @@ export function BustProps({ ctx }: { ctx: PropsContext }) {
                 <ExprField label="Turn zone width (centred on the bust point)" value={b.shortRows.zoneWidth} onChange={setDim((x, d) => void (x.shortRows.zoneWidth = d), 'z')} fieldKey="z" {...common} />
               ) : (
                 <p className="small muted">
-                  First turn at the bust point, then every {cb?.shortRows?.step ? `${cb.shortRows.step} sts` : '… sts'} towards the side seam (stitches between the bust point and the side ÷ turns per side, rounded down).
+                  First turn at the bust point, then every {cb?.shortRows?.step ? `${fmtNum(Math.round(cb.shortRows.step * 10) / 10)} sts` : '… sts'} towards the side seam
+                  {typeof b.shortRows.edgeSts === 'number'
+                    ? `, spread evenly so the outermost turn is ${b.shortRows.edgeSts} st${b.shortRows.edgeSts === 1 ? '' : 's'} from the side edge.`
+                    : ' (stitches between the bust point and the side ÷ turns per side, rounded down; the last turn is one step before the edge).'}
                   {b.shortRows.start === 'apex' ? (panel.direction === 'top-down' ? ' They begin on the bust-point row.' : ' They finish at the bust-point row.') : ''}
                 </p>
               )}
@@ -181,6 +186,7 @@ export function BustProps({ ctx }: { ctx: PropsContext }) {
                 </select>
               </div>
               <ShortRowSettings b={b} set={set} />
+              <EdgeSts b={b} set={set} />
               <ExprField label="Tip stops short of the bust point by" value={b.dart.tipGap} onChange={setDim((x, d) => void (x.dart.tipGap = d), 't')} fieldKey="t" {...common} />
               <p className="hint">Knitted horizontal darts are worked as short rows: the unworked stitches at each side form the dart.</p>
             </>
@@ -270,6 +276,27 @@ export function BustProps({ ctx }: { ctx: PropsContext }) {
       m.right = right;
     });
   }
+}
+
+/** Stitches between the side edge and the outermost turn (blank = automatic). */
+function EdgeSts({ b, set }: { b: BustShaping; set: (fn: (x: BustShaping) => void, key?: string | null) => void }) {
+  const v = b.shortRows.edgeSts;
+  return (
+    <div className="field">
+      <label>Outermost turn: sts from the side edge</label>
+      <input
+        className="num"
+        type="number"
+        min={0}
+        placeholder="auto"
+        value={typeof v === 'number' ? v : ''}
+        onChange={(e) => set((x) => void (x.shortRows.edgeSts = e.target.value === '' ? null : Math.max(0, Math.round(Number(e.target.value)))), 'bust.edgeSts')}
+      />
+      <div className="hint">
+        0 = turn right at the side seam (flat rows keep at least 1 st). Blank = automatic: 2 sts in{(b.shortRows.span ?? 'zone') === 'apex-to-side' && b.method === 'shortrows' ? ', and bust point → side seam stops one step before the edge' : ''}.
+      </div>
+    </div>
+  );
 }
 
 function ShortRowSettings({ b, set }: { b: BustShaping; set: (fn: (x: BustShaping) => void, key?: string | null) => void }) {
