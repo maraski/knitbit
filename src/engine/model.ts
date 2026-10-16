@@ -219,6 +219,44 @@ export interface Neckline {
   side: 'rs' | 'any'; // which rows the side shaping uses
 }
 
+// ---------- contiguous yoke (top-down, set-in sleeve look; Susie Myers' contiguous method) ----------
+
+/** Increases at the seams and sleeves: kfb (pfb on WS rows), a M1L/M1R pair, or a symbol of your choice. */
+export type YokeIncrease = 'kfb' | 'm1' | 'other';
+
+/**
+ * The phases of a contiguous yoke. Lengths are cm, counts are stitches or rows as named; every value is an
+ * expression with per-size overrides. Row 1 is a RS row that places the markers and makes the first increases.
+ */
+export interface YokeSpec {
+  increase: { type: YokeIncrease; symbol: string };
+  /** Stitches in each shoulder seam group (2; more makes a rounder cap). */
+  seamSts: DimExpr;
+  /**
+   * Phase A, shoulders: 4 increases every row. 'cross-back' (default): until the back, after the markers move,
+   * is `backWidth` wide. 'length': until the seam is `length − shorten` long. Plus `extraRows` (rows) in both.
+   */
+  shoulder: { mode: 'cross-back' | 'length'; backWidth: DimExpr; length: DimExpr; shorten: DimExpr; extraRows: DimExpr };
+  /** Phase B, back neck: `perRow` increases every RS row over the first `rows` rows, spread across the back. */
+  backNeck: { perRow: DimExpr; rows: DimExpr; manual: Record<Id, number[][]> };
+  /** Phase C: markers move so each cap top has `topSts`; then 4 sleeve increases every row for `rapidRows` (rows). */
+  cap: { topSts: DimExpr; rapidRows: DimExpr; /** Lengthen the rapid phase until the sleeve reaches its width. */ solve: boolean };
+  /** Phase D: sleeve increases every second row until the sleeve (with the underarm cast-on) is this wide (cm around). */
+  sleeveWidth: DimExpr;
+  /**
+   * Where the yoke splits: 'back-length' (default) = rows from the back neck; 'armhole' = armhole_depth below the seam
+   * end; plus `extra` (cm). With `deepen` (default on, needs `cap.solve`), the yoke is deepened further until the
+   * sleeve reaches its width with at most `maxRapid` (fraction, default 0.5) of the armhole rows rapid.
+   */
+  depth: { mode: 'back-length' | 'armhole'; backLength: DimExpr; extra: DimExpr; deepen: boolean; maxRapid: DimExpr };
+  /** The body at the underarm (cm around, cast-ons included), and body increases low in the armhole (`zone` = fraction of its rows). */
+  body: { width: DimExpr; increases: boolean; zone: DimExpr };
+  /** Phase F: stitches cast on at each underarm (cm), shared by body and sleeve. */
+  underarm: { castOn: DimExpr };
+  /** Front neck, worked as increases at the front edges, then (pullover) a centre cast-on that joins the round. */
+  neck: { shape: NecklineShape; depth: DimExpr; centre: DimExpr };
+}
+
 export type BustMethod = 'shortrows' | 'horizontal-dart' | 'vertical-dart' | 'none';
 
 /**
@@ -309,6 +347,8 @@ export interface Panel {
   edge?: EdgeTreatmentId;
   /** A cardigan band strip: which band it is. */
   band?: BandRole;
+  /** A contiguous yoke: worked from these phases row by row, not from waypoints. */
+  yoke?: YokeSpec | null;
   /** Cardigan front: this panel is one half of the front it describes. */
   half?: FrontHalf | null;
   /** A panel linked by the knitter (e.g. back ↔ front): dragging a waypoint moves the same-named one there too. */

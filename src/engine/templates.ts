@@ -52,7 +52,7 @@ export const TEMPLATE_MEASUREMENTS: Record<TemplateId, string[]> = {
 
 // ---------- bodices ----------
 
-const FRONT_NECKS: Record<NecklineShape, { width: string; depth: string; centre: string; top: string }> = {
+export const FRONT_NECKS: Record<NecklineShape, { width: string; depth: string; centre: string; top: string }> = {
   round: { width: 'back_neck_width', depth: 'front_neck_drop', centre: 'back_neck_width * 0.4', top: 'back_neck_width' },
   v: { width: 'back_neck_width', depth: 'front_neck_drop * 2', centre: '0', top: 'back_neck_width' },
   square: { width: 'back_neck_width', depth: 'front_neck_drop + 2', centre: 'back_neck_width', top: 'back_neck_width' },

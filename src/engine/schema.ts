@@ -206,6 +206,22 @@ const panel = obj({
   linkedTo: optional(nullable(str)),
   edge: optional(edgeId),
   band: optional(oneOf('button', 'buttonhole', 'continuous')),
+  yoke: optional(
+    nullable(
+      obj({
+        increase: obj({ type: oneOf('kfb', 'm1', 'other'), symbol: str }),
+        seamSts: dimExpr,
+        shoulder: obj({ mode: oneOf('cross-back', 'length'), backWidth: dimExpr, length: dimExpr, shorten: dimExpr, extraRows: dimExpr }),
+        backNeck: obj({ perRow: dimExpr, rows: dimExpr, manual: rec(arr(arr(num))) }),
+        cap: obj({ topSts: dimExpr, rapidRows: dimExpr, solve: bool }),
+        sleeveWidth: dimExpr,
+        depth: obj({ mode: oneOf('back-length', 'armhole'), backLength: dimExpr, extra: dimExpr, deepen: bool, maxRapid: dimExpr }),
+        body: obj({ width: dimExpr, increases: bool, zone: dimExpr }),
+        underarm: obj({ castOn: dimExpr }),
+        neck: obj({ shape: oneOf('round', 'v', 'square', 'boat'), depth: dimExpr, centre: dimExpr }),
+      }),
+    ),
+  ),
   half: optional(nullable(obj({ side: oneOf('left', 'right'), pair: nullable(str), cfSelvedge: oneOf(0, 1, 2) }))),
   freeStitches: optional(arr(obj({ id: str, sizeId: str, row: num, x: num, symbol: str, mirror: bool }))),
   shapingLines: optional(

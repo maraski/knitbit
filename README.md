@@ -419,6 +419,37 @@ multiple (with how many more or fewer to pick up); buttonholes within 2 rows of 
 than one band stitch either side, or closer than 2 sts / 4 rows to each other; buttons outside the front edge; and a
 closed width short of the whole front by more than the seam tolerance.
 
+## Contiguous yoke (generator)
+
+The contiguous method was developed by Susie Myers (SusieM on Ravelry). `generateYoke` in `src/engine/contiguous.ts`
+works a contiguous yoke row by row from its phase parameters (each an expression with per-size values). Cast on the
+back neck (`back_neck_width` × stitch gauge) plus 6; row 1 (RS) is *edge · marker · seam · marker · back neck ·
+marker · seam · marker · edge*. Zones, as seen from the RS: left front, left seam/sleeve, back, right seam/sleeve,
+right front.
+
+| Phase | Default | What happens |
+|---|---|---|
+| A, shoulders | until the back, after the markers move, is `cross_back_w + 1` (or *length* mode: `sqrt(((back_shoulder_width − back_neck_width)/2)² + shoulder_drop²)` − shorten) + extra rows (0) | 4 increases every row, one each side of each seam group (M1R before a marker, M1L after; or kfb/pfb, or a symbol) |
+| B, back neck | 2 increases on RS rows 1–7 (the first 8 rows), during A | spread evenly and symmetrically across the back, offset half a gap each time; per-size positions by hand |
+| Front neck | the neckline's depth (round: `front_neck_drop`), centre `back_neck_width × 0.4` | increases inside the edge stitch at each front edge; the neck opening at the top is the back neck, so the centre cast-on = back neck sts − 2 × increases per side. Pullover: cast on at the end of RS row R and join in the round. Cardigan: each front casts on (centre − `closing_r`) / 2 at its front edge |
+| C, cap rapid | markers move so each cap top has 6 sts; rapid rows `armhole_depth / 6`, lengthened until the sleeve can reach its width | 4 increases every row, at both ends of each sleeve |
+| D, cap slow | until the sleeve + underarm cast-on = `bicep + ease.bicep` | 4 increases every second row |
+| E, armhole | split at `shoulder_drop + armhole_depth − back_neck_drop` from the neck (or *armhole* mode: `armhole_depth` below the seam end), plus extra depth (0 cm), deepened further until the cap is at most half rapid | straight, except body increases on the body side of the armhole markers in the lower 60 % of the armhole |
+| F, split | underarm cast-on `underarm_co` each side; raised if the body increases don't fit | the sleeves are held; the body continues |
+
+**Deepening.** The back-length split fits the body, but at a typical gauge the sleeve can't grow fast enough in a
+short armhole (2 sts per sleeve per row at most). So the yoke is deepened a row at a time (up to 15 cm) until the
+sleeve reaches its width with at most *Rapid rows at most* (default 0.5) of the armhole rows rapid: a middle way
+between the back length (body fit) and `armhole_depth` below the seam end (sleeve fit). With the sample table at 22
+× 30 that adds 1.3 cm (4XS) to 4 cm (M) to 9 cm (4X); allowing 0.6 / 0.67 / 0.75 rapid adds 3 / 2.3 / 1.7 cm in M and
+7.3 / 6.3 / 5.3 cm in 4X. Switch deepening off to split exactly at the back length (a sleeve that falls short is
+then a warning).
+
+Body increases bring the body at the underarm (cast-ons included) to `upper_chest + ease`; without them the underarm
+cast-on is (body target − yoke body) / 2. The result lists every row's zone counts, increases (with positions and
+symbols), cast-ons and marker moves, a phase table, the held edges, and warnings (e.g. a sleeve that can't reach its
+width, a cap that is mostly rapid, a neck that closes below the split).
+
 ## Short-row segments
 
 A segment shaped with **short rows** keeps all its stitches live: the turns shape the outline (e.g. a shoulder slope)
