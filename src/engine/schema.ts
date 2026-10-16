@@ -123,6 +123,7 @@ const intList = nullable(arr(num));
 
 const align = oneOf('end', 'start', 'center');
 const edgeId = oneOf('hem', 'cuff', 'neckband', 'frontBands');
+const bandAttach = oneOf('pickup', 'sideways', 'integrated');
 const edgeTreatment = obj({ enabled: bool, depth: dimExpr, stitch: oneOf('rib1x1', 'rib2x2', 'garter', 'seed', 'custom'), custom: stitchPattern, method: oneOf('with-panel', 'later') });
 const segmentMethod = tagged('kind', {
   auto: {
@@ -204,6 +205,7 @@ const panel = obj({
   startFrom: optional(oneOf('caston', 'pickup')),
   linkedTo: optional(nullable(str)),
   edge: optional(edgeId),
+  band: optional(oneOf('button', 'buttonhole', 'continuous')),
   half: optional(nullable(obj({ side: oneOf('left', 'right'), pair: nullable(str), cfSelvedge: oneOf(0, 1, 2) }))),
   freeStitches: optional(arr(obj({ id: str, sizeId: str, row: num, x: num, symbol: str, mirror: bool }))),
   shapingLines: optional(
@@ -228,7 +230,7 @@ const panel = obj({
 
 const edgeRef = obj({
   panelId: str,
-  edge: tagged('kind', { side: { side: oneOf('left', 'right'), from: str, to: str }, bottom: {}, top: {}, neck: {} }),
+  edge: tagged('kind', { side: { side: oneOf('left', 'right'), from: str, to: str }, bottom: {}, top: {}, neck: {}, front: {} }),
 });
 
 const project = obj({
@@ -260,6 +262,17 @@ const project = obj({
   fit: obj({ cup: oneOf('ab', 'cd', 'ef', 'gh', 'custom'), hem: optional(oneOf('high_hip', 'hip_seat_straight', 'hip_seat_curvy')), broadBack: optional(bool) }),
   garment: obj({ construction: oneOf('panels', 'contiguous'), opening: oneOf('closed', 'cardigan') }),
   tags: arr(str),
+  cardigan: optional(
+    obj({
+      bands: oneOf('separate', 'continuous'),
+      attach: obj({ button: bandAttach, buttonhole: bandAttach, continuous: oneOf('pickup', 'sideways') }),
+      buttonholeSide: oneOf('left', 'right'),
+      overlap: dimExpr,
+      closing: dimExpr,
+      buttons: obj({ count: num, top: dimExpr, bottom: dimExpr, manual: rec(arr(num)) }),
+      buttonhole: obj({ style: oneOf('yo-k2tog', 'symbol'), symbol: str, width: num, note: str }),
+    }),
+  ),
   edges: optional(obj({ hem: edgeTreatment, cuff: edgeTreatment, neckband: edgeTreatment, frontBands: edgeTreatment })),
   panels: arr(panel),
   joins: optional(arr(obj({ id: str, name: str, tag: oneOf('seam', 'pickup', 'live', 'bindoff', 'caston', 'free'), edges: arr(edgeRef), partner: arr(edgeRef), ratio: nullable(obj({ stitches: num, rows: num })), note: str, edge: optional(edgeId) }))),

@@ -47,7 +47,9 @@ export function setOpening(p: Project, opening: FrontOpening, notes: string[] = 
   if (p.garment.opening === opening) return p;
   const next = matchOpening({ ...p, garment: { ...p.garment, opening } }, opening);
   notes.push(...next.notes);
-  return opening === 'cardigan' ? flattenForCardigan(next.project, notes) : next.project;
+  const flat = opening === 'cardigan' ? flattenForCardigan(next.project, notes) : next.project;
+  // Bands follow the opening (made for a cardigan, removed for a pullover) once edge treatments are set.
+  return flat.edges ? applyEdgeTreatments(flat, notes) : flat;
 }
 
 /** Tags from free text: comma separated, trimmed, lower case, no duplicates or blanks. */

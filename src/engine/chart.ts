@@ -10,6 +10,7 @@ import { freeCells, freeFor, freeInterior } from './free';
 import { lineX } from './lines';
 import { rowCentre, type ComputedPanel, type ComputedSegment, type Edge, type ShapeEvent } from './panel';
 import { defaultSymbol, symbolInfo, type SymbolInfo } from './symbols';
+import { buttonholeCells, buttonPlan } from './buttons';
 
 /** '' = no stitch (outside the panel), 'k' = plain stitch, 'h' = held (live, not worked), else a symbol id. */
 export type Cell = string;
@@ -52,6 +53,15 @@ export interface ChartRepeat {
   startCol: number;
 }
 
+/** A vertical stripe of columns worked in another pattern, e.g. an integrated front band. */
+export interface ChartStripe {
+  name: string;
+  fromCol: number; // first column
+  toCol: number; // one past the last
+  multiple: number;
+  offset: number;
+}
+
 export interface Chart {
   panelId: Id;
   sizeId: Id;
@@ -62,6 +72,9 @@ export interface Chart {
   topDown: boolean;
   castOn: number;
   repeats: ChartRepeat[];
+  stripes: ChartStripe[];
+  /** Knit rows with a buttonhole, by row: which button (1 = top). */
+  buttonholeRows: Record<number, number[]>;
   legend: SymbolInfo[];
 }
 
@@ -278,10 +291,33 @@ export function buildChart(project: Project, panel: Panel, c: ComputedPanel): Ch
     return { key: String(r), knitRow: r, label: String(r), shortRow: null, round, rs, rtl: round || rs, cells, refs, free, worked, count: c.counts[r] };
   };
 
+  // Buttonholes worked on this panel (a buttonhole band, or a front with an integrated band).
+  const plan = buttonPlan(project, c.sizeId);
+  const holeCells = buttonholeCells(project);
+  const holes = (plan?.holes ?? []).filter((h) => h.panelId === panel.id);
+  const holesByRow = new Map<number, typeof holes>();
+  for (const h of holes) holesByRow.set(h.row, [...(holesByRow.get(h.row) ?? []), h]);
+  const buttonholeRows: Record<number, number[]> = {};
+  const withHoles = (row: ChartRow): ChartRow => {
+    const hs = row.shortRow ? undefined : holesByRow.get(row.knitRow);
+    if (!hs) return row;
+    for (const h of hs) {
+      holeCells.forEach((sym, k) => {
+        const kk = col(h.x) + k;
+        if (kk >= 0 && kk < cols && row.cells[kk] !== '' && row.cells[kk] !== HELD) {
+          row.cells[kk] = sym;
+          delete row.refs[kk];
+        }
+      });
+      (buttonholeRows[row.knitRow] ??= []).push(h.index + 1);
+    }
+    return row;
+  };
+
   const rows: ChartRow[] = [];
   const sr = c.bust?.shortRows;
   for (let r = 1; r <= T; r++) {
-    rows.push(knitRow(r));
+    rows.push(withHoles(knitRow(r)));
     if (sr && sr.pairs.length && r === sr.afterRow) rows.push(...shortRows(c, sr, col, cols, r));
   }
   if (sr && sr.pairs.length && sr.afterRow === 0) rows.unshift(...shortRows(c, sr, col, cols, 0));
@@ -296,6 +332,14 @@ export function buildChart(project: Project, panel: Panel, c: ComputedPanel): Ch
     startCol: col(c.leftEdge[Math.max(0, Math.min(T, s.fromRow))]),
   }));
 
+  // An integrated front band: the columns next to the front-edge selvedge.
+  const stripes: ChartStripe[] = [];
+  if (c.half && c.half.bandSts > 0 && c.half.band) {
+    const sel = panel.half?.cfSelvedge ?? 0;
+    const start = c.half.keep === 'right' ? c.half.cfX + sel : c.half.cfX - sel - c.half.bandSts;
+    stripes.push({ name: `Band: ${c.half.band.name}`, fromCol: col(start), toCol: col(start) + c.half.bandSts, multiple: c.half.band.multiple, offset: c.half.band.offset });
+  }
+
   // Legend: what the chart actually uses.
   const used = new Set<string>();
   for (const row of rows) for (const v of row.cells) if (v !== '') used.add(v);
@@ -307,7 +351,7 @@ export function buildChart(project: Project, panel: Panel, c: ComputedPanel): Ch
   });
   const legend = ids.map((id) => cellInfo(id, project.symbols));
 
-  return { panelId: c.panelId, sizeId: c.sizeId, cols, x0, rows, topDown: c.topDown, castOn: c.counts[0] ?? 0, repeats, legend };
+  return { panelId: c.panelId, sizeId: c.sizeId, cols, x0, rows, topDown: c.topDown, castOn: c.counts[0] ?? 0, repeats, stripes, buttonholeRows, legend };
 }
 
 function shortRows(c: ComputedPanel, sr: NonNullable<NonNullable<ComputedPanel['bust']>['shortRows']>, col: (x: number) => number, cols: number, after: number): ChartRow[] {

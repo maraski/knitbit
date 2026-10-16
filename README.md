@@ -70,6 +70,8 @@ Waypoint dimensions and custom measurements are expressions. They evaluate to **
 | Operators | `+ - * / ^` and parentheses; `^` is right-associative; unary minus binds looser than `^` (`-2^2 = -4`) |
 | Functions | `min(a, b, …)`, `max(a, b, …)`, `abs(x)`, `sqrt(x)`, `round(x[, step])`, `floor(x[, step])`, `ceil(x[, step])`, `clamp(x, lo, hi)` |
 | Armhole | `armhole_len`: the armhole a sleeve is sewn into (see Templates) |
+| Cardigan bands | `band_w` (front band width), `band_overlap`, `closing_r` (width taken off the whole front); 0 without bands (see Cardigan bands and buttons) |
+| Joined edges | `edge_len` (cm), `edge_rows`, `edge_pickup` (sts at the join's ratio): the edges a strip is joined to, e.g. a band's `edge_pickup * st_w` |
 
 Examples:
 
@@ -364,12 +366,58 @@ a stitch (1×1 rib = 2n, 2×2 rib = 4n + 2, garter, seed = 2n + 1, or a custom m
 | Hem | a *Hem rib* pattern section at the lower edge of the back and fronts | a pick-up join on their lower edges |
 | Cuff | a *Cuff rib* section on the sleeves | a pick-up join on the sleeves' lower edges |
 | Neckband | (not available for necklines yet) | a *Neckband* strip, picked up from every neckline |
-| Front bands | stored; bands and buttons are made by the band helper | stored |
+| Front bands | integrated: extra stitches at each front edge | picked up, or knit sideways and sewn on (per band, see below) |
 
 Changing any setting applies them all; things made by a treatment are marked (`edge`) and replaced the next time, so
 nothing is duplicated. Sections you add by hand are left alone, except the templates' *Hem rib* / *Cuff rib*, which
 the treatment takes over. New panels pick up the settings once you have changed them. Defaults: hem off, cuff 2×2
 rib 5 cm with the sleeve, neckband 1×1 rib 2.5 cm added later, front bands 1×1 rib 2.5 cm added later.
+
+## Cardigan bands and buttons
+
+With a cardigan and **Front bands** switched on (Project → Edges), the front bands are made from these settings:
+
+- **Bands:** separate button and buttonhole bands, or **one continuous band** up the right front, around the back
+  neck and down the left front (the back neck counts only when the back has a neckline; a neckband switched on at the
+  same time is flagged).
+- **Buttonholes on:** the right front (default) or the left.
+- **Attachment, per band:**
+  - *Picked up* along the edge: a strip whose width is `edge_pickup * st_w`, i.e. the pick-up helper's count at
+    the join's ratio (default 3 sts per 4 rows), rounded to the band's multiple; worked for `band_w` (rows = band
+    width × row gauge). A pick-up join from the front edge(s) to the strip's lower edge.
+  - *Knit sideways* and sewn on: `band_w` across and `edge_len` long (rows = edge length × row gauge). A seam join
+    between the front edge and the strip's side.
+  - *Integrated:* no strip; each front gets `band_w` of extra stitches (rounded to the band's multiple) between its
+    front-edge selvedge and the body, shown as a stripe on the chart. The neck takes them off with its centre stitches.
+- **Band width** is the front bands' width (Edges); **overlap** (`band_overlap`, default `band_w`) is how far the
+  fronts overlap when closed.
+
+**Closing width.** Each front = (whole front − `closing_r`) / 2, with `closing_r = 2 × band_w − band_overlap` (an
+editable expression with per-size values). Closed, the two fronts plus both bands less the overlap make the whole
+front: 2 × (F − 2w + o)/2 + 2w − o = F. With 2.5 cm bands fully overlapping, `closing_r` = 2.5 cm, so in M the hem
+is (62.75 − 2.5) / 2 = 30.13 cm per front. Integrated bands add their stitches on top. The settings show the formula
+with this size's numbers plugged in. The cut at the front edge is a whole number of stitches; each front's body is
+then rounded to its pattern multiple as before.
+
+**Buttons:** a count, the distance from the top of the front edge (where the neck starts) to the first button, and
+from the lower edge to the last; evenly spaced in between. Drag a button on either front's schematic to move it in
+that size (the size then keeps its own positions; *Space evenly again* resets it). Positions become:
+
+| Buttonhole band | Buttonholes worked |
+|---|---|
+| Picked up | in the middle row of the band, at stitch positions along it (the lower-edge end is on the right for the right front and a continuous band, on the left for the left front) |
+| Knit sideways | on the band row at the button's height, centred across the band |
+| Integrated | on the front's row at the button's height, centred in the band stitches |
+
+The **buttonhole** is a one-row *yo, k2tog* by default, or any symbol (built-in or yours) a number of stitches wide,
+with a note. Charts show the buttonhole cells and mark each buttonhole row in the right margin; the schematic shows
+the band beside each front (dashed; tinted when integrated), buttons (filled) on one front and slots on the other,
+and the buttonholes on the band strip. The Layout shows the band strips upright beside the fronts.
+
+**Checks:** a band shorter than 90 % or longer than 105 % of its edge; a pick-up count that doesn't fit the band's
+multiple (with how many more or fewer to pick up); buttonholes within 2 rows of a picked-up band's edge, with less
+than one band stitch either side, or closer than 2 sts / 4 rows to each other; buttons outside the front edge; and a
+closed width short of the whole front by more than the seam tolerance.
 
 ## Short-row segments
 
@@ -556,6 +604,14 @@ Saved files are `*.knitbit.json`. All lengths are in cm, whatever the display un
                "opening": "closed" | "cardigan" },
   "tags": ["contiguous"],                      // free-form; "contiguous" is added/removed with that construction
   "edges": { "hem": Edge, "cuff": Edge, "neckband": Edge, "frontBands": Edge },   // optional (see Edge treatments)
+  "cardigan": {                                // optional (see Cardigan bands and buttons)
+    "bands": "separate" | "continuous",
+    "attach": { "button": "pickup" | "sideways" | "integrated", "buttonhole": …, "continuous": "pickup" | "sideways" },
+    "buttonholeSide": "right" | "left",
+    "overlap": Dim, "closing": Dim,            // band_overlap, closing_r
+    "buttons": { "count": 7, "top": Dim, "bottom": Dim, "manual": { "<sizeId>": [46.2, 38.8, …] } },
+    "buttonhole": { "style": "yo-k2tog" | "symbol", "symbol": "buttonhole", "width": 2, "note": "" }
+  },
   "panels": [Panel],
   "joins": [Join],                             // optional
   "symbols": [{ "id": "custom_…", "label": "Twisted decrease", "abbr": "tw",
@@ -619,6 +675,7 @@ A **Panel**:
                    "pair": "panel_…" | null,     //   the mirrored other front; null = unlinked
                    "cfSelvedge": 0-2 },
   "edge": "neckband",                          // optional: made by an edge treatment
+  "band": "button" | "buttonhole" | "continuous",   // optional: a cardigan band strip
   "layout": { "x": 0, "y": 0, "rotation": 0 | 90 | 180 | 270 },
   "notes": ""
 }
@@ -628,7 +685,8 @@ A **Panel**:
 
 `Edge` is `{ "enabled": true, "depth": Dim, "stitch": "rib1x1" | "rib2x2" | "garter" | "seed" | "custom",
 "custom": { "name": "custom", "multiple": 2, "offset": 0 }, "method": "with-panel" | "later" }`. Joins made by an
-edge treatment carry `"edge": "hem" | "cuff" | "neckband" | "frontBands"`.
+edge treatment carry `"edge": "hem" | "cuff" | "neckband" | "frontBands"`. Join edges may also be
+`{ "kind": "front" }`: a cardigan front's straight front edge, from the lower edge up to the neck.
 
 `Method` is one of:
 - `{ "kind": "auto", "side": "rs"|"ws"|"any", "align": "end"|"start"|"center", "order": "spread"|"shortFirst"|"longFirst", "rhythm": {"type":"auto"} | {"type":"fixed","every":4} | {"type":"mixed","a":4,"b":6}, "perSide": 1 }`

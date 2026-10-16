@@ -485,6 +485,31 @@ function ChartCanvas({ chart, c, panel, update, brush, setBrush, custom, cs, set
     });
   }
 
+  // Vertical stripes (an integrated front band): tinted columns with a label above.
+  const stripes: React.ReactNode[] = chart.stripes.map((st, k) => {
+    const xs = dcols.map((d, xi) => ('col' in d && d.col >= st.fromCol && d.col < st.toCol ? xi : -1)).filter((xi) => xi >= 0);
+    if (!xs.length) return null;
+    const x1 = GUT + Math.min(...xs) * cs;
+    const x2 = GUT + (Math.max(...xs) + 1) * cs;
+    return (
+      <g key={`st${k}`}>
+        <rect x={x1} y={TOP} width={x2 - x1} height={H} className="chart-stripe" />
+        <text x={(x1 + x2) / 2} y={TOP - 14} textAnchor="middle" className="repeat-label">{st.name}</text>
+      </g>
+    );
+  });
+  // Buttonhole rows: a mark in the right gutter.
+  const holeMarks: React.ReactNode[] = [];
+  display.forEach((r, i) => {
+    const b = !r.shortRow && chart.buttonholeRows[r.knitRow];
+    if (!b) return;
+    holeMarks.push(
+      <text key={`bh${i}`} x={GUT * 2 + W + 34} y={TOP + i * cs + cs / 2 + 3.5} className="buttonhole-mark">
+        ◦ buttonhole {b.join(', ')}
+      </text>,
+    );
+  });
+
   // Pattern sections: a bracket in the left gutter and repeat lines.
   const repeats: React.ReactNode[] = chart.repeats.map((rp, k) => {
     const idx = display.map((r, i) => (!r.shortRow && r.knitRow >= rp.fromRow && r.knitRow <= rp.toRow ? i : -1)).filter((i) => i >= 0);
@@ -573,7 +598,7 @@ function ChartCanvas({ chart, c, panel, update, brush, setBrush, custom, cs, set
         onPointerLeave={() => setHover(null)}
         onContextMenu={(e) => brush.on && e.preventDefault()}
       >
-        <svg width={GUT * 2 + W + 30} height={TOP + H + BOT} className="chart-svg">
+        <svg width={GUT * 2 + W + 30 + (holeMarks.length ? 110 : 0)} height={TOP + H + BOT} className="chart-svg">
           <defs>
             <pattern id="chart-grid" patternUnits="userSpaceOnUse" x={GUT} y={TOP} width={cs} height={cs}>
               <rect width={cs} height={cs} fill="var(--cell)" />
@@ -589,6 +614,8 @@ function ChartCanvas({ chart, c, panel, update, brush, setBrush, custom, cs, set
           {tens}
           {colLabels}
           {repeats}
+          {stripes}
+          {holeMarks}
           <text x={GUT + W / 2} y={chart.topDown ? TOP + H + BOT - 2 : TOP + H + BOT - 2} textAnchor="middle" className="chart-note">
             {chart.topDown ? `Worked top-down: row 1 at the top · ${panelStart === 'pickup' ? 'pick up' : 'cast on'} ${chart.castOn} sts` : `Cast on ${chart.castOn} sts`}
           </text>

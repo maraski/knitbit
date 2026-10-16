@@ -54,9 +54,17 @@ export function edgeLabel(project: Project, ref: EdgeRef): string {
       return `${panel.name} · lower edge`;
     case 'top':
       return `${panel.name} · upper edge`;
+    case 'front':
+      return `${panel.name} · front edge`;
     default:
       return `${panel.name} · neckline`;
   }
+}
+
+/** Rows along a cardigan front's straight front edge (below the neck). */
+export function frontEdgeRows(c: ComputedPanel): number {
+  if (!c.neck) return c.totalRows;
+  return c.neck.atStart ? c.totalRows - c.neck.splitRow + 1 : c.neck.splitRow - 1;
 }
 
 function blankMeasure(label: string, error: string): EdgeMeasure {
@@ -98,6 +106,14 @@ export function measureEdge(
     if (c.neckLeft[r] !== null) sts -= roundNearest(c.neckRight[r]! - c.neckLeft[r]!);
     sts = Math.max(0, sts);
     return { ok: true, label, rows: 0, stitches: sts, lengthCm: sts / spc, pickup: sts, parts: [`${sts} sts`], rowRange: null };
+  }
+
+  if (e.kind === 'front') {
+    // A cardigan front's straight front edge, from the lower edge up to where the neck takes stitches off it.
+    if (!c.half) return blankMeasure(label, 'Only a cardigan front has a front edge.');
+    const rows = frontEdgeRows(c);
+    const pickup = roundNearest(rows * perRow);
+    return { ok: true, label, rows, stitches: 0, lengthCm: rows / rpc, pickup, parts: [`${rows} rows`], rowRange: c.topDown ? [c.totalRows - rows + 1, c.totalRows] : [1, rows] };
   }
 
   // Neckline: centre stitches plus two slopes.

@@ -18,12 +18,16 @@ import { JoinProps } from './components/JoinProps';
 import { MeasurementProps, SizesProps } from './components/MeasurementProps';
 import { MeasurementsView } from './components/MeasurementsView';
 import { Properties, type PropsContext } from './components/Properties';
-import { Schematic } from './components/Schematic';
+import { Schematic, type SchematicBands } from './components/Schematic';
+import { len } from './format';
 import { Sidebar } from './components/Sidebar';
 import { Toolbar } from './components/Toolbar';
 import { downloadText, pickTextFile, safeFilename } from './fileio';
 import { markerActions } from './markerActions';
-import { panelJoins } from '../engine/joins';
+import { frontEdgeRows, panelJoins, type PanelCache } from '../engine/joins';
+import { buttonPlan } from '../engine/buttons';
+import { bandOnFront, setButtonPosition } from '../engine/bands';
+import { applyEdgeTreatments } from '../engine/edgeTreatments';
 import { PANEL_SELECTION, type Selection } from './selection';
 import { mergeSampleTable, migrationNotice, sampleProject, useProjectStore, type Notice } from './store';
 
@@ -91,6 +95,42 @@ export function App() {
   }, [project, panel, size]);
 
   const markers = useMemo(() => (panel && size ? markerActions(update, panel.id, size.id) : undefined), [update, panel?.id, size?.id]);
+
+  // Cardigan: the band and buttons on the shown front (or the buttonholes on a band strip).
+  const bands = useMemo((): SchematicBands | undefined => {
+    if (!panel || !size || !computed?.ok || (!panel.half && !panel.band)) return undefined;
+    const cache: PanelCache = new Map();
+    const plan = buttonPlan(project, size.id, cache);
+    const holes = (plan?.holes ?? []).filter((h) => h.panelId === panel.id).map((h) => ({ row: h.row, x: h.x, index: h.index }));
+    if (panel.band) return { bandX: [0, 0], integrated: false, label: '', edgeRows: 0, buttons: [], kind: 'hole', holes, holeWidth: plan?.holeWidth ?? 2 };
+    const half = computed.half!;
+    const onFront = bandOnFront(project, panel.half!.side);
+    const bandW = scope.band_w ?? 0;
+    let bandX: [number, number] = [0, 0];
+    if (onFront?.attach === 'integrated') {
+      const sel = panel.half!.cfSelvedge;
+      const start = half.keep === 'right' ? half.cfX + sel : half.cfX - sel - half.bandSts;
+      bandX = [start, start + half.bandSts];
+    } else if (onFront) {
+      const w = bandW * computed.stitchesPerCm;
+      bandX = half.keep === 'right' ? [half.cfX - w, half.cfX] : [half.cfX, half.cfX + w];
+    }
+    const edgeRows = onFront ? frontEdgeRows(computed) : 0;
+    const label = onFront ? `${onFront.attach === 'integrated' ? 'integrated ' : ''}band ${len(bandW, project.units)} · overlap ${len(scope.band_overlap ?? 0, project.units)}` : '';
+    const isHole = plan?.holeFrontId === panel.id;
+    const positions = plan?.positions ?? [];
+    return {
+      bandX,
+      integrated: onFront?.attach === 'integrated',
+      label,
+      edgeRows,
+      buttons: positions,
+      kind: isHole ? 'hole' : 'button',
+      holes,
+      holeWidth: plan?.holeWidth ?? 2,
+      onDrag: (index, h, key) => update((p) => applyEdgeTreatments(setButtonPosition(p, size.id, positions, index, h)), key),
+    };
+  }, [project, panel, size, computed, scope, update]);
 
   const selectPanel = (id: Id | null) => {
     setPanelId(id);
@@ -339,6 +379,7 @@ export function App() {
               compare={compare.map((sid) => computedFor(panel.id, sid))}
               align={align}
               project={project}
+              bands={sizeMode === 'single' ? bands : undefined}
               onDragWaypoint={(wpId, ch, sizeOnly, key) => {
                 const w = computed.waypoints.find((x) => x.id === wpId);
                 if (!w || !size) return;

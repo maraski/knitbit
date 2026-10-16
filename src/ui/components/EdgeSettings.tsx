@@ -2,6 +2,7 @@ import { applyEdgeTreatments, EDGE_STITCHES, EDGE_TREATMENTS, edgePattern, edges
 import { buildScope } from '../../engine/measurements';
 import type { EdgeStitch, EdgeTreatment, EdgeTreatmentId, Id, Project } from '../../engine/model';
 import { ExprField } from './ExprField';
+import { BandSettings } from './BandSettings';
 
 interface Props {
   project: Project;
@@ -67,14 +68,17 @@ export function EdgeSettings({ project, sizeId, update }: Props) {
                     </div>
                   )}
                 </div>
+                {d.id === 'frontBands' ? (
+                  <BandSettings project={project} sizeId={sizeId} update={update} />
+                ) : (
                 <div className="field">
                   <label>Worked</label>
                   <select value={d.id === 'neckband' ? 'later' : t.method} onChange={(e) => set(d.id, { ...t, method: e.target.value as EdgeTreatment['method'] })}>
                     <option value="with-panel" disabled={d.id === 'neckband'}>{d.withPanel}</option>
                     <option value="later">{d.later}</option>
                   </select>
-                  {d.id === 'frontBands' && <div className="hint">Bands, buttons and the closing width come next; these settings are kept.</div>}
                 </div>
+                )}
               </>
             )}
           </div>

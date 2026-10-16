@@ -307,6 +307,8 @@ export interface Panel {
   princess?: Princess | null;
   /** Made by an edge treatment (e.g. the neckband strip); re-applying the treatment updates or removes it. */
   edge?: EdgeTreatmentId;
+  /** A cardigan band strip: which band it is. */
+  band?: BandRole;
   /** Cardigan front: this panel is one half of the front it describes. */
   half?: FrontHalf | null;
   /** A panel linked by the knitter (e.g. back ↔ front): dragging a waypoint moves the same-named one there too. */
@@ -337,6 +339,42 @@ export interface EdgeTreatment {
 
 export type EdgeTreatments = Record<EdgeTreatmentId, EdgeTreatment>;
 
+// ---------- cardigan bands and buttons ----------
+
+/** Picked up along the edge, knit sideways as a strip and sewn on, or worked as extra stitches at the front edge. */
+export type BandAttach = 'pickup' | 'sideways' | 'integrated';
+/** Which band a strip is: the button band, the buttonhole band, or one continuous band up one front and down the other. */
+export type BandRole = 'button' | 'buttonhole' | 'continuous';
+
+export interface CardiganOptions {
+  /** Separate button and buttonhole bands, or one band up the right front, around the back neck and down the left. */
+  bands: 'separate' | 'continuous';
+  attach: { button: BandAttach; buttonhole: BandAttach; continuous: Exclude<BandAttach, 'integrated'> };
+  /** The front (as worn) that carries the buttonholes. */
+  buttonholeSide: 'left' | 'right';
+  /** How far the fronts overlap when closed (cm); `band_overlap` in expressions. Default: the band width. */
+  overlap: DimExpr;
+  /**
+   * Width taken off the whole front so the closed garment matches it (cm); `closing_r` in expressions.
+   * Each front = (whole front − closing_r) / 2. Default `2 * band_w - band_overlap`.
+   */
+  closing: DimExpr;
+  buttons: {
+    count: number;
+    top: DimExpr; // from the top of the front edge to the first button (cm)
+    bottom: DimExpr; // from the lower edge to the last button (cm)
+    /** Dragged positions by size: cm up from the front's lower edge, one per button (top first). */
+    manual: Record<Id, number[]>;
+  };
+  buttonhole: {
+    /** 'yo-k2tog': a one-row buttonhole (yarn over, k2tog). 'symbol': `width` cells of `symbol`. */
+    style: 'yo-k2tog' | 'symbol';
+    symbol: string;
+    width: number;
+    note: string;
+  };
+}
+
 // ---------- joins (annotation only) ----------
 
 export type JoinTag = 'seam' | 'pickup' | 'live' | 'bindoff' | 'caston' | 'free';
@@ -346,7 +384,8 @@ export type EdgeKey =
   | { kind: 'side'; side: 'left' | 'right'; from: Id; to: Id }
   | { kind: 'bottom' } // the garment's lower edge
   | { kind: 'top' } // the garment's upper edge outside any neckline
-  | { kind: 'neck' }; // the whole neckline (both slopes and the centre)
+  | { kind: 'neck' } // the whole neckline (both slopes and the centre)
+  | { kind: 'front' }; // a cardigan front's straight front edge, from the lower edge up to the neck
 
 export interface EdgeRef {
   panelId: Id;
@@ -423,6 +462,8 @@ export interface Project {
   tags: string[];
   /** Hem, cuff, neckband and front-band settings; absent = the defaults, not yet applied to any panel. */
   edges?: EdgeTreatments;
+  /** Cardigan bands, buttons and closing width; absent = the defaults. */
+  cardigan?: CardiganOptions;
   panels: Panel[];
   joins?: Join[];
   symbols?: CustomSymbol[];

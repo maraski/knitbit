@@ -2,9 +2,10 @@
 // applied to the panels as ordinary pattern sections, strips and joins. Re-applying replaces what an earlier
 // application made (marked with `edge`), so the panels follow the settings; anything else is left alone.
 
+import { attachOf, BAND_NAMES, bandRoles } from './bands';
 import { neckband } from './templates';
-import type { EdgeRef, EdgeStitch, EdgeTreatment, EdgeTreatmentId, EdgeTreatments, Join, Panel, PatternSection, Project, StitchPattern } from './model';
-import { dim, newId } from './model';
+import type { BandRole, EdgeRef, EdgeStitch, EdgeTreatment, EdgeTreatmentId, EdgeTreatments, Join, Panel, PatternSection, Project, StitchPattern } from './model';
+import { dim, newId, newPanel, newSegment, newWaypoint } from './model';
 
 export const EDGE_STITCHES: Record<Exclude<EdgeStitch, 'custom'>, { label: string; pattern: StitchPattern }> = {
   rib1x1: { label: '1×1 rib', pattern: { name: '1x1 rib', multiple: 2, offset: 0 } },
@@ -124,6 +125,100 @@ export function applyEdgeTreatments(project: Project, notes: string[] = []): Pro
     panels = panels.filter((p) => p.id !== existing.id);
     joins = joins.filter((j) => ![...j.edges, ...j.partner].some((r) => r.panelId === existing.id));
     notes.push('Removed the Neckband strip.');
+  }
+  return applyFrontBands({ ...project, panels, joins }, notes);
+}
+
+// ---------- cardigan front bands ----------
+
+/** The edges a band is attached to, in working order (a continuous band: up the right front, around, down the left). */
+export function bandEdges(project: Project, role: BandRole): EdgeRef[] {
+  const front = (side: 'left' | 'right') => project.panels.find((p) => p.half?.side === side);
+  const c = project.cardigan;
+  const one = (side: 'left' | 'right'): EdgeRef[] => {
+    const f = front(side);
+    return f ? [{ panelId: f.id, edge: { kind: 'front' } }] : [];
+  };
+  if (role !== 'continuous') {
+    const holeSide = c?.buttonholeSide ?? 'right';
+    return one(role === 'buttonhole' ? holeSide : holeSide === 'right' ? 'left' : 'right');
+  }
+  const r = front('right');
+  const l = front('left');
+  const back = project.panels.find((p) => p.template === 'back' && p.neckline);
+  const neck = (p: Panel | undefined): EdgeRef[] => (p?.neckline ? [{ panelId: p.id, edge: { kind: 'neck' } }] : []);
+  return [...one('right'), ...neck(r), ...neck(back), ...neck(l), ...one('left')];
+}
+
+/**
+ * A band strip. Picked up: worked out from the picked-up edge for the band width (its width is the pick-up count,
+ * rounded to the band's multiple). Knit sideways: the band width across, as many rows as the edge is long.
+ */
+function bandStrip(role: BandRole, attach: 'pickup' | 'sideways', pattern: StitchPattern, existing?: Panel): Panel {
+  const p = newPanel(BAND_NAMES[role]);
+  const [a, b] =
+    attach === 'pickup'
+      ? [newWaypoint('pick_up', 0, 'edge_pickup * st_w'), newWaypoint('bind_off', 'band_w', 'pick_up.width')]
+      : [newWaypoint('cast_on', 0, 'band_w'), newWaypoint('bind_off', 'edge_len', 'band_w')];
+  if (existing) {
+    // Keep the waypoint ids so hand-edited joins to its edges stay valid.
+    const old = existing.waypoints;
+    if (old[0]) a.id = old[0].id;
+    if (old[1]) b.id = old[1].id;
+  }
+  p.id = existing?.id ?? p.id;
+  p.name = existing?.name ?? p.name;
+  p.layout = existing?.layout ?? p.layout;
+  p.template = 'band';
+  p.edge = 'frontBands';
+  p.band = role;
+  p.selvedge = { left: 0, right: 0 };
+  p.startFrom = attach === 'pickup' ? 'pickup' : 'caston';
+  p.pattern = pattern;
+  p.waypoints = [a, b];
+  p.segments = [newSegment(a.id, { kind: 'straight' })];
+  p.sections = [{ id: existing?.sections[0]?.id ?? newId('sec'), name: pattern.name, fromHeight: dim(0), toHeight: dim(`${b.name}.height`), pattern }];
+  p.notes =
+    attach === 'pickup'
+      ? 'Picked up along the edge (pick-up helper at the join’s ratio), rounded to the band’s multiple; worked for the band width.'
+      : 'Knit sideways: the band width across, as many rows as the edge is long; sewn to the edge.';
+  return p;
+}
+
+/** Make the band strips and their joins match the settings (cardigan, front bands on, not integrated). */
+export function applyFrontBands(project: Project, notes: string[] = []): Project {
+  const roles = bandRoles(project);
+  const pattern = edgePattern(edgesOf(project).frontBands);
+  let panels = project.panels;
+  let joins = (project.joins ?? []).filter((j) => j.edge !== 'frontBands');
+  const keep = new Set<string>();
+  for (const role of roles) {
+    const attach = attachOf(project, role);
+    if (attach === 'integrated') continue;
+    const existing = panels.find((p) => p.edge === 'frontBands' && p.band === role);
+    const strip = bandStrip(role, attach, pattern, existing);
+    keep.add(strip.id);
+    panels = existing ? panels.map((p) => (p.id === existing.id ? strip : p)) : [...panels, strip];
+    if (!existing) notes.push(`Added a ${strip.name} strip.`);
+    const edges = bandEdges({ ...project, panels }, role);
+    const end = strip.waypoints[1].id;
+    joins.push({
+      id: newId('join'),
+      name: `${strip.name} ${attach === 'pickup' ? 'picked up' : 'sewn on'}`,
+      tag: attach === 'pickup' ? 'pickup' : 'seam',
+      edges,
+      partner: [{ panelId: strip.id, edge: attach === 'pickup' ? { kind: 'bottom' } : { kind: 'side', side: 'left', from: strip.waypoints[0].id, to: end } }],
+      ratio: null,
+      note: `${edgeStitchLabel(edgesOf(project).frontBands)}, band_w wide.`,
+      edge: 'frontBands',
+    });
+  }
+  const gone = panels.filter((p) => p.edge === 'frontBands' && !keep.has(p.id));
+  if (gone.length) {
+    const ids = new Set(gone.map((p) => p.id));
+    panels = panels.filter((p) => !ids.has(p.id));
+    joins = joins.filter((j) => ![...j.edges, ...j.partner].some((r) => ids.has(r.panelId)));
+    notes.push(`Removed ${gone.map((p) => p.name).join(', ')}.`);
   }
   return { ...project, panels, joins };
 }

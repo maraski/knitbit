@@ -366,6 +366,8 @@ table.events.editable select { font-size: 11.5px; max-width: 110px; padding: 1px
 .chart-svg .repeat-line { stroke: var(--accent); stroke-width: 1; stroke-dasharray: 3 2; opacity: 0.6; pointer-events: none; }
 .chart-svg .repeat-bracket { fill: none; stroke: var(--accent); stroke-width: 1.2; }
 .chart-svg .repeat-label { fill: var(--accent); font-size: 10.5px; }
+.chart-svg .chart-stripe { fill: var(--accent); opacity: 0.08; pointer-events: none; }
+.chart-svg .buttonhole-mark { fill: var(--accent); font-size: 10.5px; }
 .chart-svg .chart-note { fill: var(--muted); font-size: 11px; }
 .chart-tools { flex: none; display: flex; gap: 6px; align-items: center; background: var(--panel); border-bottom: 1px solid var(--line); padding: 4px 10px; }
 .chart-tools .check { font-size: 12px; display: inline-flex; gap: 4px; align-items: center; }
@@ -417,3 +419,14 @@ table.events.editable select { font-size: 11.5px; max-width: 110px; padding: 1px
 .mgrid td.cell.from-other { background-image: linear-gradient(135deg, var(--accent-soft) 0 6px, transparent 6px); }
 .region-fill { fill: var(--accent); opacity: 0.08; }
 .region-label { font-size: 11px; font-weight: 600; fill: var(--accent); paint-order: stroke; stroke: var(--canvas); stroke-width: 3px; }
+
+/* cardigan bands */
+.band-settings h5 { margin: 10px 0 4px; font-size: 12px; }
+.formula { background: var(--panel-alt, #f6f4ef); border-radius: 4px; padding: 6px 8px; margin: 4px 0 8px; font-size: 11.5px; line-height: 1.5; }
+.formula code { font-size: 11px; }
+.band-strip { fill: var(--accent); fill-opacity: 0.07; stroke: var(--accent); stroke-dasharray: 4 3; stroke-width: 1; pointer-events: none; }
+.band-strip.integrated { fill-opacity: 0.12; stroke-dasharray: none; stroke-opacity: 0.4; }
+.band-label { fill: var(--accent); font-size: 10.5px; pointer-events: none; }
+.button-mark circle, .button-mark rect, rect.button-mark { fill: #fff; stroke: #333; stroke-width: 1.4; }
+.button-mark.button circle { fill: #333; }
+.button-mark.draggable { cursor: ns-resize; }

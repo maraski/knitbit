@@ -47,6 +47,21 @@ interface Props {
    * whole width or one half. `size` = this size only (Alt held). `key` coalesces one drag into one undo step.
    */
   onDragWaypoint?: (wpId: string, change: { kind: 'height'; h: number } | { kind: 'width'; part: 'width' | 'left' | 'right'; factor: number }, size: boolean, key: string) => void;
+  /** A cardigan front or band: its band (stitch x range), button positions (cm up), buttonholes, and dragging. */
+  bands?: SchematicBands;
+}
+
+export interface SchematicBands {
+  bandX: [number, number];
+  integrated: boolean;
+  label: string;
+  edgeRows: number; // rows of the straight front edge (0 = no band drawn)
+  buttons: number[]; // cm up from the lower edge
+  kind: 'button' | 'hole';
+  /** Buttonholes on this panel (a band strip, or an integrated front): knit row and first-cell x. */
+  holes: { row: number; x: number; index: number }[];
+  holeWidth: number;
+  onDrag?: (index: number, hCm: number, key: string) => void;
 }
 
 interface View {
@@ -75,7 +90,7 @@ interface MarkerDrag {
 
 const isStepLike = (e: ShapeEvent) => e.kind === 'bindoff' || e.kind === 'caston' || e.kind === 'turn';
 
-export function Schematic({ computed: c, direction, units, selection, onSelect, fitKey, fitOutlines, markers, joins = [], mode = 'single', compare = [], align = 'hem', project, drawLine = false, onDrawLine, onDragWaypoint }: Props) {
+export function Schematic({ computed: c, direction, units, selection, onSelect, fitKey, fitOutlines, markers, joins = [], mode = 'single', compare = [], align = 'hem', project, drawLine = false, onDrawLine, onDragWaypoint, bands }: Props) {
   const wpDrag = useRef<{ wpId: string; kind: 'height' | 'width'; part: 'width' | 'left' | 'right'; half0: number; key: string; x: number; y: number; moved: boolean; last: string } | null>(null);
   const [wpReadout, setWpReadout] = useState<{ sx: number; sy: number; text: string } | null>(null);
   const [drawPts, setDrawPts] = useState<{ first: { h: number; x: number; sx: number; sy: number } | null; cursor: { sx: number; sy: number } | null }>({ first: null, cursor: null });
@@ -239,6 +254,7 @@ export function Schematic({ computed: c, direction, units, selection, onSelect, 
     return edge === 'left' ? c.leftEdge[row] : c.rightEdge[row];
   };
 
+  const buttonDrag = useRef<{ index: number; key: string; last: number } | null>(null);
   /** Garment point under the pointer: cm up from the lower edge and cm from that row's centre. */
   const garmentAt = (clientX: number, clientY: number) => {
     const r = wrapRef.current!.getBoundingClientRect();
@@ -286,6 +302,17 @@ export function Schematic({ computed: c, direction, units, selection, onSelect, 
   };
 
   const onPointerMove = (e: React.PointerEvent) => {
+    const bd = buttonDrag.current;
+    if (bd && bands?.onDrag) {
+      const p = garmentAt(e.clientX, e.clientY);
+      const g = Math.max(0, Math.min(bands.edgeRows, Math.round(p.h * rpc)));
+      if (g !== bd.last) {
+        bd.last = g;
+        bands.onDrag(bd.index, g / rpc, bd.key);
+      }
+      setWpReadout({ sx: p.sx, sy: p.sy, text: `button ${bd.index + 1} · ${len(g / rpc, units)} up · this size` });
+      return;
+    }
     const wd = wpDrag.current;
     if (wd && onDragWaypoint) {
       if (!wd.moved && Math.hypot(e.clientX - wd.x, e.clientY - wd.y) < 3) return;
@@ -353,6 +380,12 @@ export function Schematic({ computed: c, direction, units, selection, onSelect, 
     setHoverRow(row >= 0 && row <= top ? row : null);
   };
   const onPointerUp = () => {
+    if (buttonDrag.current) {
+      buttonDrag.current = null;
+      setWpReadout(null);
+      suppressClick.current = true;
+      return;
+    }
     if (wpDrag.current) {
       if (wpDrag.current.moved) suppressClick.current = true;
       wpDrag.current = null;
@@ -797,6 +830,52 @@ export function Schematic({ computed: c, direction, units, selection, onSelect, 
             <MarkerGlyph key={i} m={m} p={S(m.x, m.kind === 'dec' || m.kind === 'inc' ? m.row : m.row - 1)} />
           ))}
         </g>
+
+        {/* cardigan band, buttons and buttonholes */}
+        {bands && vertical && (() => {
+          const gy = (hCm: number) => (c.topDown ? top - hCm * rpc : hCm * rpc);
+          const parts: React.ReactNode[] = [];
+          const [x1, x2] = bands.bandX;
+          if (bands.edgeRows > 0 && x2 > x1) {
+            const a = S(x1, c.topDown ? top : 0);
+            const b = S(x2, c.topDown ? top - bands.edgeRows : bands.edgeRows);
+            parts.push(<rect key="band" x={Math.min(a.x, b.x)} y={Math.min(a.y, b.y)} width={Math.abs(b.x - a.x)} height={Math.abs(b.y - a.y)} className={`band-strip${bands.integrated ? ' integrated' : ''}`} />);
+            const lab = S((x1 + x2) / 2, c.topDown ? top - bands.edgeRows / 2 : bands.edgeRows / 2);
+            parts.push(
+              <text key="bandlabel" transform={`translate(${lab.x + 3},${lab.y}) rotate(-90)`} textAnchor="middle" className="band-label">
+                {bands.label}
+              </text>,
+            );
+          }
+          bands.buttons.forEach((h, i) => {
+            const p = S((x1 + x2) / 2, gy(h));
+            parts.push(
+              <g
+                key={`b${i}`}
+                className={`button-mark ${bands.kind}${bands.onDrag ? ' draggable' : ''}`}
+                onPointerDown={(e) => {
+                  if (!bands.onDrag || e.button !== 0) return;
+                  e.stopPropagation();
+                  wrapRef.current?.setPointerCapture(e.pointerId);
+                  buttonDrag.current = { index: i, key: `drag:button:${Date.now()}`, last: -1 };
+                }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                {bands.kind === 'button' ? <circle cx={p.x} cy={p.y} r={5} /> : <rect x={p.x - 6} y={p.y - 2} width={12} height={4} rx={2} />}
+                <title>{`Button ${i + 1}: ${len(h, units)} up${bands.onDrag ? ' — drag to move (this size)' : ''}`}</title>
+              </g>,
+            );
+          });
+          for (const h of bands.holes) {
+            const p = S(h.x + bands.holeWidth / 2, h.row - 0.5);
+            parts.push(
+              <rect key={`h${h.index}`} x={p.x - 5} y={p.y - 2} width={10} height={4} rx={2} className="button-mark hole on-panel">
+                <title>{`Buttonhole ${h.index + 1}: row ${h.row}`}</title>
+              </rect>,
+            );
+          }
+          return <g className="bands">{parts}</g>;
+        })()}
 
         {/* bust shaping */}
         {c.bust && vertical && (() => {
