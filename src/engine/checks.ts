@@ -3,6 +3,7 @@
 import { joinReport, sameEdge, type PanelCache } from './joins';
 import { fitChecks } from './fitChecks';
 import { bandChecks } from './buttons';
+import { contiguousChecks } from './contiguousChecks';
 import type { Id, Project } from './model';
 import { computePanel, type Issue } from './panel';
 
@@ -24,6 +25,7 @@ export function projectChecks(project: Project): Check[] {
     const replaced = new Set(fit.flatMap((f) => (f.replaces ? [f.replaces] : [])));
     for (const { replaces: _, ...f } of fit) out.push({ ...f, sizeId: size.id, sizeName: size.name });
     for (const b of bandChecks(project, size.id, cache)) out.push({ ...b, sizeId: size.id, sizeName: size.name });
+    for (const k of contiguousChecks(project, size.id, cache)) out.push({ ...k, sizeId: size.id, sizeName: size.name });
     for (const { panel, c } of computed) {
       for (const issue of c.issues) if (!replaced.has(issue)) out.push({ panelId: panel.id, panelName: panel.name, sizeId: size.id, sizeName: size.name, issue });
     }

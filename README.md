@@ -509,6 +509,22 @@ neck, down the left). Buttons are spaced over the whole front edge, hem to neck:
 drawn on the yoke's top view, at the front edges, and can be dragged there. Integrated bands aren't worked into a
 contiguous yoke yet (a warning says so).
 
+**Checks.** For a contiguous garment the Checks bar adds, per size:
+
+- *info:* the back and the fronts (with the neck between them) at the end of the shoulders, against `cross_back_w`
+  and `cross_front` (the back follows the cross back by design; this shows how close);
+- *warning:* the sleeve at the underarm (held sleeve + underarm cast-on) less than `bicep + ease.bicep` by more than
+  the seam tolerance (info when it is more than 10 % over);
+- *warning:* around the armhole (both armhole edges along the yoke, the cap top and the underarm cast-on) less than
+  `scye_circumference` (info when more than 15 % over: a deep armhole). With the sample table this flags 4XS–XS,
+  where the back-length split makes a shallow yoke;
+- *hint (info):* the cap may look pointy when the shoulder seam has more than twice as many rows as the rapid cap;
+  *the cap may look flat* when most armhole rows are rapid;
+- *warning:* a body or sleeve panel that no longer starts with the held stitches plus the underarm cast-on (after
+  editing its widths);
+- from the generator: rows that don't fit (shoulders, armhole, neck below the split, body increases), zero or
+  negative counts, the sleeve or body not reaching its width, odd cap tops, and how far the yoke was deepened.
+
 **Bust from the top.** The front's bust point is `underarm.height + yoke.depth − (hps_to_apex − bust_apex_corr)` up
 from the hem: measured down from the neck point, where the fronts begin. Short rows add the length; the bust helper
 doesn't add side width at the underarm (the yoke sets it).

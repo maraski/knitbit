@@ -339,7 +339,7 @@ export function generateYoke(project: Project, spec: YokeSpec, sizeId: Id): Yoke
   const bodySet = new Set(bodyRows);
   const dSet = new Set(dRows);
   if (spec.cap.solve && C > rapidBase) issues.push({ severity: 'info', message: `Rapid cap rows lengthened from ${rapidBase} to ${C} so the sleeve reaches its width.` });
-  if (C > X / 2) issues.push({ severity: 'info', message: `Hint: ${C} of the ${X} armhole rows are rapid; the cap will be wide and flat. A deeper yoke gives a rounder cap.` });
+  if (C > X / 2) issues.push({ severity: 'info', message: `Hint: the cap may look flat: ${C} of the ${X} armhole rows are rapid. A deeper yoke gives a rounder cap.` });
 
   // ---- simulate ----
   const sym = incSymbols(spec);
