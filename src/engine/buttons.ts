@@ -2,7 +2,7 @@
 // buttonhole band, or on the front for an integrated band), and whether bands, holes and the closed width work out.
 
 import { attachOf, bandOnFront, bandRoles, buttonPositions, cardiganOf } from './bands';
-import { edgePattern, edgesOf, staleStrips } from './edgeTreatments';
+import { edgePattern, edgesOf, frontEdges, staleStrips } from './edgeTreatments';
 import { cachedPanel, frontEdgeRows, measureEdge, type PanelCache } from './joins';
 import type { BandAttach, BandRole, Id, Panel, Project } from './model';
 import { buildScope } from './measurements';
@@ -20,7 +20,8 @@ export interface Buttonhole {
 export interface ButtonPlan {
   positions: number[]; // cm up from the lower edge, top button first
   manual: boolean;
-  frontEdgeCm: number; // height of the straight front edge
+  frontEdgeCm: number; // length of the whole front edge, hem to neck
+  bodyEdgeCm: number; // the part on the front panel (the rest is on a contiguous yoke)
   buttonFrontId: Id | null;
   holeFrontId: Id | null;
   holeRole: BandRole;
@@ -56,7 +57,9 @@ export function buttonPlan(project: Project, sizeId: Id, cache: PanelCache = new
   const fc = cachedPanel(project, holeFront.id, sizeId, cache);
   if (!fc?.ok) return null;
   const issues: ButtonPlan['issues'] = [];
-  const frontEdgeCm = frontEdgeRows(fc) / fc.rowsPerCm;
+  // The whole front edge: the front panel's, plus the yoke's on a contiguous cardigan.
+  const bodyEdgeCm = frontEdgeRows(fc) / fc.rowsPerCm;
+  const frontEdgeCm = frontEdges(project, holeSide).reduce((a, r) => a + measureEdge(project, r, sizeId, project.settings.pickUp, cache).lengthCm, 0) || bodyEdgeCm;
   const scope = buildScope(project, sizeId);
   const bp = buttonPositions(project, sizeId, frontEdgeCm, scope);
   for (const e of bp.errors) issues.push({ severity: 'error', message: e });
@@ -67,6 +70,7 @@ export function buttonPlan(project: Project, sizeId: Id, cache: PanelCache = new
     positions: bp.positions,
     manual: bp.manual,
     frontEdgeCm,
+    bodyEdgeCm,
     buttonFrontId: buttonFront?.id ?? null,
     holeFrontId: holeFront.id,
     holeRole: hole.role,

@@ -12,7 +12,16 @@ import { sizeColor } from '../sizeColors';
 
 type Mode = 'single' | 'overlay' | 'grid';
 
+/** Buttons on a contiguous cardigan's yoke: the positions (cm up from the hem) above the front panels. */
+export interface YokeButtons {
+  positions: number[];
+  bodyEdgeCm: number;
+  holeSide: 'left' | 'right';
+  onDrag?: (index: number, hCm: number, key: string) => void;
+}
+
 interface Props {
+  buttons?: YokeButtons;
   project: Project;
   panel: Panel;
   computed: ComputedPanel;
@@ -99,12 +108,13 @@ function ringArc(ring: TopRing, r: number, P: (x: number, y: number) => { x: num
 
 // ---------- the view ----------
 
-export function YokeTopView({ project, panel, computed: c, view, mode, compare, units }: Props) {
+export function YokeTopView({ project, panel, computed: c, view, mode, compare, units, buttons }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ w: 800, h: 600 });
   const [vs, setVs] = useState<ViewState | null>(null);
   const [hover, setHover] = useState<{ sx: number; sy: number; text: string } | null>(null);
   const drag = useRef<{ x: number; y: number; ox: number; oy: number } | null>(null);
+  const buttonDrag = useRef<{ index: number; key: string; last: number } | null>(null);
 
   const y = c.yoke;
   const geo = useMemo(() => (y ? topGeometry(y) : null), [y]);
@@ -168,6 +178,17 @@ export function YokeTopView({ project, panel, computed: c, view, mode, compare, 
   };
   const onPointerMove = (e: React.PointerEvent) => {
     const r = wrapRef.current!.getBoundingClientRect();
+    const bd = buttonDrag.current;
+    if (bd && buttons?.onDrag) {
+      // Distance from the centre → yoke row → cm up from the hem.
+      const rad = Math.hypot((e.clientX - r.left - v.ox) / v.scale, (e.clientY - r.top - v.oy) / v.scale);
+      const row = Math.max(y.counts.neckRow ?? 1, Math.min(y.rows.length, Math.round((rad - geo.neckR) * y.rowsPerCm)));
+      if (row !== bd.last) {
+        bd.last = row;
+        buttons.onDrag(bd.index, buttons.bodyEdgeCm + (y.rows.length - row) / y.rowsPerCm, bd.key);
+      }
+      return;
+    }
     const d = drag.current;
     if (d) {
       setVs({ ...v, ox: d.ox + e.clientX - d.x, oy: d.oy + e.clientY - d.y });
@@ -191,7 +212,41 @@ export function YokeTopView({ project, panel, computed: c, view, mode, compare, 
   };
   const onPointerUp = () => {
     drag.current = null;
+    buttonDrag.current = null;
   };
+  // Buttons and buttonholes on the yoke's front edges (positions above the front panels).
+  const yokeButtons: React.ReactNode[] = [];
+  if (buttons && mode === 'single') {
+    buttons.positions.forEach((h, i) => {
+      if (h <= buttons.bodyEdgeCm + 1e-6) return;
+      const row = Math.round(y.rows.length - (h - buttons.bodyEdgeCm) * y.rowsPerCm);
+      const ring = geo.rings[Math.max(1, Math.min(geo.rings.length - 1, row))];
+      if (!ring) return;
+      const rad = (ring.r0 + ring.r1) / 2;
+      for (const side of ['left', 'right'] as const) {
+        // Just outside each front edge, in the band space at centre front.
+        const a = side === 'left' ? boundaryAngle(ring, -1.5) : boundaryAngle(ring, ring.total + 1.5);
+        const p = polar(rad, a);
+        const q = P(p.x, p.y);
+        const hole = side === buttons.holeSide;
+        yokeButtons.push(
+          <g
+            key={`b${i}${side}`}
+            className={`button-mark ${hole ? 'hole' : 'button'}${buttons.onDrag ? ' draggable' : ''}`}
+            onPointerDown={(e) => {
+              if (!buttons.onDrag || e.button !== 0) return;
+              e.stopPropagation();
+              wrapRef.current?.setPointerCapture(e.pointerId);
+              buttonDrag.current = { index: i, key: `drag:button:${Date.now()}`, last: -1 };
+            }}
+          >
+            {hole ? <rect x={q.x - 5} y={q.y - 2} width={10} height={4} rx={2} /> : <circle cx={q.x} cy={q.y} r={4.5} />}
+            <title>{`Button ${i + 1}: row ${ring.row} of the yoke · ${len(h, units)} up from the hem${buttons.onDrag ? ' — drag to move (this size)' : ''}`}</title>
+          </g>,
+        );
+      }
+    });
+  }
 
   if (mode === 'grid') {
     return (
@@ -233,6 +288,7 @@ export function YokeTopView({ project, panel, computed: c, view, mode, compare, 
         ) : (
           <TopChart y={y} g={geo} P={P} scale={v.scale} chart={chart} custom={project.symbols ?? []} size={size} />
         )}
+        {yokeButtons}
       </svg>
       {mode === 'overlay' && (
         <div className="size-legend">

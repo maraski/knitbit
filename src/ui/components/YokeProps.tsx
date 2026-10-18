@@ -137,6 +137,7 @@ export function YokeProps({ ctx }: { ctx: PropsContext }) {
       </div>
       {cm('Depth below the neck point (cm)', (s) => s.neck.depth, (s, d) => (s.neck.depth = d), 'neckDepth')}
       {spec.neck.shape !== 'v' && spec.neck.shape !== 'square' && cm('Centre (cm)', (s) => s.neck.centre, (s, d) => (s.neck.centre = d), 'neckCentre')}
+      {y && <NeckWorked y={y} cardigan={project.garment.opening === 'cardigan'} rpc={y.rowsPerCm} />}
 
       <h4>C, D · Sleeve cap</h4>
       {num('Cap top stitches (markers move to)', 'capTopSts', (s) => s.cap.topSts, (s, d) => (s.cap.topSts = d))}
@@ -196,6 +197,35 @@ export function YokeProps({ ctx }: { ctx: PropsContext }) {
 
       <h4>All sizes</h4>
       <AllSizes ctx={ctx} />
+    </div>
+  );
+}
+
+/** How the front neck is worked in this size, with the numbers plugged in. */
+function NeckWorked({ y, cardigan, rpc }: { y: NonNullable<PropsContext['computed']['yoke']>; cardigan: boolean; rpc: number }) {
+  const n = y.neck;
+  const depthCm = y.params.neckDepth?.value ?? 0;
+  const r2 = (x: number) => Math.round(x * 100) / 100;
+  return (
+    <div className="formula">
+      <div>
+        Neck row R = depth × row gauge = {r2(depthCm)} × {r2(rpc)} = {r2(depthCm * rpc)} → {n.depthRows}
+        {n.row !== n.depthRows ? ` → row ${n.row} (a RS row)` : ` (a RS row)`}.
+      </div>
+      <div>
+        Increases at each front edge: (back neck − centre) / 2 = ({n.backNeck} − {n.centre}) / 2 = <b>{n.perSide}</b>
+        {n.perSide ? `, on rows ${y.rows.filter((r) => r.neck).map((r) => r.row).join(', ')}` : ''}.
+      </div>
+      {cardigan ? (
+        <div>
+          Each front casts on (centre − closing_r) / 2 = ({n.centre} − {n.closingSts}) / 2 = <b>{n.frontEdgeCo}</b> sts at its front edge (right front on row {n.row}, left front on row {n.row + 1}); the
+          fronts stay open, flat to the split.
+        </div>
+      ) : (
+        <div>
+          Cast on <b>{n.centre}</b> sts at centre front at the end of row {n.row} (back neck − 2 × increases = {n.backNeck} − 2 × {n.perSide}) and join in the round.
+        </div>
+      )}
     </div>
   );
 }

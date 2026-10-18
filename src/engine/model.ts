@@ -428,7 +428,9 @@ export type EdgeKey =
   | { kind: 'bottom' } // the garment's lower edge
   | { kind: 'top' } // the garment's upper edge outside any neckline
   | { kind: 'neck' } // the whole neckline (both slopes and the centre)
-  | { kind: 'front' } // a cardigan front's straight front edge, from the lower edge up to the neck
+  /** A cardigan front's straight front edge, from the lower edge up to the neck; on a contiguous yoke, `side` picks
+   * the wearer's left or right front edge (from the split up to the neck). */
+  | { kind: 'front'; side?: 'left' | 'right' }
   | { kind: 'held'; part: 'leftSleeve' | 'body' | 'rightSleeve' }; // a contiguous yoke's stitches held at the split
 
 export interface EdgeRef {

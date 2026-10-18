@@ -95,6 +95,9 @@ export interface YokeResult {
   bodyIncs: { perEdge: number; rows: number[] };
   /** Stitch counts at the end of phase A (before the markers move). */
   endOfA: ZoneCounts;
+  /** The front neck as worked: depth in rows (before making it a RS row), the cast-on row, increases per side,
+   * the centre (pullover cast-on), and a cardigan's cast-on at each front edge less the closing width. */
+  neck: { depthRows: number; row: number; perSide: number; backNeck: number; centre: number; closingSts: number; frontEdgeCo: number };
   derived: {
     seamCm: number;
     backEndOfACm: number;
@@ -223,7 +226,8 @@ export function generateYoke(project: Project, spec: YokeSpec, sizeId: Id): Yoke
   const centreRaw = spec.neck.shape === 'square' ? bn : spec.neck.shape === 'v' ? 0 : Math.min(bn, sts(centreCm));
   const perSide = Math.max(0, Math.floor((bn - centreRaw) / 2));
   const centre = bn - 2 * perSide; // pullover cast-on at centre front
-  let R = Math.max(1, rowsOf(depthCm));
+  const depthRows = Math.max(1, rowsOf(depthCm));
+  let R = depthRows;
   if (R % 2 === 0) R += 1; // the centre is cast on at the end of a RS row
   const neckRows: number[] = [];
   if (perSide > 0) {
@@ -465,6 +469,7 @@ export function generateYoke(project: Project, spec: YokeSpec, sizeId: Id): Yoke
     underarmCo: N,
     bodyIncs: { perEdge, rows: bodyRows },
     endOfA,
+    neck: { depthRows, row: R, perSide, backNeck: bn, centre, closingSts, frontEdgeCo },
     derived: {
       seamCm,
       backEndOfACm: endOfA.back / spc,

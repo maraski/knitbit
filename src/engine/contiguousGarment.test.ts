@@ -128,3 +128,20 @@ describe('yoke names elsewhere', () => {
     expect((c.counts[0] - c.counts[c.totalRows]) % 2).toBe(0);
   });
 });
+
+describe('ribbing on the generated panels', () => {
+  it('lets a hem or cuff rib fix the count; the odd change is a note, not a warning', async () => {
+    const { applyEdgeTreatments, defaultEdges } = await import('./edgeTreatments');
+    const base = garment('closed');
+    const e = defaultEdges();
+    const p = applyEdgeTreatments({ ...base, edges: { ...e, hem: { ...e.hem, enabled: true } } });
+    for (const s of p.sizes) {
+      for (const x of p.panels.filter((x) => x.fromYoke)) {
+        const c = computePanel(p, x, s.id);
+        expect(c.issues.filter((i) => i.severity !== 'info')).toEqual([]);
+        const rib = c.waypoints.find((w) => w.name === (x.fromYoke === 'back' || x.fromYoke === 'front' ? 'hem' : 'cuff'))!;
+        expect((rib.stitches - 2) % 4).toBe(0); // 2×2 rib: 4n + 2
+      }
+    }
+  });
+});

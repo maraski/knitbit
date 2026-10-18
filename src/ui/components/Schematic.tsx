@@ -848,6 +848,7 @@ export function Schematic({ computed: c, direction, units, selection, onSelect, 
             );
           }
           bands.buttons.forEach((h, i) => {
+            if (h > bands.edgeRows / rpc + 1e-6) return; // on the yoke (contiguous cardigan): drawn there
             const p = S((x1 + x2) / 2, gy(h));
             parts.push(
               <g

@@ -55,12 +55,45 @@ export function edgeLabel(project: Project, ref: EdgeRef): string {
     case 'top':
       return `${panel.name} · upper edge`;
     case 'front':
-      return `${panel.name} · front edge`;
+      return `${panel.name} · ${e.side ? `${e.side} ` : ''}front edge`;
     case 'held':
       return `${panel.name} · held ${e.part === 'body' ? 'body' : e.part === 'leftSleeve' ? 'left sleeve' : 'right sleeve'}`;
     default:
       return `${panel.name} · neckline`;
   }
+}
+
+/**
+ * A contiguous yoke's neck (cast-on, both neck slopes, and the centre or front-edge cast-ons) or one front edge
+ * (a cardigan: from the neck cast-on down to the split).
+ */
+function yokeEdge(c: ComputedPanel, e: EdgeKey, perRow: number): Omit<EdgeMeasure, 'ok' | 'label' | 'rowRange' | 'error'> | { error: string } {
+  const y = c.yoke!;
+  const spc = y.stitchesPerCm;
+  const rpc = y.rowsPerCm;
+  const R = y.counts.neckRow ?? 0;
+  const Y = y.rows.length;
+  if (e.kind === 'front') {
+    if (y.counts.joinRow !== null) return { error: 'A pullover yoke is joined at the front; it has no front edges.' };
+    if (!e.side) return { error: 'Choose the left or right front edge of the yoke.' };
+    // The right front's edge stitches are cast on at row R (RS), the left front's at row R + 1 (WS).
+    const from = Math.min(Y, e.side === 'right' ? R : R + 1);
+    const rows = Math.max(0, Y - from);
+    return { rows, stitches: 0, lengthCm: rows / rpc, pickup: Math.round(rows * perRow), parts: [`${rows} rows, row ${from + 1} to the split`] };
+  }
+  const slopeRows = Math.max(0, Math.min(R, Y) - 1);
+  const perSide = y.rows.filter((r) => r.neck).length;
+  const castOns = y.rows.filter((r) => r.row >= R).flatMap((r) => r.castOns).reduce((a, co) => a + co.count, 0);
+  const slopeCm = Math.hypot(slopeRows / rpc, perSide / spc);
+  const slopePick = Math.round(slopeRows * perRow);
+  const sts = y.castOn + castOns;
+  return {
+    rows: 2 * slopeRows,
+    stitches: sts,
+    lengthCm: sts / spc + 2 * slopeCm,
+    pickup: sts + 2 * slopePick,
+    parts: [`cast-on ${y.castOn} sts`, `2 neck slopes of ${slopeRows} rows (${slopePick} each)`, ...(castOns ? [`${castOns} sts cast on at the ${y.counts.joinRow !== null ? 'centre' : 'front edges'}`] : [])],
+  };
 }
 
 /** Rows along a cardigan front's straight front edge (below the neck). */
@@ -114,6 +147,11 @@ export function measureEdge(
     if (!c.yoke) return blankMeasure(label, 'Only a contiguous yoke has held stitches.');
     const sts = c.yoke.held[e.part];
     return { ok: true, label, rows: 0, stitches: sts, lengthCm: sts / spc, pickup: sts, parts: [`${sts} sts held`], rowRange: null };
+  }
+
+  if (c.yoke && (e.kind === 'front' || e.kind === 'neck')) {
+    const m = yokeEdge(c, e, perRow);
+    return 'error' in m ? blankMeasure(label, m.error) : { ok: true, label, ...m, rowRange: null };
   }
 
   if (e.kind === 'front') {

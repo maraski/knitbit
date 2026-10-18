@@ -247,7 +247,7 @@ const panel = obj({
 
 const edgeRef = obj({
   panelId: str,
-  edge: tagged('kind', { side: { side: oneOf('left', 'right'), from: str, to: str }, bottom: {}, top: {}, neck: {}, front: {}, held: { part: oneOf('leftSleeve', 'body', 'rightSleeve') } }),
+  edge: tagged('kind', { side: { side: oneOf('left', 'right'), from: str, to: str }, bottom: {}, top: {}, neck: {}, front: { side: optional(oneOf('left', 'right')) }, held: { part: oneOf('leftSleeve', 'body', 'rightSleeve') } }),
 });
 
 const project = obj({

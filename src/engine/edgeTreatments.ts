@@ -126,7 +126,7 @@ export function applyEdgeTreatments(project: Project, notes: string[] = [], opts
     };
     panels = existing ? panels.map((p) => (p.id === existing.id ? strip : p)) : [...panels, strip];
     if (!existing) notes.push('Added a Neckband strip.');
-    const necks = panels.filter((p) => isBodyPanel(p) && p.neckline).map((p): EdgeRef => ({ panelId: p.id, edge: { kind: 'neck' } }));
+    const necks = panels.filter((p) => p.yoke || (isBodyPanel(p) && p.neckline)).map((p): EdgeRef => ({ panelId: p.id, edge: { kind: 'neck' } }));
     if (necks.length) joins.push({ ...laterJoin('neckband', nb, necks, 'Neckband picked up'), partner: [{ panelId: strip.id, edge: { kind: 'bottom' } }] });
   }
   return applyFrontBands({ ...project, panels, joins }, notes, opts);
@@ -159,13 +159,18 @@ export function addStrips(project: Project, notes: string[] = []): Project {
 // ---------- cardigan front bands ----------
 
 /** The edges a band is attached to, in working order (a continuous band: up the right front, around, down the left). */
+/** A front edge (as worn), from the hem up: the front panel's, then on a contiguous yoke the yoke's up to the neck. */
+export function frontEdges(project: Project, side: 'left' | 'right'): EdgeRef[] {
+  const f = project.panels.find((p) => p.half?.side === side);
+  const yoke = project.panels.find((p) => p.yoke);
+  return [...(f ? [{ panelId: f.id, edge: { kind: 'front' as const } }] : []), ...(yoke && project.garment.opening === 'cardigan' ? [{ panelId: yoke.id, edge: { kind: 'front' as const, side } }] : [])];
+}
+
 export function bandEdges(project: Project, role: BandRole): EdgeRef[] {
   const front = (side: 'left' | 'right') => project.panels.find((p) => p.half?.side === side);
+  const yoke = project.panels.find((p) => p.yoke);
   const c = project.cardigan;
-  const one = (side: 'left' | 'right'): EdgeRef[] => {
-    const f = front(side);
-    return f ? [{ panelId: f.id, edge: { kind: 'front' } }] : [];
-  };
+  const one = (side: 'left' | 'right') => frontEdges(project, side);
   if (role !== 'continuous') {
     const holeSide = c?.buttonholeSide ?? 'right';
     return one(role === 'buttonhole' ? holeSide : holeSide === 'right' ? 'left' : 'right');
@@ -174,7 +179,9 @@ export function bandEdges(project: Project, role: BandRole): EdgeRef[] {
   const l = front('left');
   const back = project.panels.find((p) => p.template === 'back' && p.neckline);
   const neck = (p: Panel | undefined): EdgeRef[] => (p?.neckline ? [{ panelId: p.id, edge: { kind: 'neck' } }] : []);
-  return [...one('right'), ...neck(r), ...neck(back), ...neck(l), ...one('left')];
+  const necks = yoke ? [{ panelId: yoke.id, edge: { kind: 'neck' as const } }] : [...neck(r), ...neck(back), ...neck(l)];
+  // Up the right front, around the neck, down the left front.
+  return [...one('right'), ...necks, ...one('left').reverse()];
 }
 
 /**

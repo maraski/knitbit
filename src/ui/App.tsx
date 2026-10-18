@@ -20,7 +20,7 @@ import { MeasurementsView } from './components/MeasurementsView';
 import { Properties, type PropsContext } from './components/Properties';
 import { Schematic, type SchematicBands } from './components/Schematic';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import { YokeTopView } from './components/YokeTopView';
+import { YokeTopView, type YokeButtons } from './components/YokeTopView';
 import { len } from './format';
 import { Sidebar } from './components/Sidebar';
 import { Toolbar } from './components/Toolbar';
@@ -97,6 +97,20 @@ export function App() {
   }, [project, panel, size]);
 
   const markers = useMemo(() => (panel && size ? markerActions(update, panel.id, size.id) : undefined), [update, panel?.id, size?.id]);
+
+  // Contiguous cardigan: buttons on the yoke's front edges, above the front panels.
+  const yokeButtons = useMemo((): YokeButtons | undefined => {
+    if (!panel?.yoke || !size || project.garment.opening !== 'cardigan') return undefined;
+    const plan = buttonPlan(project, size.id);
+    if (!plan) return undefined;
+    const positions = plan.positions;
+    return {
+      positions,
+      bodyEdgeCm: plan.bodyEdgeCm,
+      holeSide: project.cardigan?.buttonholeSide ?? 'right',
+      onDrag: (index, h, key) => update((p) => applyEdgeTreatments(setButtonPosition(p, size.id, positions, index, h)), key),
+    };
+  }, [project, panel, size, update]);
 
   // Cardigan: the band and buttons on the shown front (or the buttonholes on a band strip).
   const bands = useMemo((): SchematicBands | undefined => {
@@ -355,6 +369,7 @@ export function App() {
               mode={center === 'chart' && sizeMode === 'overlay' ? 'single' : sizeMode}
               compare={(sizeMode === 'single' ? [size?.id ?? ''] : compare).map((sid) => computedFor(panel.id, sid))}
               units={project.units}
+              buttons={yokeButtons}
             />
           ) : center === 'chart' && panel && computed ? (
             <ChartView

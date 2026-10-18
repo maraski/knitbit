@@ -503,7 +503,9 @@ function computePanelRaw(project: Project, panel: Panel, sizeId: Id): ComputedPa
     const selL = inRound ? 0 : panel.selvedge.left;
     const selR = inRound ? 0 : panel.selvedge.right;
     const pattern = sectionAt(heightCm)?.sec.pattern ?? panel.pattern;
-    const parity = panel.rounding.parity === 'start' ? (i === startIdx ? 'any' : startParity) : panel.rounding.parity;
+    // 'start' gives way where an even pattern multiple (a rib) already fixes the parity.
+    const fixedByPattern = pattern.multiple % 2 === 0;
+    const parity = panel.rounding.parity === 'start' ? (i === startIdx || fixedByPattern ? 'any' : startParity) : panel.rounding.parity;
     const rules = { multiple: pattern.multiple, offset: pattern.offset, parity };
     let stitchRounding: RoundingResult[];
     let leftPos: number;
@@ -680,7 +682,13 @@ function computePanelRaw(project: Project, panel: Panel, sizeId: Id): ComputedPa
       [dL, dR] = offCentre(b, a) <= offCentre(a, b) ? [b, a] : [a, b];
       if (dL !== dR) {
         const which = Math.abs(dL) > Math.abs(dR) ? 'left' : 'right';
-        issues.push({ severity: 'warning', message: `${label}: odd stitch change (${total}); the ${which} edge gets one more ${total < 0 ? 'decrease' : 'increase'}.`, ref });
+        // With parity 'same as the first row' an odd change only happens where a rib's multiple fixes the count: expected.
+        const expected = panel.rounding.parity === 'start';
+        issues.push({
+          severity: expected ? 'info' : 'warning',
+          message: `${label}: odd stitch change (${total}); the ${which} edge gets one more ${total < 0 ? 'decrease' : 'increase'}${expected ? ' (the rib’s multiple fixes the count here)' : ''}.`,
+          ref,
+        });
       }
     } else {
       dL = roundNearest(L - hi.leftPos);

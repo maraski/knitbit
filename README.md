@@ -481,10 +481,33 @@ nothing a second time:
 
 Pullovers work the body and sleeves in the round, cardigans flat (each panel's *Worked* setting can be changed). The
 panels use *Stitch count: Same as the first row* (parity of the waypoint the panel starts from), so every change
-below the yoke is even and both sides shape in pairs. Selvedges are 0: the stitches continue from the yoke.
+below the yoke is even and both sides shape in pairs; where a rib's even multiple fixes a count (a 2×2 hem or
+cuff) the rib wins and the one odd change is a note, not a warning. Selvedges are 0: the stitches continue from the
+yoke.
 Joins record it: *Body continues from the yoke* and *Left/Right sleeve continues from the yoke* (live stitches, from
 the yoke's held edges: a new edge kind `{ "kind": "held", "part": "leftSleeve" | "body" | "rightSleeve" }`), and
 *Underarm cast-on*. Change the yoke and the body and sleeves follow in every size.
+
+**Front neck.** The yoke's neck uses the neckline shapes (round, V, square, boat) worked top-down: increases at each
+front edge (inside the edge stitch), then a cast-on. The neck opening at the top is the back neck (the fronts begin
+at the neck points), so the neck width is the back neck; *depth* and *centre* are expressions with per-size values.
+The properties show the numbers, e.g. M, round: *Neck row R = depth × row gauge = 8.5 × 3 = 25.5 → 26 → row 27
+(a RS row)*; *increases at each front edge = (back neck − centre) / 2 = (33 − 13) / 2 = 10*; then
+
+- **pullover:** cast on the centre (13 sts) at the end of row R and join in the round; the yoke is in rounds after;
+- **cardigan:** each front casts on (centre − `closing_r`) / 2 at its front edge (the right front on row R, the left
+  front on row R + 1) and the fronts stay open, flat to the split.
+
+V is all increases (no centre, or one stitch), square and boat all centre (boat shallow). A neck that would close
+below the split is an error.
+
+**Cardigan edges on a contiguous yoke.** The yoke has a neck edge (cast-on, two neck slopes, and the centre or
+front-edge cast-ons) and, on a cardigan, a left and a right front edge (`{ "kind": "front", "side": "left" }`) from
+the neck cast-on down to the split. The neckband is picked up around the yoke's neck; a band runs up the front
+panel's edge and on up the yoke's front edge to the neck (a continuous band: up the right front, around the yoke
+neck, down the left). Buttons are spaced over the whole front edge, hem to neck: those above the front panels are
+drawn on the yoke's top view, at the front edges, and can be dragged there. Integrated bands aren't worked into a
+contiguous yoke yet (a warning says so).
 
 **Bust from the top.** The front's bust point is `underarm.height + yoke.depth − (hps_to_apex − bust_apex_corr)` up
 from the hem: measured down from the neck point, where the fronts begin. Short rows add the length; the bust helper
