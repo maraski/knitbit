@@ -1,26 +1,22 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { CascadePicker } from './components/CascadePicker';
 import { sizeText } from './components/EstMark';
 import type { Id } from '../engine/model';
 import { buildScope } from '../engine/measurements';
 import { computePanel, panelExtras, resolvePanelDims, type ComputedPanel } from '../engine/panel';
 import type { AlignRef } from '../engine/layout';
-import { LayoutView } from './components/LayoutView';
 import { SizeModeBar, type SizeMode } from './components/SizeModeBar';
-import { ChartView } from './components/ChartView';
 import { lineFromPoints } from '../engine/lines';
 import { dragHeight, dragWidth } from '../engine/waypointDrag';
 import { editPanel } from './edit';
 import { loadProject, serializeProject } from '../engine/schema';
 import { CheckPanel } from './components/CheckPanel';
-import { ImportDialog } from './components/ImportDialog';
 import { JoinProps } from './components/JoinProps';
 import { MeasurementProps, SizesProps } from './components/MeasurementProps';
-import { MeasurementsView } from './components/MeasurementsView';
 import { Properties, type PropsContext } from './components/Properties';
 import { Schematic, type SchematicBands } from './components/Schematic';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import { YokeTopView, type YokeButtons } from './components/YokeTopView';
+import type { YokeButtons } from './components/YokeTopView';
 import { len } from './format';
 import { Sidebar } from './components/Sidebar';
 import { Toolbar } from './components/Toolbar';
@@ -32,6 +28,13 @@ import { bandOnFront, setButtonPosition } from '../engine/bands';
 import { applyEdgeTreatments } from '../engine/edgeTreatments';
 import { PANEL_SELECTION, type Selection } from './selection';
 import { mergeSampleTable, migrationNotice, sampleProject, useProjectStore, type Notice } from './store';
+
+// Screens other than the schematic load on first use, keeping them out of the initial download.
+const LayoutView = lazy(() => import('./components/LayoutView').then((m) => ({ default: m.LayoutView })));
+const ChartView = lazy(() => import('./components/ChartView').then((m) => ({ default: m.ChartView })));
+const YokeTopView = lazy(() => import('./components/YokeTopView').then((m) => ({ default: m.YokeTopView })));
+const MeasurementsView = lazy(() => import('./components/MeasurementsView').then((m) => ({ default: m.MeasurementsView })));
+const ImportDialog = lazy(() => import('./components/ImportDialog').then((m) => ({ default: m.ImportDialog })));
 
 const VIEW_KEY = 'knitbit.view.v1';
 type CenterView = 'schematic' | 'chart' | 'layout' | 'measurements';
@@ -344,99 +347,101 @@ export function App() {
               </>
             )}
           </div>
-          {center === 'layout' ? (
-            <LayoutView
-              project={project}
-              update={update}
-              sizeId={size?.id ?? ''}
-              mode={sizeMode}
-              compare={compare}
-              align={align}
-              computed={computedFor}
-              selectedPanel={panel?.id ?? null}
-              onSelectPanel={(id) => {
-                setPanelId(id);
-                setSelection(PANEL_SELECTION);
-              }}
-              onSelectJoin={(id) => setSelection({ kind: 'join', id })}
-            />
-          ) : (center === 'chart' || center === 'schematic') && panel?.yoke && computed ? (
-            <YokeTopView
-              project={project}
-              panel={panel}
-              computed={computed}
-              view={center === 'chart' ? 'chart' : 'schematic'}
-              mode={center === 'chart' && sizeMode === 'overlay' ? 'single' : sizeMode}
-              compare={(sizeMode === 'single' ? [size?.id ?? ''] : compare).map((sid) => computedFor(panel.id, sid))}
-              units={project.units}
-              buttons={yokeButtons}
-            />
-          ) : center === 'chart' && panel && computed ? (
-            <ChartView
-              project={project}
-              panel={panel}
-              computed={computed}
-              selection={selection}
-              onSelect={setSelection}
-              markers={markers}
-              update={update}
-              grid={sizeMode === 'grid' ? compare.map((sid) => ({ computed: computedFor(panel.id, sid), name: (() => { const s = project.sizes.find((z) => z.id === sid); return s ? sizeText(s, project) : ''; })() })) : undefined}
-            />
-          ) : center === 'measurements' ? (
-            <MeasurementsView
-              project={project}
-              update={update}
-              selected={measSel}
-              onSelect={setMeasSel}
-              currentSizeId={size?.id ?? ''}
-              onSize={setSizeId}
-              onImport={() => setImporting(true)}
-            />
-          ) : panel && computed ? (
-            <Schematic
-              computed={computed}
-              direction={panel.direction}
-              units={project.units}
-              selection={selection}
-              onSelect={setSelection}
-              fitKey={panel.id}
-              fitOutlines={fitOutlines}
-              markers={markers}
-              joins={panelJoins(project, panel.id)}
-              mode={sizeMode}
-              compare={compare.map((sid) => computedFor(panel.id, sid))}
-              align={align}
-              project={project}
-              bands={sizeMode === 'single' ? bands : undefined}
-              onDragWaypoint={(wpId, ch, sizeOnly, key) => {
-                const w = computed.waypoints.find((x) => x.id === wpId);
-                if (!w || !size) return;
-                const mode = sizeOnly ? 'size' : 'all';
-                if (ch.kind === 'height') {
-                  const h0 = (scope[`${w.key}.height`] ?? w.heightCm) - w.heightCm;
-                  update((p) => dragHeight(p, panel.id, wpId, size.id, ch.h + h0, mode, cascade), key);
-                } else {
-                  if (wpDragStart.current?.key !== key) wpDragStart.current = { key, value: scope[`${w.key}.${ch.part}`] ?? 0 };
-                  const start = wpDragStart.current.value;
-                  if (start > 0) update((p) => dragWidth(p, panel.id, wpId, size.id, ch.part, start * ch.factor, mode, cascade), key);
-                }
-              }}
-              drawLine={drawLine && sizeMode === 'single'}
-              onDrawLine={(a, b) => {
-                const w0 = computed.waypoints[0];
-                const h0 = (scope[`${w0.key}.height`] ?? w0.heightCm) - w0.heightCm;
-                const n = (panel.shapingLines?.length ?? 0) + 1;
-                const line = lineFromPoints(panel, scope, { h: a.h + h0, x: a.x }, { h: b.h + h0, x: b.x }, `Line ${n}`);
-                update((p) => editPanel(p, panel.id, (pn) => void (pn.shapingLines = [...(pn.shapingLines ?? []), line])));
-                setSelection({ kind: 'line', id: line.id });
-                setDrawLine(false);
-              }}
-            />
-          ) : (
-            <div className="canvas-empty">
-              <p>No panel selected. Add one from the Panels tab.</p>
-            </div>
-          )}
+          <Suspense fallback={<div className="canvas-empty"><p>Loading…</p></div>}>
+            {center === 'layout' ? (
+              <LayoutView
+                project={project}
+                update={update}
+                sizeId={size?.id ?? ''}
+                mode={sizeMode}
+                compare={compare}
+                align={align}
+                computed={computedFor}
+                selectedPanel={panel?.id ?? null}
+                onSelectPanel={(id) => {
+                  setPanelId(id);
+                  setSelection(PANEL_SELECTION);
+                }}
+                onSelectJoin={(id) => setSelection({ kind: 'join', id })}
+              />
+            ) : (center === 'chart' || center === 'schematic') && panel?.yoke && computed ? (
+              <YokeTopView
+                project={project}
+                panel={panel}
+                computed={computed}
+                view={center === 'chart' ? 'chart' : 'schematic'}
+                mode={center === 'chart' && sizeMode === 'overlay' ? 'single' : sizeMode}
+                compare={(sizeMode === 'single' ? [size?.id ?? ''] : compare).map((sid) => computedFor(panel.id, sid))}
+                units={project.units}
+                buttons={yokeButtons}
+              />
+            ) : center === 'chart' && panel && computed ? (
+              <ChartView
+                project={project}
+                panel={panel}
+                computed={computed}
+                selection={selection}
+                onSelect={setSelection}
+                markers={markers}
+                update={update}
+                grid={sizeMode === 'grid' ? compare.map((sid) => ({ computed: computedFor(panel.id, sid), name: (() => { const s = project.sizes.find((z) => z.id === sid); return s ? sizeText(s, project) : ''; })() })) : undefined}
+              />
+            ) : center === 'measurements' ? (
+              <MeasurementsView
+                project={project}
+                update={update}
+                selected={measSel}
+                onSelect={setMeasSel}
+                currentSizeId={size?.id ?? ''}
+                onSize={setSizeId}
+                onImport={() => setImporting(true)}
+              />
+            ) : panel && computed ? (
+              <Schematic
+                computed={computed}
+                direction={panel.direction}
+                units={project.units}
+                selection={selection}
+                onSelect={setSelection}
+                fitKey={panel.id}
+                fitOutlines={fitOutlines}
+                markers={markers}
+                joins={panelJoins(project, panel.id)}
+                mode={sizeMode}
+                compare={compare.map((sid) => computedFor(panel.id, sid))}
+                align={align}
+                project={project}
+                bands={sizeMode === 'single' ? bands : undefined}
+                onDragWaypoint={(wpId, ch, sizeOnly, key) => {
+                  const w = computed.waypoints.find((x) => x.id === wpId);
+                  if (!w || !size) return;
+                  const mode = sizeOnly ? 'size' : 'all';
+                  if (ch.kind === 'height') {
+                    const h0 = (scope[`${w.key}.height`] ?? w.heightCm) - w.heightCm;
+                    update((p) => dragHeight(p, panel.id, wpId, size.id, ch.h + h0, mode, cascade), key);
+                  } else {
+                    if (wpDragStart.current?.key !== key) wpDragStart.current = { key, value: scope[`${w.key}.${ch.part}`] ?? 0 };
+                    const start = wpDragStart.current.value;
+                    if (start > 0) update((p) => dragWidth(p, panel.id, wpId, size.id, ch.part, start * ch.factor, mode, cascade), key);
+                  }
+                }}
+                drawLine={drawLine && sizeMode === 'single'}
+                onDrawLine={(a, b) => {
+                  const w0 = computed.waypoints[0];
+                  const h0 = (scope[`${w0.key}.height`] ?? w0.heightCm) - w0.heightCm;
+                  const n = (panel.shapingLines?.length ?? 0) + 1;
+                  const line = lineFromPoints(panel, scope, { h: a.h + h0, x: a.x }, { h: b.h + h0, x: b.x }, `Line ${n}`);
+                  update((p) => editPanel(p, panel.id, (pn) => void (pn.shapingLines = [...(pn.shapingLines ?? []), line])));
+                  setSelection({ kind: 'line', id: line.id });
+                  setDrawLine(false);
+                }}
+              />
+            ) : (
+              <div className="canvas-empty">
+                <p>No panel selected. Add one from the Panels tab.</p>
+              </div>
+            )}
+          </Suspense>
           <CheckPanel
             project={project}
             sizeId={size?.id ?? ''}
@@ -467,16 +472,18 @@ export function App() {
       </div>
       </ErrorBoundary>
       {importing && (
-        <ImportDialog
-          project={project}
-          onCancel={() => setImporting(false)}
-          onImport={(next, summary) => {
-            store.replace(next);
-            setImporting(false);
-            setCenter('measurements');
-            store.setNotice({ kind: summary.length > 4 ? 'warning' : 'info', title: 'Sizing table imported', lines: summary });
-          }}
-        />
+        <Suspense fallback={null}>
+          <ImportDialog
+            project={project}
+            onCancel={() => setImporting(false)}
+            onImport={(next, summary) => {
+              store.replace(next);
+              setImporting(false);
+              setCenter('measurements');
+              store.setNotice({ kind: summary.length > 4 ? 'warning' : 'info', title: 'Sizing table imported', lines: summary });
+            }}
+          />
+        </Suspense>
       )}
     </div>
   );
