@@ -1,6 +1,7 @@
 // Resolving measurement values per size, and building the expression scope that panels evaluate against.
 // Precedence per size: manual override → table value → grading rule.
 
+import { bandValues } from './bands';
 import { evaluate, resolveDefinitions, scopeFrom, type Result } from './expr';
 import { customCupNames, fitAliases } from './fit';
 import { regionOf, regionSources } from './regions';
@@ -103,6 +104,11 @@ export function buildScope(project: Project, sizeId: Id): Record<string, number>
   const { values } = resolveMeasurements(project, sizeId);
   const scope = { ...gaugeScope(project), ...easeScope(project) };
   for (const [name, v] of Object.entries(values)) scope[name] = v.value;
+  // Cardigan front bands: band_w, band_overlap, closing_r (0 without bands).
+  const b = bandValues(project, sizeId, scope);
+  scope.band_w = b.band_w;
+  scope.band_overlap = b.band_overlap;
+  scope.closing_r = b.closing_r;
   return scope;
 }
 

@@ -184,6 +184,10 @@ const EDGE_KINDS: { value: string; label: string }[] = [
   { value: 'bottom', label: 'Lower edge' },
   { value: 'top', label: 'Upper edge' },
   { value: 'neck', label: 'Neckline' },
+  { value: 'front', label: 'Front edge (cardigan)' },
+  { value: 'held:leftSleeve', label: 'Held left sleeve (yoke)' },
+  { value: 'held:body', label: 'Held body (yoke)' },
+  { value: 'held:rightSleeve', label: 'Held right sleeve (yoke)' },
 ];
 
 /** Edit a list of edges: panel, which edge, and for side edges the waypoint range. */
@@ -193,13 +197,14 @@ function EdgeList({ project, refs, onChange }: { project: Project; refs: EdgeRef
     const panel = project.panels.find((p) => p.id === panelId);
     const wps = panel?.waypoints ?? [];
     if (kind === 'left' || kind === 'right') return { kind: 'side', side: kind, from: wps[0]?.id ?? '', to: wps[1]?.id ?? '' };
-    return { kind: kind as 'bottom' | 'top' | 'neck' };
+    if (kind.startsWith('held:')) return { kind: 'held', part: kind.slice(5) as 'leftSleeve' | 'body' | 'rightSleeve' };
+    return { kind: kind as 'bottom' | 'top' | 'neck' | 'front' };
   };
   return (
     <div className="edge-list">
       {refs.map((r, i) => {
         const panel = project.panels.find((p) => p.id === r.panelId);
-        const kind = r.edge.kind === 'side' ? r.edge.side : r.edge.kind;
+        const kind = r.edge.kind === 'side' ? r.edge.side : r.edge.kind === 'held' ? `held:${r.edge.part}` : r.edge.kind;
         return (
           <div key={i} className="edge-row">
             <select value={r.panelId} onChange={(e) => setAt(i, { panelId: e.target.value, edge: defaultEdge(e.target.value, kind) })}>

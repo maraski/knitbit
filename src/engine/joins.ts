@@ -54,9 +54,52 @@ export function edgeLabel(project: Project, ref: EdgeRef): string {
       return `${panel.name} · lower edge`;
     case 'top':
       return `${panel.name} · upper edge`;
+    case 'front':
+      return `${panel.name} · ${e.side ? `${e.side} ` : ''}front edge`;
+    case 'held':
+      return `${panel.name} · held ${e.part === 'body' ? 'body' : e.part === 'leftSleeve' ? 'left sleeve' : 'right sleeve'}`;
     default:
       return `${panel.name} · neckline`;
   }
+}
+
+/**
+ * A contiguous yoke's neck (cast-on, both neck slopes, and the centre or front-edge cast-ons) or one front edge
+ * (a cardigan: from the neck cast-on down to the split).
+ */
+function yokeEdge(c: ComputedPanel, e: EdgeKey, perRow: number): Omit<EdgeMeasure, 'ok' | 'label' | 'rowRange' | 'error'> | { error: string } {
+  const y = c.yoke!;
+  const spc = y.stitchesPerCm;
+  const rpc = y.rowsPerCm;
+  const R = y.counts.neckRow ?? 0;
+  const Y = y.rows.length;
+  if (e.kind === 'front') {
+    if (y.counts.joinRow !== null) return { error: 'A pullover yoke is joined at the front; it has no front edges.' };
+    if (!e.side) return { error: 'Choose the left or right front edge of the yoke.' };
+    // The right front's edge stitches are cast on at row R (RS), the left front's at row R + 1 (WS).
+    const from = Math.min(Y, e.side === 'right' ? R : R + 1);
+    const rows = Math.max(0, Y - from);
+    return { rows, stitches: 0, lengthCm: rows / rpc, pickup: Math.round(rows * perRow), parts: [`${rows} rows, row ${from + 1} to the split`] };
+  }
+  const slopeRows = Math.max(0, Math.min(R, Y) - 1);
+  const perSide = y.rows.filter((r) => r.neck).length;
+  const castOns = y.rows.filter((r) => r.row >= R).flatMap((r) => r.castOns).reduce((a, co) => a + co.count, 0);
+  const slopeCm = Math.hypot(slopeRows / rpc, perSide / spc);
+  const slopePick = Math.round(slopeRows * perRow);
+  const sts = y.castOn + castOns;
+  return {
+    rows: 2 * slopeRows,
+    stitches: sts,
+    lengthCm: sts / spc + 2 * slopeCm,
+    pickup: sts + 2 * slopePick,
+    parts: [`cast-on ${y.castOn} sts`, `2 neck slopes of ${slopeRows} rows (${slopePick} each)`, ...(castOns ? [`${castOns} sts cast on at the ${y.counts.joinRow !== null ? 'centre' : 'front edges'}`] : [])],
+  };
+}
+
+/** Rows along a cardigan front's straight front edge (below the neck). */
+export function frontEdgeRows(c: ComputedPanel): number {
+  if (!c.neck) return c.totalRows;
+  return c.neck.atStart ? c.totalRows - c.neck.splitRow + 1 : c.neck.splitRow - 1;
 }
 
 function blankMeasure(label: string, error: string): EdgeMeasure {
@@ -100,27 +143,51 @@ export function measureEdge(
     return { ok: true, label, rows: 0, stitches: sts, lengthCm: sts / spc, pickup: sts, parts: [`${sts} sts`], rowRange: null };
   }
 
+  if (e.kind === 'held') {
+    if (!c.yoke) return blankMeasure(label, 'Only a contiguous yoke has held stitches.');
+    const sts = c.yoke.held[e.part];
+    return { ok: true, label, rows: 0, stitches: sts, lengthCm: sts / spc, pickup: sts, parts: [`${sts} sts held`], rowRange: null };
+  }
+
+  if (c.yoke && (e.kind === 'front' || e.kind === 'neck')) {
+    const m = yokeEdge(c, e, perRow);
+    return 'error' in m ? blankMeasure(label, m.error) : { ok: true, label, ...m, rowRange: null };
+  }
+
+  if (e.kind === 'front') {
+    // A cardigan front's straight front edge, from the lower edge up to where the neck takes stitches off it.
+    if (!c.half) return blankMeasure(label, 'Only a cardigan front has a front edge.');
+    const rows = frontEdgeRows(c);
+    const pickup = roundNearest(rows * perRow);
+    return { ok: true, label, rows, stitches: 0, lengthCm: rows / rpc, pickup, parts: [`${rows} rows`], rowRange: c.topDown ? [c.totalRows - rows + 1, c.totalRows] : [1, rows] };
+  }
+
   // Neckline: centre stitches plus two slopes.
   const n = c.neck;
   if (!n) return blankMeasure(label, 'This panel has no neckline.');
   const slopeRows = n.atStart ? n.splitRow - 1 : c.totalRows - n.splitRow;
+  // A cardigan front has one neck slope: the edge on its own side (the other one is its straight front edge).
+  const slopeEdge = c.half?.keep === 'left' ? c.neckLeft : c.half ? c.neckRight : c.neckLeft;
+  const slopes = n.oneSide ? 1 : 2;
   const neckRows = Array.from({ length: c.totalRows + 1 }, (_, r) => r).filter((r) => c.neckLeft[r] !== null);
   let slopeLen = 0;
   for (let i = 1; i < neckRows.length; i++) {
     const r = neckRows[i];
     const p = neckRows[i - 1];
-    slopeLen += Math.hypot(Math.abs(c.neckLeft[r]! - c.neckLeft[p]!) / spc, 1 / rpc);
+    slopeLen += Math.hypot(Math.abs(slopeEdge[r]! - slopeEdge[p]!) / spc, 1 / rpc);
   }
   const centreText = panel.neckline?.centre === 'hold' ? 'held' : n.atStart ? 'cast on' : 'bound off';
   const slopePick = roundNearest(slopeRows * perRow);
   return {
     ok: true,
     label,
-    rows: slopeRows * 2,
+    rows: slopeRows * slopes,
     stitches: n.centreSts,
-    lengthCm: n.centreSts / spc + 2 * slopeLen,
-    pickup: n.centreSts + 2 * slopePick,
-    parts: [`centre ${n.centreSts} sts ${centreText}`, `2 slopes of ${slopeRows} rows (${slopePick} each)`],
+    lengthCm: n.centreSts / spc + slopes * slopeLen,
+    pickup: n.centreSts + slopes * slopePick,
+    parts: n.oneSide
+      ? [`${n.centreSts} sts ${centreText} at the front edge`, `1 slope of ${slopeRows} rows (${slopePick})`]
+      : [`centre ${n.centreSts} sts ${centreText}`, `2 slopes of ${slopeRows} rows (${slopePick} each)`],
     rowRange: null,
   };
 }

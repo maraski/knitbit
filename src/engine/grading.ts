@@ -39,6 +39,12 @@ function allDims(panel: Panel): DimExpr[] {
   }
   if (panel.princess) out.push(panel.princess.position);
   for (const l of panel.shapingLines ?? []) out.push(l.from.height, l.from.x, l.to.height, l.to.x, l.amount);
+  const y = panel.yoke;
+  if (y) {
+    out.push(y.seamSts, y.shoulder.backWidth, y.shoulder.length, y.shoulder.shorten, y.shoulder.extraRows, y.backNeck.perRow, y.backNeck.rows);
+    out.push(y.cap.topSts, y.cap.rapidRows, y.sleeveWidth, y.depth.backLength, y.depth.extra, y.depth.maxRapid);
+    out.push(y.body.width, y.body.zone, y.underarm.castOn, y.neck.depth, y.neck.centre);
+  }
   return out;
 }
 
@@ -93,7 +99,13 @@ export function removeSize(p: Project, id: Id): Project {
     if (panel.bust) delete panel.bust.manual[id];
     if (panel.freeStitches) panel.freeStitches = panel.freeStitches.filter((f) => f.sizeId !== id);
     for (const l of panel.shapingLines ?? []) delete l.manual[id];
+    if (panel.yoke) delete panel.yoke.backNeck.manual[id];
   }
+  if (d.cardigan) {
+    delete d.cardigan.buttons.manual[id];
+    for (const dim of [d.cardigan.overlap, d.cardigan.closing, d.cardigan.buttons.top, d.cardigan.buttons.bottom]) delete dim.overrides[id];
+  }
+  for (const t of Object.values(d.edges ?? {})) delete t.depth.overrides[id];
   return d;
 }
 

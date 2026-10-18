@@ -87,8 +87,9 @@ export function alignShift(c: ComputedPanel, anchor: ComputedPanel, ref: AlignRe
 
 const GAP = 8; // cm between panels
 
-function role(panel: Panel): 'back' | 'front' | 'sleeve' | 'other' {
+function role(panel: Panel): 'back' | 'front' | 'sleeve' | 'band' | 'other' {
   const t = panel.template ?? '';
+  if (panel.band) return 'band';
   if (t === 'back' || t === 'back-bodice') return 'back';
   if (t === 'front') return 'front';
   if (t.startsWith('sleeve')) return 'sleeve';
@@ -113,7 +114,8 @@ export function arrangeT(project: Project, computed: Map<Id, ComputedPanel>, all
   const usable = project.panels.filter((p) => computed.get(p.id)?.ok);
   const bodies = [...usable.filter((p) => role(p) === 'back'), ...usable.filter((p) => role(p) === 'front')];
   const sleeves = usable.filter((p) => role(p) === 'sleeve');
-  const others = usable.filter((p) => !bodies.includes(p) && !sleeves.slice(0, 2).includes(p));
+  const bands = usable.filter((p) => role(p) === 'band');
+  const others = usable.filter((p) => !bodies.includes(p) && !bands.includes(p) && !sleeves.slice(0, 2).includes(p));
 
   // Bodies in a row, lower edges on y = 0.
   let x = 0;
@@ -129,6 +131,17 @@ export function arrangeT(project: Project, computed: Map<Id, ComputedPanel>, all
     underarm = Math.max(underarm, refHeight(computed.get(p.id)!, 'underarm'));
   });
   if (!bodies.length) underarm = 0;
+
+  // Cardigan bands stand upright beside the body, lower ends on y = 0 (a picked-up band turned a quarter turn).
+  for (const p of bands) {
+    const pts = (allSizes?.get(p.id)?.filter((c) => c.ok) ?? [computed.get(p.id)!]).flatMap((c) => localOutline(c));
+    const flat = bbox(pts);
+    const rotation: Rotation = flat.maxX - flat.minX > flat.maxY - flat.minY ? 90 : 0;
+    const b = bbox(pts.map((q) => rotate(q, rotation)));
+    out[p.id] = { x: x - b.minX, y: -b.minY, rotation };
+    x += b.maxX - b.minX + GAP;
+    bodyRight = x - GAP;
+  }
 
   // Sleeves: left one rotated 270° (cap pointing right), right one 90° (cap pointing left), axis at underarm height.
   const [left, right] = sleeves;

@@ -6,7 +6,7 @@ import type { Gauge } from './gauge';
 import type { Parity } from './rounding';
 import type { Units } from './units';
 
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 export type Id = string;
 
@@ -191,6 +191,21 @@ export interface PatternSection {
   fromHeight: DimExpr;
   toHeight: DimExpr;
   pattern: StitchPattern;
+  /** Made by an edge treatment (Project → Edges); re-applying the treatment replaces it. */
+  edge?: EdgeTreatmentId;
+}
+
+/**
+ * One front of a cardigan. The panel's dimensions describe the whole front (both halves, as if closed at centre
+ * front, so necklines and bust shaping work as on a pullover front); the panel is the wearer's left or right half of it.
+ * As seen from the RS, the left front's centre-front edge is its left edge, the right front's its right edge.
+ */
+export interface FrontHalf {
+  side: 'left' | 'right';
+  /** The other front of the pair: edits to either are copied to the other (mirrored). null = unlinked. */
+  pair: Id | null;
+  /** Selvedge stitches at the centre-front edge (the side edge uses the panel's selvedge). */
+  cfSelvedge: number;
 }
 
 export type NecklineShape = 'round' | 'v' | 'square' | 'boat';
@@ -202,6 +217,44 @@ export interface Neckline {
   centre: 'bindoff' | 'hold'; // what happens to the centre stitches
   centreWidth: DimExpr; // width taken off at the centre in one go (round neck); 0 for V
   side: 'rs' | 'any'; // which rows the side shaping uses
+}
+
+// ---------- contiguous yoke (top-down, set-in sleeve look; Susie Myers' contiguous method) ----------
+
+/** Increases at the seams and sleeves: kfb (pfb on WS rows), a M1L/M1R pair, or a symbol of your choice. */
+export type YokeIncrease = 'kfb' | 'm1' | 'other';
+
+/**
+ * The phases of a contiguous yoke. Lengths are cm, counts are stitches or rows as named; every value is an
+ * expression with per-size overrides. Row 1 is a RS row that places the markers and makes the first increases.
+ */
+export interface YokeSpec {
+  increase: { type: YokeIncrease; symbol: string };
+  /** Stitches in each shoulder seam group (2; more makes a rounder cap). */
+  seamSts: DimExpr;
+  /**
+   * Phase A, shoulders: 4 increases every row. 'cross-back' (default): until the back, after the markers move,
+   * is `backWidth` wide. 'length': until the seam is `length − shorten` long. Plus `extraRows` (rows) in both.
+   */
+  shoulder: { mode: 'cross-back' | 'length'; backWidth: DimExpr; length: DimExpr; shorten: DimExpr; extraRows: DimExpr };
+  /** Phase B, back neck: `perRow` increases every RS row over the first `rows` rows, spread across the back. */
+  backNeck: { perRow: DimExpr; rows: DimExpr; manual: Record<Id, number[][]> };
+  /** Phase C: markers move so each cap top has `topSts`; then 4 sleeve increases every row for `rapidRows` (rows). */
+  cap: { topSts: DimExpr; rapidRows: DimExpr; /** Lengthen the rapid phase until the sleeve reaches its width. */ solve: boolean };
+  /** Phase D: sleeve increases every second row until the sleeve (with the underarm cast-on) is this wide (cm around). */
+  sleeveWidth: DimExpr;
+  /**
+   * Where the yoke splits: 'back-length' (default) = rows from the back neck; 'armhole' = armhole_depth below the seam
+   * end; plus `extra` (cm). With `deepen` (default on, needs `cap.solve`), the yoke is deepened further until the
+   * sleeve reaches its width with at most `maxRapid` (fraction, default 0.5) of the armhole rows rapid.
+   */
+  depth: { mode: 'back-length' | 'armhole'; backLength: DimExpr; extra: DimExpr; deepen: boolean; maxRapid: DimExpr };
+  /** The body at the underarm (cm around, cast-ons included), and body increases low in the armhole (`zone` = fraction of its rows). */
+  body: { width: DimExpr; increases: boolean; zone: DimExpr };
+  /** Phase F: stitches cast on at each underarm (cm), shared by body and sleeve. */
+  underarm: { castOn: DimExpr };
+  /** Front neck, worked as increases at the front edges, then (pullover) a centre cast-on that joins the round. */
+  neck: { shape: NecklineShape; depth: DimExpr; centre: DimExpr };
 }
 
 export type BustMethod = 'shortrows' | 'horizontal-dart' | 'vertical-dart' | 'none';
@@ -282,7 +335,8 @@ export interface Panel {
   joinAt?: Id | null;
   selvedge: { left: number; right: number }; // 0–2 each, flat parts only
   shapingInset: number; // stitches between the edge and the shaping (default 2)
-  rounding: { parity: Parity; rowParity: Parity };
+  /** Stitch-count parity; 'start' = the same parity as the waypoint the panel starts from (every change is even). */
+  rounding: { parity: Parity | 'start'; rowParity: Parity };
   pattern: StitchPattern; // main stitch pattern
   sections: PatternSection[];
   waypoints: Waypoint[]; // ordered by height
@@ -290,6 +344,16 @@ export interface Panel {
   neckline: Neckline | null;
   bust?: BustShaping | null;
   princess?: Princess | null;
+  /** Made by an edge treatment (e.g. the neckband strip); re-applying the treatment updates or removes it. */
+  edge?: EdgeTreatmentId;
+  /** A cardigan band strip: which band it is. */
+  band?: BandRole;
+  /** Made from a contiguous yoke's held stitches (body and sleeves continue from the split). */
+  fromYoke?: 'back' | 'front' | 'leftSleeve' | 'rightSleeve';
+  /** A contiguous yoke: worked from these phases row by row, not from waypoints. */
+  yoke?: YokeSpec | null;
+  /** Cardigan front: this panel is one half of the front it describes. */
+  half?: FrontHalf | null;
   /** A panel linked by the knitter (e.g. back ↔ front): dragging a waypoint moves the same-named one there too. */
   linkedTo?: Id | null;
   /** How the first row is made: cast on (default) or picked up from another panel (top-down fronts). */
@@ -298,6 +362,60 @@ export interface Panel {
   shapingLines?: ShapingLine[];
   layout: { x: number; y: number; rotation: 0 | 90 | 180 | 270 };
   notes: string;
+}
+
+// ---------- edge treatments ----------
+
+export type EdgeTreatmentId = 'hem' | 'cuff' | 'neckband' | 'frontBands';
+export type EdgeStitch = 'rib1x1' | 'rib2x2' | 'garter' | 'seed' | 'custom';
+
+/** A ribbed (or garter, seed…) edge. `depth` is the rib height, or the band width for neck and front bands. */
+export interface EdgeTreatment {
+  enabled: boolean;
+  depth: DimExpr;
+  stitch: EdgeStitch;
+  /** Used when `stitch` is 'custom'. */
+  custom: StitchPattern;
+  /** Knit with the panel (a pattern section, or extra stitches for front bands) or added later (picked up / sewn on). */
+  method: 'with-panel' | 'later';
+}
+
+export type EdgeTreatments = Record<EdgeTreatmentId, EdgeTreatment>;
+
+// ---------- cardigan bands and buttons ----------
+
+/** Picked up along the edge, knit sideways as a strip and sewn on, or worked as extra stitches at the front edge. */
+export type BandAttach = 'pickup' | 'sideways' | 'integrated';
+/** Which band a strip is: the button band, the buttonhole band, or one continuous band up one front and down the other. */
+export type BandRole = 'button' | 'buttonhole' | 'continuous';
+
+export interface CardiganOptions {
+  /** Separate button and buttonhole bands, or one band up the right front, around the back neck and down the left. */
+  bands: 'separate' | 'continuous';
+  attach: { button: BandAttach; buttonhole: BandAttach; continuous: Exclude<BandAttach, 'integrated'> };
+  /** The front (as worn) that carries the buttonholes. */
+  buttonholeSide: 'left' | 'right';
+  /** How far the fronts overlap when closed (cm); `band_overlap` in expressions. Default: the band width. */
+  overlap: DimExpr;
+  /**
+   * Width taken off the whole front so the closed garment matches it (cm); `closing_r` in expressions.
+   * Each front = (whole front − closing_r) / 2. Default `2 * band_w - band_overlap`.
+   */
+  closing: DimExpr;
+  buttons: {
+    count: number;
+    top: DimExpr; // from the top of the front edge to the first button (cm)
+    bottom: DimExpr; // from the lower edge to the last button (cm)
+    /** Dragged positions by size: cm up from the front's lower edge, one per button (top first). */
+    manual: Record<Id, number[]>;
+  };
+  buttonhole: {
+    /** 'yo-k2tog': a one-row buttonhole (yarn over, k2tog). 'symbol': `width` cells of `symbol`. */
+    style: 'yo-k2tog' | 'symbol';
+    symbol: string;
+    width: number;
+    note: string;
+  };
 }
 
 // ---------- joins (annotation only) ----------
@@ -309,7 +427,11 @@ export type EdgeKey =
   | { kind: 'side'; side: 'left' | 'right'; from: Id; to: Id }
   | { kind: 'bottom' } // the garment's lower edge
   | { kind: 'top' } // the garment's upper edge outside any neckline
-  | { kind: 'neck' }; // the whole neckline (both slopes and the centre)
+  | { kind: 'neck' } // the whole neckline (both slopes and the centre)
+  /** A cardigan front's straight front edge, from the lower edge up to the neck; on a contiguous yoke, `side` picks
+   * the wearer's left or right front edge (from the split up to the neck). */
+  | { kind: 'front'; side?: 'left' | 'right' }
+  | { kind: 'held'; part: 'leftSleeve' | 'body' | 'rightSleeve' }; // a contiguous yoke's stitches held at the split
 
 export interface EdgeRef {
   panelId: Id;
@@ -328,9 +450,25 @@ export interface Join {
   partner: EdgeRef[];
   ratio: { stitches: number; rows: number } | null; // pick-up ratio; null = the project default
   note: string;
+  /** Made by an edge treatment (an edge added later); re-applying the treatment replaces it. */
+  edge?: EdgeTreatmentId;
 }
 
 // ---------- project ----------
+
+/**
+ * How the garment is built. 'panels': panels as drawn (the original behaviour). 'contiguous': a top-down contiguous
+ * yoke (Susie Myers' method) generates the yoke, body and sleeve panels, which stay ordinary and editable.
+ */
+export type Construction = 'panels' | 'contiguous';
+/** 'closed': a pullover. 'cardigan': the front opens at centre front (fronts and bands worked flat). */
+export type FrontOpening = 'closed' | 'cardigan';
+
+/** Project-level garment options; they combine freely. */
+export interface GarmentOptions {
+  construction: Construction;
+  opening: FrontOpening;
+}
 
 export interface ProjectSettings {
   seamToleranceCm: number;
@@ -341,6 +479,8 @@ export interface ProjectSettings {
   regionGapLimit?: number;
   /** Check that the hem is at least the bust plus ease around (off by default). */
   hemCheck?: boolean;
+  /** Credit line for the construction method (if any) in the footer of exports. Absent = on. */
+  exportCredit?: boolean;
 }
 
 /** A stitch symbol the knitter defines (drawn as a coloured cell with its abbreviation). */
@@ -363,6 +503,13 @@ export interface Project {
   measurements: Measurement[];
   ease: EaseSettings;
   fit: FitChoices;
+  garment: GarmentOptions;
+  /** Free-form labels; some are added for you (e.g. "contiguous" for that construction). */
+  tags: string[];
+  /** Hem, cuff, neckband and front-band settings; absent = the defaults, not yet applied to any panel. */
+  edges?: EdgeTreatments;
+  /** Cardigan bands, buttons and closing width; absent = the defaults. */
+  cardigan?: CardiganOptions;
   panels: Panel[];
   joins?: Join[];
   symbols?: CustomSymbol[];
@@ -444,6 +591,8 @@ export function newProject(name = 'Untitled top'): Project {
     measurements: [],
     ease: { global: 5, per: {} },
     fit: { cup: 'cd' },
+    garment: { construction: 'panels', opening: 'closed' },
+    tags: [],
     panels: [],
     settings: { seamToleranceCm: 1, pickUp: { stitches: 3, rows: 4 } },
     createdAt: now,

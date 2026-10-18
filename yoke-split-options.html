@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Yoke split options</title>
+<style>
+  :root { --ink:#2c2c2a; --muted:#6b6a64; --line:#d3d1c7; --bad:#a32d2d; --good:#0f6e56; --bg:#fbfaf7; --accent:#534ab7; }
+  @media (prefers-color-scheme: dark) { :root { --ink:#ecebe6; --muted:#a9a79f; --line:#4a4945; --bad:#f09595; --good:#5dcaa5; --bg:#1f1f1d; --accent:#afa9ec; } }
+  body { margin:0; padding:20px 16px; background:var(--bg); color:var(--ink); font:15px/1.55 system-ui, -apple-system, sans-serif; }
+  h1 { font-size:20px; font-weight:500; margin:0 0 6px; }
+  p.lead { color:var(--muted); margin:0 0 16px; max-width:760px; }
+  .sizes { display:flex; gap:8px; align-items:center; margin-bottom:16px; color:var(--muted); font-size:13px; }
+  .sizes button { font:inherit; padding:4px 14px; border-radius:8px; border:1px solid var(--line); background:transparent; color:var(--ink); cursor:pointer; }
+  .sizes button.on { border-color:var(--accent); color:var(--accent); font-weight:500; }
+  .cols { display:flex; gap:24px; flex-wrap:wrap; }
+  .col { flex:1; min-width:300px; max-width:460px; }
+  .col h2 { font-size:16px; font-weight:500; margin:0; }
+  .col .sub { font-size:13px; color:var(--muted); margin-bottom:6px; }
+  svg { width:100%; height:auto; display:block; }
+  svg text { font:12px system-ui, sans-serif; fill:var(--muted); }
+  .facts { font-size:14px; line-height:1.7; }
+  .bad { color:var(--bad); font-weight:500; } .good { color:var(--good); font-weight:500; }
+  .legend { display:flex; gap:16px; flex-wrap:wrap; margin-top:18px; font-size:13px; color:var(--muted); }
+  .sw { display:inline-block; width:11px; height:11px; border-radius:2px; vertical-align:-1px; margin-right:4px; }
+</style>
+</head>
+<body>
+<h1>Where should the yoke split?</h1>
+<p class="lead">Bar on the left: the back of the yoke from the back neck down (purple = shoulder rows, green = armhole rows). Red dashed line: your underarm. Shape on the right: the sleeve cap laid flat, growing row by row until the split. Bracket underneath: the width the sleeve needs (bicep + ease).</p>
+<div class="sizes">Size
+  <button data-s="M">M</button><button data-s="L">L</button><button data-s="4X">4X</button>
+</div>
+<div class="cols">
+  <div class="col"><h2>Option 1 · split by back length</h2><div class="sub">current default</div>
+    <svg id="o1" viewBox="0 0 330 250"></svg><div class="facts" id="t1"></div></div>
+  <div class="col"><h2>Option 2 · split at armhole depth</h2><div class="sub">measured below the shoulder seam</div>
+    <svg id="o2" viewBox="0 0 330 250"></svg><div class="facts" id="t2"></div></div>
+</div>
+<div class="legend">
+  <span><span class="sw" style="background:#7F77DD"></span>shoulder rows</span>
+  <span><span class="sw" style="background:#F0997B"></span>rapid cap (increase every row)</span>
+  <span><span class="sw" style="background:#5DCAA5"></span>slow cap (every 2nd row)</span>
+  <span><span class="sw" style="background:#B4B2A9"></span>underarm cast-on</span>
+</div>
+<script>
+const D = {
+  M:   { body:22.5, target:44.5, o:[{A:27,C:38,n:2, X:41,N:12},{A:27,C:17,n:23,X:62,N:12}] },
+  L:   { body:23.5, target:48,   o:[{A:28,C:43,n:0, X:43,N:13},{A:28,C:22,n:22,X:65,N:13}] },
+  '4X':{ body:27,   target:63,   o:[{A:32,C:49,n:0, X:49,N:23},{A:32,C:36,n:21,X:77,N:19}] },
+};
+const SPC = 2.2, RPC = 3, S = 4, Y0 = 30, CX = 200, NS = 'http://www.w3.org/2000/svg';
+function el(svg, tag, a, txt) { const e = document.createElementNS(NS, tag); for (const k in a) e.setAttribute(k, a[k]); if (txt !== undefined) e.textContent = txt; svg.appendChild(e); return e; }
+function draw(id, tid, d, o) {
+  const svg = document.getElementById(id); svg.innerHTML = '';
+  const yA = Y0 + o.A / RPC * S, yC = Y0 + (o.A + o.C) / RPC * S, yY = Y0 + (o.A + o.X) / RPC * S, yB = Y0 + d.body * S;
+  el(svg, 'rect', { x:30, y:Y0, width:16, height:yA - Y0, fill:'#7F77DD' });
+  el(svg, 'rect', { x:30, y:yA, width:16, height:yY - yA, fill:'#9FE1CB' });
+  el(svg, 'text', { x:22, y:Y0 - 10 }, 'back neck');
+  el(svg, 'line', { x1:20, y1:yB, x2:320, y2:yB, stroke:'#E24B4A', 'stroke-width':1, 'stroke-dasharray':'4 3' });
+  el(svg, 'text', { x:52, y:yB - 5, style:'fill:#E24B4A' }, 'your underarm');
+  const top = 3 / SPC / 2 * S, rapid = (3 + 2 * o.C) / SPC / 2 * S, slow = (3 + 2 * o.C + 2 * o.n) / SPC / 2 * S, co = slow + o.N / SPC / 2 * S;
+  el(svg, 'polygon', { points:`${CX-top},${yA} ${CX+top},${yA} ${CX+rapid},${yC} ${CX-rapid},${yC}`, fill:'#F0997B' });
+  if (yY > yC + 0.5) el(svg, 'polygon', { points:`${CX-rapid},${yC} ${CX+rapid},${yC} ${CX+slow},${yY} ${CX-slow},${yY}`, fill:'#5DCAA5' });
+  el(svg, 'rect', { x:CX - co, y:yY, width:2 * co, height:5, fill:'#B4B2A9' });
+  const tw = d.target / 2 * S, ink = getComputedStyle(document.body).color;
+  el(svg, 'line', { x1:CX - tw, y1:yY + 12, x2:CX + tw, y2:yY + 12, stroke:ink, 'stroke-width':1 });
+  el(svg, 'line', { x1:CX - tw, y1:yY + 7, x2:CX - tw, y2:yY + 17, stroke:ink, 'stroke-width':1 });
+  el(svg, 'line', { x1:CX + tw, y1:yY + 7, x2:CX + tw, y2:yY + 17, stroke:ink, 'stroke-width':1 });
+  el(svg, 'text', { x:CX, y:yY + 30, 'text-anchor':'middle' }, 'bicep + ease');
+  el(svg, 'text', { x:CX, y:yA - 6, 'text-anchor':'middle' }, 'sleeve cap');
+  const sleeve = ((3 + 2 * o.C + 2 * o.n) + o.N) / SPC, back = (o.A + o.X) / RPC;
+  document.getElementById(tid).innerHTML =
+    `Back, neck to split: <span class="${back - d.body > 2 ? 'bad' : 'good'}">${back.toFixed(1)} cm</span> (your body ${d.body} cm)<br>` +
+    `Sleeve at underarm: <span class="${d.target - sleeve > 0.4 ? 'bad' : 'good'}">${sleeve.toFixed(1)} cm</span> of ${d.target} cm<br>` +
+    `Cap: ${o.C} of ${o.X} armhole rows increase every row`;
+}
+function pick(s) {
+  document.querySelectorAll('.sizes button').forEach(b => b.classList.toggle('on', b.dataset.s === s));
+  draw('o1', 't1', D[s], D[s].o[0]); draw('o2', 't2', D[s], D[s].o[1]);
+}
+document.querySelectorAll('.sizes button').forEach(b => b.addEventListener('click', () => pick(b.dataset.s)));
+pick('M');
+</script>
+</body>
+</html>

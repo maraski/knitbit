@@ -44,7 +44,7 @@ describe('templates', () => {
   });
 
   it('lists every template id', () => {
-    expect(TEMPLATES.map((t) => t.id).sort()).toEqual(['back', 'front', 'neckband', 'rectangle', 'sleeve', 'top']);
+    expect(TEMPLATES.map((t) => t.id).sort()).toEqual(['back', 'front', 'neckband', 'rectangle', 'sleeve', 'top', 'yoke']);
   });
 
   it('front and back share side seams: same rows, front wider at the waist by 2 × waist_shift', () => {

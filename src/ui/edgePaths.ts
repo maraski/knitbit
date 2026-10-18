@@ -3,6 +3,7 @@
 
 import type { EdgeKey } from '../engine/model';
 import type { ComputedPanel, Point } from '../engine/panel';
+import { frontEdgeRows } from '../engine/joins';
 
 /** Per-row stair along an outer edge between two knit rows (row r spans y = r−1 … r). */
 export function edgeRowsPath(edge: number[], from: number, to: number): Point[] {
@@ -32,10 +33,38 @@ export function edgePaths(c: ComputedPanel, edge: EdgeKey): Point[][] {
     }
     return [[{ x: c.leftEdge[r], y: r }, { x: c.rightEdge[r], y: r }]];
   }
+  if (edge.kind === 'held') {
+    // The yoke's last row, by zone: the body is the two fronts and the back.
+    if (!c.yoke || !c.yoke.rows.length) return [];
+    const row = c.yoke.rows[c.yoke.rows.length - 1];
+    const z = row.zones;
+    let x = -row.total / 2;
+    const spans: Record<string, [number, number]> = {};
+    for (const k of ['leftFront', 'leftSleeve', 'back', 'rightSleeve', 'rightFront'] as const) {
+      spans[k] = [x, x + z[k]];
+      x += z[k];
+    }
+    const seg = (k: string) => [{ x: spans[k][0], y: top }, { x: spans[k][1], y: top }];
+    return edge.part === 'body' ? [seg('leftFront'), seg('back'), seg('rightFront')] : [seg(edge.part)];
+  }
+  if (edge.kind === 'front') {
+    if (!c.half) return [];
+    // From the garment's lower edge up to the neck (the front edge's rows).
+    const rows = frontEdgeRows(c);
+    const [a, b] = c.topDown ? [top - rows, top] : [0, rows];
+    return [[{ x: c.half.cfX, y: a }, { x: c.half.cfX, y: b }]];
+  }
   if (!c.neck) return [];
   const rows: number[] = [];
   for (let r = 0; r <= top; r++) if (c.neckLeft[r] !== null) rows.push(r);
   const line = c.neck.splitRow - 1;
+  if (c.half) {
+    // One neck edge, from the front edge across the centre stitches and up (down) the slope.
+    const edgeX = c.half.keep === 'right' ? c.neckRight : c.neckLeft;
+    const slope = rows.map((r) => ({ x: edgeX[r]!, y: r }));
+    const start = { x: c.half.cfX, y: line };
+    return [c.neck.atStart ? [start, ...slope.reverse()] : [start, ...slope]];
+  }
   const left = rows.map((r) => ({ x: c.neckLeft[r]!, y: r }));
   const right = rows.map((r) => ({ x: c.neckRight[r]!, y: r }));
   const cl = { x: c.neck.centreX - c.neck.centreSts / 2, y: line };

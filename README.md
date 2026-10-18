@@ -12,6 +12,20 @@ optional region sizing (upper body, lower body and sleeves from different sizes)
 **Sizing data credit:** Body measurements adapted from Ysolda Teague's designer size chart, ysolda.com/designer-size-chart.
 The adapted table (`samples/sizing_table_ysolda_cm.csv`) is for personal use and should not be redistributed as a chart.
 
+**Garment options** (Project → Garment), combined freely: **Construction** *Panels* (the panels you draw) or
+*Contiguous, top-down* (a generator that makes a contiguous yoke and the body and sleeves that continue from it, all
+ordinary editable panels), and **Front opening** *Closed / pullover* or *Cardigan* (mirrored left/right fronts,
+bands, buttons). Edge treatments (hem, cuff, neckband, front bands) are set once for the project. See *Garment
+options*, *Cardigan fronts*, *Edge treatments*, *Cardigan bands and buttons* and *Contiguous yoke*.
+
+**Contiguous method credit:** The contiguous construction follows the contiguous sleeve method developed by Susie
+Myers, SusieM on Ravelry (http://www.ravelry.com/people/SusieM). It is a method, not a pattern; Knitbit only models
+its phases. Projects that use it get the tag *contiguous*, and exports carry this line in their footer (Project →
+Garment → *Credit the construction method in export footers*, on by default): *"This garment is worked seamlessly
+from the top-down using the contiguous sleeve method developed by Susie Myers, SusieM on Ravelry
+(http://www.ravelry.com/people/SusieM)"*. (PDF/PNG export itself is not built yet; `exportFooter()` in
+`src/engine/garment.ts` gives it the footer lines.)
+
 ## Running
 
 Requires Node 20+.
@@ -52,9 +66,16 @@ npm run typecheck
   - `layout.ts`: garment layout geometry (local cm frame, rotation, placement), size alignment, T-shape auto-arrange.
   - `free.ts`: painted stitches (paint, erase, repeat, mirror, copy to all sizes). `lines.ts`: shaping lines.
   - `chart.ts`: the stitch chart grid built from a computed panel (cells, short rows, repeats, legend, column folding).
+  - `garment.ts`: the garment options (construction, front opening), tags, the export credit line, schema 2 → 3.
+  - `cardigan.ts`: cardigan fronts as a mirrored pair (split, merge, link, keep in step).
+  - `edgeTreatments.ts`: hem, cuff, neckband and front band settings applied as sections, strips and joins.
+  - `bands.ts`, `buttons.ts`: band width / overlap / closing width, button positions, buttonholes, band checks.
+  - `contiguous.ts`: the contiguous yoke generator (phases A–F, neck, row-by-row zones and increases) and `yoke.*` names.
+  - `yokePanel.ts`, `yokeTop.ts`: the yoke as a panel and chart; its top-view geometry.
+  - `contiguousGarment.ts`: body and sleeves from the yoke's held stitches. `contiguousChecks.ts`: their checks.
 - `src/ui/`: React views.
 - `samples/`: the sample sizing table (`sizing_table_ysolda_cm.csv`, and `.json` with the same data).
-- `src/engine/fixtures/`: test data: the old sample table and a schema-1 project file.
+- `src/engine/fixtures/`: test data: the old sample table, and schema-1 and schema-2 project files.
 
 ## Expression syntax
 
@@ -70,6 +91,9 @@ Waypoint dimensions and custom measurements are expressions. They evaluate to **
 | Operators | `+ - * / ^` and parentheses; `^` is right-associative; unary minus binds looser than `^` (`-2^2 = -4`) |
 | Functions | `min(a, b, …)`, `max(a, b, …)`, `abs(x)`, `sqrt(x)`, `round(x[, step])`, `floor(x[, step])`, `ceil(x[, step])`, `clamp(x, lo, hi)` |
 | Armhole | `armhole_len`: the armhole a sleeve is sewn into (see Templates) |
+| Cardigan bands | `band_w` (front band width), `band_overlap`, `closing_r` (width taken off the whole front); 0 without bands (see Cardigan bands and buttons) |
+| Joined edges | `edge_len` (cm), `edge_rows`, `edge_pickup` (sts at the join's ratio): the edges a strip is joined to, e.g. a band's `edge_pickup * st_w` |
+| Contiguous yoke | `yoke.back_w`, `yoke.front_w`, `yoke.sleeve_w` (held stitches + underarm cast-on share, cm), `yoke.underarm_co` (cm), `yoke.depth` (neck to split, cm); see Contiguous yoke |
 
 Examples:
 
@@ -329,6 +353,234 @@ Rows are spread evenly (centred) between the ends; a slanted line moves across a
 rows by hand in the line's table (Reset to auto goes back). Presets: fisheye dart through the bust point, waist dart
 ⅓ in from the side, slanted side-front dart, sway-back dart at the centre back.
 
+## Garment options
+
+Project → **Garment** sets two options that combine freely (schema 3; older projects load as Panels + Closed, and
+the upgrade says so):
+
+| | Panels | Contiguous, top-down |
+|---|---|---|
+| **Closed / pullover** | the panels you draw (the original behaviour) | a contiguous yoke, joined in the round at the neck; back, front and sleeves in the round |
+| **Cardigan** | each front becomes a mirrored Left / Right front pair; body flat | the yoke stays open at centre front; back, Left / Right fronts and sleeves flat |
+
+Nothing is made or removed behind your back: switching an option never adds panels. Cardigan splits each front into a
+pair (and Closed merges it back), and **Add strips** / **Add yoke, body and sleeves** make the strips and the
+contiguous panels when you ask. The contiguous construction adds the project tag *contiguous* (removed again when you
+switch back) and the export credit (above).
+
+**Formulas confirmed while building these options** (each is an editable expression with per-size values):
+
+| Decision | Formula / default |
+|---|---|
+| Shoulder seam (phase A) | until the back, after the markers move, is `cross_back_w + 1` (the cross back is followed; the back shoulder width is a style option): rows = (target + 2·k − back neck − phase B increases) / 2, k = (cap top − seam) / 2. Option: the sloped length `sqrt(((back_shoulder_width − back_neck_width)/2)² + shoulder_drop²)` − shorten (0) + extra rows (0) |
+| Back neck increases (phase B) | during phase A, 2 per row on RS rows 1–7 (the first 8 rows), spread evenly and symmetrically, offset half a gap each row; positions per size by hand |
+| Pullover front neck | R = front neck depth × row gauge, made a RS row; increases per side = (back neck − centre) / 2 with centre = 0.4 × `back_neck_width` (round); cast on back neck − 2 × increases at the end of row R and join |
+| Underarm cast-on | `underarm_co` each side, with body increases low in the armhole bringing the body to `upper_chest + ease`; without them, (body target − yoke body) / 2 |
+| Split | `shoulder_drop + armhole_depth − back_neck_drop` from the neck, deepened until the sleeve reaches `bicep + ease.bicep` with at most half the armhole rows rapid |
+| Cardigan closing width | each front = (whole front − `closing_r`) / 2, `closing_r = 2 × band_w − band_overlap`, overlap = band width |
+
+## Cardigan fronts
+
+Project → Garment → **Front opening: Cardigan** splits every front (template *front*) into a **Left front** and a
+**Right front**, and works the body flat (a back that was joined in the round becomes flat; sleeves keep their own
+choice). Switching back to *Closed* merges each pair into one front again. The app lists what it changed.
+
+- **One description, two halves.** Each front's waypoints, segments, neckline and bust shaping describe the *whole*
+  front, as if closed at centre front; the panel is the wearer's left or right half of it. So necklines (round, V,
+  square, boat), bust shaping, princess and shaping lines all work as on a pullover front. Seen from the RS, the left
+  front's front edge is its left edge, the right front's its right edge.
+- **Front edge.** Straight, with its own selvedge (*Front-edge selvedge*, default 1). The neckline's centre
+  stitches are taken at the front edge: bottom-up *bind off 8 sts at the front edge, then −11 at the neck edge*;
+  top-down *+11 at the neck edge, then cast on 8 sts at the front edge* (the fronts are never joined).
+- **Rounding.** Each front is rounded on its own: its half width, to the pattern multiple (e.g. a 2×2 rib hem gives
+  4n + 2 sts between the selvedges on each front), plus both selvedges. Parity doesn't apply; the whole front is
+  always even.
+- **Bust short rows** turn at the side edge only: each pair is a turning row worked from the front edge towards the
+  side and a return row back (the left front turns on WS rows, the right front on RS rows).
+- **Mirrored pair.** An edit to either front is copied to the other (names, layout, notes and links stay each
+  front's own). **Unlink** in the panel properties to edit them separately; *mirror with…* relinks by copying.
+- **Joins** follow the split: the front's left side edge belongs to the right front, its right side edge to the
+  left front; lower edge, top and neckline joins go to both fronts.
+- **Checks:** the armhole (`armhole_len`, scye check) is measured on a front's side edge; hem totals add both fronts.
+
+## Edge treatments
+
+Project → **Edges** sets the hem ribbing, cuff ribbing, neckband and (cardigans) front bands for the whole project.
+Each can be switched off and has a height (band width for neck and front bands, an expression with per-size values),
+a stitch (1×1 rib = 2n, 2×2 rib = 4n + 2, garter, seed = 2n + 1, or a custom multiple + offset) and how it is worked:
+
+| | Knit with the panel | Added later |
+|---|---|---|
+| Hem | a *Hem rib* pattern section at the lower edge of the back and fronts | a pick-up join on their lower edges |
+| Cuff | a *Cuff rib* section on the sleeves | a pick-up join on the sleeves' lower edges |
+| Neckband | (not available for necklines yet) | a *Neckband* strip, picked up from every neckline |
+| Front bands | integrated: extra stitches at each front edge | picked up, or knit sideways and sewn on (per band, see below) |
+
+Changing any setting applies them to the panels you have; things made by a treatment are marked (`edge`) and
+replaced the next time, so nothing is duplicated. **Settings never add or remove panels.** Strips (the neckband,
+front band strips) are made only with **Add strips** in Project → Edges, which lists what the settings call for
+that doesn't exist yet. Once made, a strip follows the settings (same panel, updated in place). A strip the settings
+no longer call for (neckband switched off, a band that became integrated or continuous, a cardigan turned pullover)
+is kept, with a note in the Checks bar so you can delete it. Sections you add by hand are left alone, except the templates' *Hem rib* / *Cuff rib*, which
+the treatment takes over. New panels pick up the settings once you have changed them. Defaults: hem off, cuff 2×2
+rib 5 cm with the sleeve, neckband 1×1 rib 2.5 cm added later, front bands 1×1 rib 2.5 cm added later.
+
+## Cardigan bands and buttons
+
+With a cardigan and **Front bands** switched on (Project → Edges), the front bands are made from these settings:
+
+- **Bands:** separate button and buttonhole bands, or **one continuous band** up the right front, around the back
+  neck and down the left front (the back neck counts only when the back has a neckline; a neckband switched on at the
+  same time is flagged).
+- **Buttonholes on:** the right front (default) or the left.
+- **Attachment, per band:**
+  - *Picked up* along the edge: a strip whose width is `edge_pickup * st_w`, i.e. the pick-up helper's count at
+    the join's ratio (default 3 sts per 4 rows), rounded to the band's multiple; worked for `band_w` (rows = band
+    width × row gauge). A pick-up join from the front edge(s) to the strip's lower edge.
+  - *Knit sideways* and sewn on: `band_w` across and `edge_len` long (rows = edge length × row gauge). A seam join
+    between the front edge and the strip's side.
+  - *Integrated:* no strip; each front gets `band_w` of extra stitches (rounded to the band's multiple) between its
+    front-edge selvedge and the body, shown as a stripe on the chart. The neck takes them off with its centre stitches.
+- **Band width** is the front bands' width (Edges); **overlap** (`band_overlap`, default `band_w`) is how far the
+  fronts overlap when closed.
+
+**Closing width.** Each front = (whole front − `closing_r`) / 2, with `closing_r = 2 × band_w − band_overlap` (an
+editable expression with per-size values). Closed, the two fronts plus both bands less the overlap make the whole
+front: 2 × (F − 2w + o)/2 + 2w − o = F. With 2.5 cm bands fully overlapping, `closing_r` = 2.5 cm, so in M the hem
+is (62.75 − 2.5) / 2 = 30.13 cm per front. Integrated bands add their stitches on top. The settings show the formula
+with this size's numbers plugged in. The cut at the front edge is a whole number of stitches; each front's body is
+then rounded to its pattern multiple as before.
+
+**Buttons:** a count, the distance from the top of the front edge (where the neck starts) to the first button, and
+from the lower edge to the last; evenly spaced in between. Drag a button on either front's schematic to move it in
+that size (the size then keeps its own positions; *Space evenly again* resets it). Positions become:
+
+| Buttonhole band | Buttonholes worked |
+|---|---|
+| Picked up | in the middle row of the band, at stitch positions along it (the lower-edge end is on the right for the right front and a continuous band, on the left for the left front) |
+| Knit sideways | on the band row at the button's height, centred across the band |
+| Integrated | on the front's row at the button's height, centred in the band stitches |
+
+The **buttonhole** is a one-row *yo, k2tog* by default, or any symbol (built-in or yours) a number of stitches wide,
+with a note. Charts show the buttonhole cells and mark each buttonhole row in the right margin; the schematic shows
+the band beside each front (dashed; tinted when integrated), buttons (filled) on one front and slots on the other,
+and the buttonholes on the band strip. The Layout shows the band strips upright beside the fronts.
+
+**Checks:** a band shorter than 90 % or longer than 105 % of its edge; a pick-up count that doesn't fit the band's
+multiple (with how many more or fewer to pick up); buttonholes within 2 rows of a picked-up band's edge, with less
+than one band stitch either side, or closer than 2 sts / 4 rows to each other; buttons outside the front edge; and a
+closed width short of the whole front by more than the seam tolerance.
+
+## Contiguous yoke (generator)
+
+The contiguous method was developed by Susie Myers (SusieM on Ravelry). `generateYoke` in `src/engine/contiguous.ts`
+works a contiguous yoke row by row from its phase parameters (each an expression with per-size values). Cast on the
+back neck (`back_neck_width` × stitch gauge) plus 6; row 1 (RS) is *edge · marker · seam · marker · back neck ·
+marker · seam · marker · edge*. Zones, as seen from the RS: left front, left seam/sleeve, back, right seam/sleeve,
+right front.
+
+| Phase | Default | What happens |
+|---|---|---|
+| A, shoulders | until the back, after the markers move, is `cross_back_w + 1` (or *length* mode: `sqrt(((back_shoulder_width − back_neck_width)/2)² + shoulder_drop²)` − shorten) + extra rows (0) | 4 increases every row, one each side of each seam group (M1R before a marker, M1L after; or kfb/pfb, or a symbol) |
+| B, back neck | 2 increases on RS rows 1–7 (the first 8 rows), during A | spread evenly and symmetrically across the back, offset half a gap each time; per-size positions by hand |
+| Front neck | the neckline's depth (round: `front_neck_drop`), centre `back_neck_width × 0.4` | increases inside the edge stitch at each front edge; the neck opening at the top is the back neck, so the centre cast-on = back neck sts − 2 × increases per side. Pullover: cast on at the end of RS row R and join in the round. Cardigan: each front casts on (centre − `closing_r`) / 2 at its front edge |
+| C, cap rapid | markers move so each cap top has 6 sts; rapid rows `armhole_depth / 6`, lengthened until the sleeve can reach its width | 4 increases every row, at both ends of each sleeve |
+| D, cap slow | until the sleeve + underarm cast-on = `bicep + ease.bicep` | 4 increases every second row |
+| E, armhole | split at `shoulder_drop + armhole_depth − back_neck_drop` from the neck (or *armhole* mode: `armhole_depth` below the seam end), plus extra depth (0 cm), deepened further until the cap is at most half rapid | straight, except body increases on the body side of the armhole markers in the lower 60 % of the armhole |
+| F, split | underarm cast-on `underarm_co` each side; raised if the body increases don't fit | the sleeves are held; the body continues |
+
+**Deepening.** The back-length split fits the body, but at a typical gauge the sleeve can't grow fast enough in a
+short armhole (2 sts per sleeve per row at most). So the yoke is deepened a row at a time (up to 15 cm) until the
+sleeve reaches its width with at most *Rapid rows at most* (default 0.5) of the armhole rows rapid: a middle way
+between the back length (body fit) and `armhole_depth` below the seam end (sleeve fit). With the sample table at 22
+× 30 that adds 1.3 cm (4XS) to 4 cm (M) to 9 cm (4X); allowing 0.6 / 0.67 / 0.75 rapid adds 3 / 2.3 / 1.7 cm in M and
+7.3 / 6.3 / 5.3 cm in 4X. Switch deepening off to split exactly at the back length (a sleeve that falls short is
+then a warning).
+
+**The yoke panel.** *Add panel → Contiguous yoke* makes a panel that holds the phases (`Panel.yoke`) instead of
+waypoints; its properties edit every phase (expressions with per-size values, numbers plugged in) and show the phase
+table for this size (rows, stitches before → after, increases per row) and every size side by side (cast-on, rows
+per phase, back length, underarm cast-on, held stitches). Removing a size clears its hand-placed back neck positions.
+
+- **Seen from above.** Both the Schematic and the Chart show the yoke from above: the neck in the middle, each row a
+  ring around it (spaced by the row height), each stitch an angle by its share of the ring. Back at the top, fronts at
+  the bottom, the wearer's left sleeve on the right. Before a pullover's neck is joined (and on a cardigan, all the
+  way) the ring is open at centre front. Scroll to zoom, drag to pan, F to fit; hover a stitch for its row, RS/WS,
+  phase, zone and the per-zone counts. A key (top left) lists the cast-on, shoulder seam, cap height, the phase rings
+  and the split. (The Layout still shows the yoke unrolled, each row as wide as its stitches.)
+- **Schematic:** the five zones tinted (fronts green, seams/sleeves orange, back blue), the four markers as red lines
+  from the neck out, the front edges, dashed rings at the end of A, C and D and where the neck is joined, and the
+  held stitches at the split. Overlay draws every size's outline and markers at one scale; Grid shows every size.
+- **Chart:** the same rings, one per row, with stitch boundaries when zoomed in; increases and cast-ons drawn at their
+  stitches, symbols pointing away from the neck (the knitting direction); markers as bold red lines; row numbers down
+  centre front; the symbol legend (incl. *place marker on row 1, slip after*) at the bottom right.
+
+**Body and sleeves.** *Add body and sleeves* (Project → Garment with the contiguous construction, or the yoke's
+properties) adds the yoke if there is none and the panels it lacks, all top-down; it never runs on its own and adds
+nothing a second time:
+
+| Panel | Starts with (`underarm` width) | Below |
+|---|---|---|
+| Back | the yoke's back + half the underarm cast-on each side (`yoke.back_w`) | waist and hem as the bodice template |
+| Front (pullover) | both fronts + the centre cast-on + half the cast-on each side (`yoke.front_w`) | the same, with bust shaping |
+| Left / Right front (cardigan) | each front + its half of the cast-on; `yoke.front_w` describes the whole front, so each half rounds to exactly that | a mirrored pair, as in Panels mode |
+| Left / right sleeve | the held sleeve + the whole underarm cast-on (`yoke.sleeve_w`) | tapering to `wrist + ease.wrist` at `arm_length` |
+
+Pullovers work the body and sleeves in the round, cardigans flat (each panel's *Worked* setting can be changed). The
+panels use *Stitch count: Same as the first row* (parity of the waypoint the panel starts from), so every change
+below the yoke is even and both sides shape in pairs; where a rib's even multiple fixes a count (a 2×2 hem or
+cuff) the rib wins and the one odd change is a note, not a warning. Selvedges are 0: the stitches continue from the
+yoke.
+Joins record it: *Body continues from the yoke* and *Left/Right sleeve continues from the yoke* (live stitches, from
+the yoke's held edges: a new edge kind `{ "kind": "held", "part": "leftSleeve" | "body" | "rightSleeve" }`), and
+*Underarm cast-on*. Change the yoke and the body and sleeves follow in every size.
+
+**Front neck.** The yoke's neck uses the neckline shapes (round, V, square, boat) worked top-down: increases at each
+front edge (inside the edge stitch), then a cast-on. The neck opening at the top is the back neck (the fronts begin
+at the neck points), so the neck width is the back neck; *depth* and *centre* are expressions with per-size values.
+The properties show the numbers, e.g. M, round: *Neck row R = depth × row gauge = 8.5 × 3 = 25.5 → 26 → row 27
+(a RS row)*; *increases at each front edge = (back neck − centre) / 2 = (33 − 13) / 2 = 10*; then
+
+- **pullover:** cast on the centre (13 sts) at the end of row R and join in the round; the yoke is in rounds after;
+- **cardigan:** each front casts on (centre − `closing_r`) / 2 at its front edge (the right front on row R, the left
+  front on row R + 1) and the fronts stay open, flat to the split.
+
+V is all increases (no centre, or one stitch), square and boat all centre (boat shallow). A neck that would close
+below the split is an error.
+
+**Cardigan edges on a contiguous yoke.** The yoke has a neck edge (cast-on, two neck slopes, and the centre or
+front-edge cast-ons) and, on a cardigan, a left and a right front edge (`{ "kind": "front", "side": "left" }`) from
+the neck cast-on down to the split. The neckband is picked up around the yoke's neck; a band runs up the front
+panel's edge and on up the yoke's front edge to the neck (a continuous band: up the right front, around the yoke
+neck, down the left). Buttons are spaced over the whole front edge, hem to neck: those above the front panels are
+drawn on the yoke's top view, at the front edges, and can be dragged there. Integrated bands aren't worked into a
+contiguous yoke yet (a warning says so).
+
+**Checks.** For a contiguous garment the Checks bar adds, per size:
+
+- *info:* the back and the fronts (with the neck between them) at the end of the shoulders, against `cross_back_w`
+  and `cross_front` (the back follows the cross back by design; this shows how close);
+- *warning:* the sleeve at the underarm (held sleeve + underarm cast-on) less than `bicep + ease.bicep` by more than
+  the seam tolerance (info when it is more than 10 % over);
+- *warning:* around the armhole (both armhole edges along the yoke, the cap top and the underarm cast-on) less than
+  `scye_circumference` (info when more than 15 % over: a deep armhole). With the sample table this flags 4XS–XS,
+  where the back-length split makes a shallow yoke;
+- *hint (info):* the cap may look pointy when the shoulder seam has more than twice as many rows as the rapid cap;
+  *the cap may look flat* when most armhole rows are rapid;
+- *warning:* a body or sleeve panel that no longer starts with the held stitches plus the underarm cast-on (after
+  editing its widths);
+- from the generator: rows that don't fit (shoulders, armhole, neck below the split, body increases), zero or
+  negative counts, the sleeve or body not reaching its width, odd cap tops, and how far the yoke was deepened.
+
+**Bust from the top.** The front's bust point is `underarm.height + yoke.depth − (hps_to_apex − bust_apex_corr)` up
+from the hem: measured down from the neck point, where the fronts begin. Short rows add the length; the bust helper
+doesn't add side width at the underarm (the yoke sets it).
+
+Body increases bring the body at the underarm (cast-ons included) to `upper_chest + ease`; without them the underarm
+cast-on is (body target − yoke body) / 2. The result lists every row's zone counts, increases (with positions and
+symbols), cast-ons and marker moves, a phase table, the held edges, and warnings (e.g. a sleeve that can't reach its
+width, a cap that is mostly rapid, a neck that closes below the split).
+
 ## Short-row segments
 
 A segment shaped with **short rows** keeps all its stitches live: the turns shape the outline (e.g. a shoulder slope)
@@ -481,13 +733,13 @@ shipped table has most of them; the first group is only seeded for older tables.
 per-measurement value that falls back to the global one. Expressions decide how it is split, e.g. a back panel
 using `upper_chest/2 + ease/2` takes half.
 
-## Project JSON (schema version 2)
+## Project JSON (schema version 3)
 
 Saved files are `*.knitbit.json`. All lengths are in cm, whatever the display units. Top level:
 
 ```jsonc
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "id": "project_…", "name": "My top",
   "units": "metric" | "imperial",              // display only
   "gauge": { "stitches": 22, "rows": 30, "basis": "10cm" | "4in" },
@@ -510,12 +762,25 @@ Saved files are `*.knitbit.json`. All lengths are in cm, whatever the display un
   "fit": { "cup": "cd",                        // which bust column `bust` follows: ab | cd | ef | gh | custom (bust_custom)
            "hem": "high_hip",                  // optional: high_hip | hip_seat_straight | hip_seat_curvy
            "broadBack": false },               // optional
+  "garment": { "construction": "panels" | "contiguous",   // contiguous = top-down contiguous yoke (generator)
+               "opening": "closed" | "cardigan" },
+  "tags": ["contiguous"],                      // free-form; "contiguous" is added/removed with that construction
+  "edges": { "hem": Edge, "cuff": Edge, "neckband": Edge, "frontBands": Edge },   // optional (see Edge treatments)
+  "cardigan": {                                // optional (see Cardigan bands and buttons)
+    "bands": "separate" | "continuous",
+    "attach": { "button": "pickup" | "sideways" | "integrated", "buttonhole": …, "continuous": "pickup" | "sideways" },
+    "buttonholeSide": "right" | "left",
+    "overlap": Dim, "closing": Dim,            // band_overlap, closing_r
+    "buttons": { "count": 7, "top": Dim, "bottom": Dim, "manual": { "<sizeId>": [46.2, 38.8, …] } },
+    "buttonhole": { "style": "yo-k2tog" | "symbol", "symbol": "buttonhole", "width": 2, "note": "" }
+  },
   "panels": [Panel],
   "joins": [Join],                             // optional
   "symbols": [{ "id": "custom_…", "label": "Twisted decrease", "abbr": "tw",
                 "color": "#f2d17a", "change": -1 }],   // optional: your own chart symbols
   "settings": { "seamToleranceCm": 1, "pickUp": { "stitches": 3, "rows": 4 },
-                "regionSizing": false, "regionGapLimit": 2, "hemCheck": false },   // last three optional
+                "regionSizing": false, "regionGapLimit": 2, "hemCheck": false,   // these three optional
+                "exportCredit": true },        // optional: credit line in export footers (absent = on)
   "createdAt": "ISO date", "updatedAt": "ISO date"
 }
 ```
@@ -530,9 +795,10 @@ A **Panel**:
   "inTheRound": false,
   "selvedge": { "left": 0-2, "right": 0-2 },
   "shapingInset": 2,                            // stitches in from the edge
-  "rounding": { "parity": "any" | "even" | "odd", "rowParity": "any" | "even" | "odd" },
+  "rounding": { "parity": "any" | "even" | "odd" | "start", "rowParity": "any" | "even" | "odd" },   // start = same as the first row
   "pattern": { "name": "stockinette", "multiple": 1, "offset": 0 },
-  "sections": [{ "id": "…", "name": "Hem rib", "fromHeight": Dim, "toHeight": Dim, "pattern": { … } }],
+  "sections": [{ "id": "…", "name": "Hem rib", "fromHeight": Dim, "toHeight": Dim, "pattern": { … },
+                 "edge": "hem" }],               // edge optional: made by an edge treatment
   "waypoints": [{
     "id": "wp_…", "name": "waist",
     "height": Dim,                              // up from the garment's lower edge
@@ -567,12 +833,24 @@ A **Panel**:
                      "rowSide": "rs" | "any", "mirror": true, "manual": { "<sizeId>": [12, 16] } }],
   "startFrom": "caston" | "pickup",            // optional: how the first row is made (top-down fronts: pickup)
   "linkedTo": "panel_…" | null,                // optional: linked panel (waypoint drags follow by name)
+  "half": null | { "side": "left" | "right",   // optional: a cardigan front (dimensions = the whole front)
+                   "pair": "panel_…" | null,     //   the mirrored other front; null = unlinked
+                   "cfSelvedge": 0-2 },
+  "edge": "neckband",                          // optional: made by an edge treatment
+  "band": "button" | "buttonhole" | "continuous",   // optional: a cardigan band strip
+  "yoke": null | YokeSpec,                     // optional: a contiguous yoke (see Contiguous yoke)
+  "fromYoke": "back" | "front" | "leftSleeve" | "rightSleeve",   // optional: continues from the yoke
   "layout": { "x": 0, "y": 0, "rotation": 0 | 90 | 180 | 270 },
   "notes": ""
 }
 ```
 
 `Dim` is `{ "expr": "upper_chest/2 + ease/4", "overrides": { "<sizeId>": 60 } }`: an expression plus per-size fixed values.
+
+`Edge` is `{ "enabled": true, "depth": Dim, "stitch": "rib1x1" | "rib2x2" | "garter" | "seed" | "custom",
+"custom": { "name": "custom", "multiple": 2, "offset": 0 }, "method": "with-panel" | "later" }`. Joins made by an
+edge treatment carry `"edge": "hem" | "cuff" | "neckband" | "frontBands"`. Join edges may also be
+`{ "kind": "front" }`: a cardigan front's straight front edge, from the lower edge up to the neck.
 
 `Method` is one of:
 - `{ "kind": "auto", "side": "rs"|"ws"|"any", "align": "end"|"start"|"center", "order": "spread"|"shortFirst"|"longFirst", "rhythm": {"type":"auto"} | {"type":"fixed","every":4} | {"type":"mixed","a":4,"b":6}, "perSide": 1 }`
@@ -581,7 +859,7 @@ A **Panel**:
 - `{ "kind": "straight" }`
 
 New optional fields don't change the schema version; incompatible changes bump `schemaVersion` and add a migration
-(schema 2 renamed measurements for the Ysolda table and added `fit`).
+(schema 2 renamed measurements for the Ysolda table and added `fit`; schema 3 added `garment` and `tags`).
 
 ### Loading and migrations
 
@@ -619,6 +897,12 @@ file or restores an old auto-save.
   Old tables imported or seeded with a single `bust` column go through the same mapping.
 
 The tests in `src/engine/legacy.test.ts` load `src/engine/fixtures/project_v1.json`, a real schema-1 project.
+
+**Schema 2 → 3** (garment options, `src/engine/garment.ts`): adds `garment` = Panels + Closed / pullover (how every
+older project was built) and an empty `tags` list, and reports both. Nothing else changes: panels, joins,
+measurements and settings load as they were. The export credit setting is absent, which means on. Tests in
+`src/engine/garment.test.ts` load `src/engine/fixtures/project_v2.json` (a top-down top + sleeve at schema 2) and the
+schema-1 fixture, which goes through both migrations.
 
 ### Auto-save
 

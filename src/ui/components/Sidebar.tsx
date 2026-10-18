@@ -1,6 +1,10 @@
 import { useState } from 'react';
 import { DEFAULT_REGION_GAP } from '../../engine/fitChecks';
 import { FitSettings } from './FitSettings';
+import { GarmentSettings } from './GarmentSettings';
+import { EdgeSettings } from './EdgeSettings';
+import { conformToGarment } from '../../engine/garment';
+import { yokePanel } from '../../engine/contiguous';
 import { convertGauge, type GaugeBasis } from '../../engine/gauge';
 import { newId, type Id, type Project } from '../../engine/model';
 import { ensureEstimates } from '../../engine/seed';
@@ -59,17 +63,19 @@ function PanelList({ project, panelId, update, selectPanel }: Props) {
   const shouldersFirst = tpl === 'top' || (opts.direction === 'top-down' && opts.construction === 'shoulders-first');
 
   const add = () => {
-    const set = tpl === 'top' ? topDownTop(opts) : { panels: [fromTemplate(tpl, opts)], joins: [] };
+    const set = tpl === 'top' ? topDownTop(opts) : tpl === 'yoke' ? { panels: [yokePanel(opts.neckline)], joins: [] } : { panels: [fromTemplate(tpl, opts)], joins: [] };
     const names = new Set(project.panels.map((p) => p.name));
     for (const panel of set.panels) {
       if (names.has(panel.name)) for (let i = 2; ; i++) if (!names.has(`${panel.name} ${i}`)) { panel.name = `${panel.name} ${i}`; break; }
       names.add(panel.name);
     }
     update((p) =>
-      produce(ensureEstimates(p, TEMPLATE_MEASUREMENTS[tpl]).project, (d) => {
-        d.panels.push(...set.panels);
-        if (set.joins.length) d.joins = [...(d.joins ?? []), ...set.joins];
-      }),
+      conformToGarment(
+        produce(ensureEstimates(p, TEMPLATE_MEASUREMENTS[tpl]).project, (d) => {
+          d.panels.push(...set.panels);
+          if (set.joins.length) d.joins = [...(d.joins ?? []), ...set.joins];
+        }),
+      ),
     );
     selectPanel(set.panels[set.panels.length - 1].id);
   };
@@ -88,6 +94,7 @@ function PanelList({ project, panelId, update, selectPanel }: Props) {
     for (const s of copy.segments) s.fromWaypoint = idMap.get(s.fromWaypoint) ?? s.fromWaypoint;
     if (copy.joinAt) copy.joinAt = idMap.get(copy.joinAt) ?? null;
     copy.linkedTo = null;
+    if (copy.half) copy.half = { ...copy.half, pair: null };
     for (const sec of copy.sections) sec.id = newId('sec');
     update((p) => produce(p, (d) => void d.panels.splice(d.panels.findIndex((x) => x.id === id) + 1, 0, copy)));
     selectPanel(copy.id);
@@ -100,6 +107,7 @@ function PanelList({ project, panelId, update, selectPanel }: Props) {
       produce(p, (d) => {
         d.panels = d.panels.filter((x) => x.id !== id);
         for (const x of d.panels) if (x.linkedTo === id) x.linkedTo = null;
+        for (const x of d.panels) if (x.half?.pair === id) x.half.pair = null;
         d.joins = dropPanelFromJoins(d.joins, id);
       }),
     );
@@ -249,7 +257,7 @@ function JoinList({ project, sizeId, update, selectedJoin, selectJoin }: Props) 
   );
 }
 
-function ProjectSettings({ project, update }: Props) {
+function ProjectSettings({ project, sizeId, update }: Props) {
   const g = project.gauge;
   const setBasis = (basis: GaugeBasis) =>
     update((p) => {
@@ -258,6 +266,8 @@ function ProjectSettings({ project, update }: Props) {
     });
   return (
     <div className="props">
+      <GarmentSettings project={project} update={update} />
+      <EdgeSettings project={project} sizeId={sizeId} update={update} />
       <h4>Gauge</h4>
       <div className="row3">
         <div className="field">

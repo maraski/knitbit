@@ -1,8 +1,10 @@
 import type { DimExpr, Id, Panel, Project, SegmentMethod, Waypoint } from '../../engine/model';
 import { defaultAutoMethod, defaultBust, defaultPrincess, dim, newId, newWaypoint, type ShapingPlacement } from '../../engine/model';
 import { BustProps } from './BustProps';
+import { YokeProps } from './YokeProps';
 import { LineProps, linePresets } from './LineProps';
 import { linkPanels, matchPartner, partnerWaypoint } from '../../engine/waypointDrag';
+import { frontPartner, linkFronts, unlinkFronts } from '../../engine/cardigan';
 import { JOIN_TAGS, sameEdge } from '../../engine/joins';
 import type { EdgeKey, JoinTag } from '../../engine/model';
 import { produce } from '../edit';
@@ -31,6 +33,7 @@ export interface PropsContext {
 }
 
 export function Properties({ ctx, selection }: { ctx: PropsContext; selection: Selection }) {
+  if (ctx.panel.yoke) return <YokeProps ctx={ctx} />;
   switch (selection.kind) {
     case 'waypoint': {
       const wp = ctx.panel.waypoints.find((w) => w.id === selection.id);
@@ -53,6 +56,36 @@ export function Properties({ ctx, selection }: { ctx: PropsContext; selection: S
 
 // ---------- panel ----------
 
+/** A cardigan front: which half it is, its partner, and linking. */
+function FrontPairProps({ ctx }: { ctx: PropsContext }) {
+  const { panel, project, update } = ctx;
+  const half = panel.half!;
+  const partner = frontPartner(project, panel);
+  const candidates = project.panels.filter((x) => x.half && x.half.side !== half.side && x.id !== panel.id);
+  return (
+    <div className="front-pair">
+      <p className="hint">
+        {half.side === 'left' ? 'Left' : 'Right'} front of a cardigan (seen from the RS, its front edge is on the {half.side === 'left' ? 'left' : 'right'}).
+        Widths describe the whole front, as if closed at centre front; this panel is its half.
+      </p>
+      {partner ? (
+        <p className="pair-status">
+          Mirrored with <b>{partner.name}</b>: edits to either are copied to the other.{' '}
+          <button className="link" onClick={() => update((p) => unlinkFronts(p, panel.id))}>Unlink</button>
+        </p>
+      ) : (
+        <div className="field">
+          <label>Not linked: mirror with…</label>
+          <select value="" onChange={(e) => e.target.value && update((p) => linkFronts(p, panel.id, e.target.value))}>
+            <option value="">—</option>
+            {candidates.map((x) => <option key={x.id} value={x.id}>{x.name} (copies this front onto it)</option>)}
+          </select>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PanelProps({ ctx }: { ctx: PropsContext }) {
   const { panel, computed: c, update } = ctx;
   const set = (fn: (p: Panel) => void, key: string | null = null) => update((p) => editPanel(p, panel.id, fn), key);
@@ -73,6 +106,7 @@ function PanelProps({ ctx }: { ctx: PropsContext }) {
         <label>Name</label>
         <input value={panel.name} onChange={(e) => set((p) => void (p.name = e.target.value), `panel.${panel.id}.name`)} />
       </div>
+      {panel.half && <FrontPairProps ctx={ctx} />}
       <div className="row2">
         <div className="field">
           <label>Direction</label>
@@ -85,7 +119,9 @@ function PanelProps({ ctx }: { ctx: PropsContext }) {
         <div className="field">
           <label>Worked</label>
           <select
-            value={panel.inTheRound ? 'round' : panel.joinAt && panel.waypoints.some((w) => w.id === panel.joinAt) ? `join:${panel.joinAt}` : 'flat'}
+            disabled={!!panel.half}
+            title={panel.half ? 'Cardigan fronts are worked flat' : undefined}
+            value={panel.half ? 'flat' : panel.inTheRound ? 'round' : panel.joinAt && panel.waypoints.some((w) => w.id === panel.joinAt) ? `join:${panel.joinAt}` : 'flat'}
             onChange={(e) =>
               set((p) => {
                 const v = e.target.value;
@@ -102,6 +138,26 @@ function PanelProps({ ctx }: { ctx: PropsContext }) {
           </select>
         </div>
       </div>
+      {panel.half ? (
+        <div className="row3">
+          <div className="field">
+            <label>Side selvedge</label>
+            <select value={panel.half.side === 'left' ? panel.selvedge.right : panel.selvedge.left} onChange={(e) => set((p) => void (p.selvedge = { left: Number(e.target.value), right: Number(e.target.value) }))}>
+              {[0, 1, 2].map((n) => <option key={n} value={n}>{n}</option>)}
+            </select>
+          </div>
+          <div className="field">
+            <label>Front-edge selvedge</label>
+            <select value={panel.half.cfSelvedge} onChange={(e) => set((p) => void (p.half = { ...p.half!, cfSelvedge: Number(e.target.value) }))}>
+              {[0, 1, 2].map((n) => <option key={n} value={n}>{n}</option>)}
+            </select>
+          </div>
+          <div className="field">
+            <label>Shaping inset</label>
+            <input className="num" type="number" min={0} value={panel.shapingInset} onChange={(e) => set((p) => void (p.shapingInset = Math.max(0, Number(e.target.value))), `panel.${panel.id}.inset`)} />
+          </div>
+        </div>
+      ) : (
       <div className="row3">
         <div className="field">
           <label>Selvedge L</label>
@@ -120,13 +176,20 @@ function PanelProps({ ctx }: { ctx: PropsContext }) {
           <input className="num" type="number" min={0} value={panel.shapingInset} onChange={(e) => set((p) => void (p.shapingInset = Math.max(0, Number(e.target.value))), `panel.${panel.id}.inset`)} />
         </div>
       </div>
+      )}
       <div className="row3">
         <div className="field">
           <label>Stitch count</label>
-          <select value={panel.rounding.parity} onChange={(e) => set((p) => void (p.rounding.parity = e.target.value as Panel['rounding']['parity']))}>
+          <select
+            value={panel.rounding.parity}
+            disabled={!!panel.half}
+            title={panel.half ? 'Each front is rounded on its own (to the pattern multiple); the whole front is always even' : undefined}
+            onChange={(e) => set((p) => void (p.rounding.parity = e.target.value as Panel['rounding']['parity']))}
+          >
             <option value="any">Any</option>
             <option value="even">Even</option>
             <option value="odd">Odd</option>
+            <option value="start">Same as the first row</option>
           </select>
         </div>
         <div className="field">
@@ -426,7 +489,14 @@ function WaypointProps({ ctx, wp }: { ctx: PropsContext; wp: Waypoint }) {
         Symmetric (right mirrors left)
       </label>
       {wp.symmetric ? (
-        <ExprField label="Width" value={wp.width} onChange={setDim('width')} fieldKey="width" {...common} detail={cw && <>→ {sts(cw.stitches)}</>} />
+        <ExprField
+          label={ctx.panel.half ? 'Width of the whole front (both fronts)' : 'Width'}
+          value={wp.width}
+          onChange={setDim('width')}
+          fieldKey="width"
+          {...common}
+          detail={cw && <>→ {sts(cw.stitches)}{ctx.panel.half ? ' this front' : ''}</>}
+        />
       ) : (
         <>
           <ExprField label="Left half (centre to left edge)" value={wp.left} onChange={setDim('left')} fieldKey="left" {...common} />

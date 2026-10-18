@@ -4,7 +4,7 @@
 
 import type { CustomSymbol, FreeStitch, Id, Panel, Project } from './model';
 import { newId } from './model';
-import type { ComputedPanel } from './panel';
+import { rowCentre, type ComputedPanel } from './panel';
 import { isCountSymbol, markerDelta } from './symbols';
 
 /** Leaning stitches swap when mirrored across the centre. */
@@ -164,5 +164,5 @@ function mapX(from: ComputedPanel, to: ComputedPanel, row: number, row2: number,
 
 /** Cell left edge (relative to the row's centre) for a chart column. */
 export function cellX(c: ComputedPanel, x0: number, col: number, row: number): number {
-  return x0 + col - (c.leftEdge[row] + c.rightEdge[row]) / 2;
+  return x0 + col - rowCentre(c, row);
 }

@@ -16,6 +16,20 @@ M9), `6ee297f` (M10 + bust/princess options), `89c2318` (painted stitches, shapi
 > README is current: see its *Sizing tables*, *Region sizing*, *Bust shaping*, *Checks from the sizing data* and
 > *Loading and migrations* sections.
 
+> **Construction and front-opening options (2026-10-14 to 18, branch `claude/knitting-construction-options-3b15a9`,
+> milestones M1–M9):** schema 3 adds `garment` (construction: panels | contiguous; opening: closed | cardigan), `tags`,
+> `edges` (hem / cuff / neckband / front bands) and `cardigan` (bands, overlap, closing width, buttons). Cardigan fronts
+> are `Panel.half` pairs that describe the whole front and are cropped to one half in `computePanel` (`cropHalf`),
+> kept in step by `syncFrontPairs` in the store. The contiguous yoke (Susie Myers' method) is `Panel.yoke`, generated
+> row by row by `generateYoke` (`contiguous.ts`), shown as a panel (`yokePanel.ts`) and as a top view in the Schematic
+> and Chart (`yokeTop.ts`, `YokeTopView.tsx`); body and sleeves come from its held stitches (`contiguousGarment.ts`,
+> `yoke.*` names via `panelExtras`). Checks in `buttons.ts` (bands) and `contiguousChecks.ts`. User decisions (see the
+> README's *Garment options* table): cross back is followed (shoulder width is a style option); the yoke splits by
+> back length and deepens until the cap is at most half rapid; body increases low in the armhole with `underarm_co`;
+> edge settings never add or remove panels (explicit *Add strips* / *Add yoke, body and sleeves*); the yoke is drawn
+> from above. Not done: PDF/PNG export (the credit footer text and toggle are ready: `exportFooter()`), integrated
+> bands on a contiguous yoke, neckband knit with the panel, dragging back-neck increases on the chart.
+
 ## 1. Project goal and architecture
 
 ### Goal

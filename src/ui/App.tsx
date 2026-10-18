@@ -3,7 +3,7 @@ import { CascadePicker } from './components/CascadePicker';
 import { sizeText } from './components/EstMark';
 import type { Id } from '../engine/model';
 import { buildScope } from '../engine/measurements';
-import { computePanel, resolvePanelDims, type ComputedPanel } from '../engine/panel';
+import { computePanel, panelExtras, resolvePanelDims, type ComputedPanel } from '../engine/panel';
 import type { AlignRef } from '../engine/layout';
 import { LayoutView } from './components/LayoutView';
 import { SizeModeBar, type SizeMode } from './components/SizeModeBar';
@@ -18,12 +18,18 @@ import { JoinProps } from './components/JoinProps';
 import { MeasurementProps, SizesProps } from './components/MeasurementProps';
 import { MeasurementsView } from './components/MeasurementsView';
 import { Properties, type PropsContext } from './components/Properties';
-import { Schematic } from './components/Schematic';
+import { Schematic, type SchematicBands } from './components/Schematic';
+import { ErrorBoundary } from './components/ErrorBoundary';
+import { YokeTopView, type YokeButtons } from './components/YokeTopView';
+import { len } from './format';
 import { Sidebar } from './components/Sidebar';
 import { Toolbar } from './components/Toolbar';
 import { downloadText, pickTextFile, safeFilename } from './fileio';
 import { markerActions } from './markerActions';
-import { panelJoins } from '../engine/joins';
+import { frontEdgeRows, panelJoins, type PanelCache } from '../engine/joins';
+import { buttonPlan } from '../engine/buttons';
+import { bandOnFront, setButtonPosition } from '../engine/bands';
+import { applyEdgeTreatments } from '../engine/edgeTreatments';
 import { PANEL_SELECTION, type Selection } from './selection';
 import { mergeSampleTable, migrationNotice, sampleProject, useProjectStore, type Notice } from './store';
 
@@ -87,10 +93,60 @@ export function App() {
   const fitOutlines = useMemo(() => allSizes.filter((c) => c.ok).map((c) => c.outline), [allSizes]);
   const scope = useMemo(() => {
     if (!panel || !size) return {};
-    return { ...buildScope(project, size.id), ...resolvePanelDims(project, panel, size.id).values };
+    return { ...buildScope(project, size.id), ...panelExtras(project, panel, size.id), ...resolvePanelDims(project, panel, size.id).values };
   }, [project, panel, size]);
 
   const markers = useMemo(() => (panel && size ? markerActions(update, panel.id, size.id) : undefined), [update, panel?.id, size?.id]);
+
+  // Contiguous cardigan: buttons on the yoke's front edges, above the front panels.
+  const yokeButtons = useMemo((): YokeButtons | undefined => {
+    if (!panel?.yoke || !size || project.garment.opening !== 'cardigan') return undefined;
+    const plan = buttonPlan(project, size.id);
+    if (!plan) return undefined;
+    const positions = plan.positions;
+    return {
+      positions,
+      bodyEdgeCm: plan.bodyEdgeCm,
+      holeSide: project.cardigan?.buttonholeSide ?? 'right',
+      onDrag: (index, h, key) => update((p) => applyEdgeTreatments(setButtonPosition(p, size.id, positions, index, h)), key),
+    };
+  }, [project, panel, size, update]);
+
+  // Cardigan: the band and buttons on the shown front (or the buttonholes on a band strip).
+  const bands = useMemo((): SchematicBands | undefined => {
+    if (!panel || !size || !computed?.ok || (!panel.half && !panel.band)) return undefined;
+    const cache: PanelCache = new Map();
+    const plan = buttonPlan(project, size.id, cache);
+    const holes = (plan?.holes ?? []).filter((h) => h.panelId === panel.id).map((h) => ({ row: h.row, x: h.x, index: h.index }));
+    if (panel.band) return { bandX: [0, 0], integrated: false, label: '', edgeRows: 0, buttons: [], kind: 'hole', holes, holeWidth: plan?.holeWidth ?? 2 };
+    const half = computed.half!;
+    const onFront = bandOnFront(project, panel.half!.side);
+    const bandW = scope.band_w ?? 0;
+    let bandX: [number, number] = [0, 0];
+    if (onFront?.attach === 'integrated') {
+      const sel = panel.half!.cfSelvedge;
+      const start = half.keep === 'right' ? half.cfX + sel : half.cfX - sel - half.bandSts;
+      bandX = [start, start + half.bandSts];
+    } else if (onFront) {
+      const w = bandW * computed.stitchesPerCm;
+      bandX = half.keep === 'right' ? [half.cfX - w, half.cfX] : [half.cfX, half.cfX + w];
+    }
+    const edgeRows = onFront ? frontEdgeRows(computed) : 0;
+    const label = onFront ? `${onFront.attach === 'integrated' ? 'integrated ' : ''}band ${len(bandW, project.units)} · overlap ${len(scope.band_overlap ?? 0, project.units)}` : '';
+    const isHole = plan?.holeFrontId === panel.id;
+    const positions = plan?.positions ?? [];
+    return {
+      bandX,
+      integrated: onFront?.attach === 'integrated',
+      label,
+      edgeRows,
+      buttons: positions,
+      kind: isHole ? 'hole' : 'button',
+      holes,
+      holeWidth: plan?.holeWidth ?? 2,
+      onDrag: (index, h, key) => update((p) => applyEdgeTreatments(setButtonPosition(p, size.id, positions, index, h)), key),
+    };
+  }, [project, panel, size, computed, scope, update]);
 
   const selectPanel = (id: Id | null) => {
     setPanelId(id);
@@ -217,6 +273,7 @@ export function App() {
           }}
         />
       )}
+      <ErrorBoundary onUndo={store.undo} resetKey={project}>
       <div className="main">
         <Sidebar
           project={project}
@@ -262,7 +319,7 @@ export function App() {
               <>
                 <strong>{panel.name}</strong>
                 <span className="muted">
-                  · size {size ? sizeText(size, project) : ''} · {panel.direction === 'top-down' ? 'row 1 at top' : 'row 1 at bottom'}
+                  · size {size ? sizeText(size, project) : ''} · {panel.yoke ? 'seen from above, row 1 at the neck' : panel.direction === 'top-down' ? 'row 1 at top' : 'row 1 at bottom'}
                   {panel.direction === 'side-to-side' ? ' · worked side to side (chart in knitting orientation)' : ''}
                 </span>
               </>
@@ -271,14 +328,14 @@ export function App() {
               <>
                 <strong>{panel.name}</strong>
                 <span className="muted">
-                  · size {size ? sizeText(size, project) : ''} · {panel.direction}
-                  {panel.direction === 'top-down' ? ' (row 1 at top)' : panel.direction === 'bottom-up' ? ' (row 1 at bottom)' : ''}
+                  · size {size ? sizeText(size, project) : ''} · {panel.yoke ? 'seen from above' : panel.direction}
+                  {panel.yoke ? '' : panel.direction === 'top-down' ? ' (row 1 at top)' : panel.direction === 'bottom-up' ? ' (row 1 at bottom)' : ''}
                   {panel.inTheRound ? ' · in the round' : panel.joinAt ? ' · round below ' + (panel.waypoints.find((w) => w.id === panel.joinAt)?.name ?? '?') : ''}
                 </span>
                 <span className="spacer" />
-                {sizeMode === 'single' && size && <CascadePicker project={project} currentSizeId={size.id} cascade={cascade ?? null} setCascade={setCascade} />}
-                {sizeMode === 'single' && <Legend />}
-                {sizeMode === 'single' && panel.direction !== 'side-to-side' && (
+                {sizeMode === 'single' && size && !panel.yoke && <CascadePicker project={project} currentSizeId={size.id} cascade={cascade ?? null} setCascade={setCascade} />}
+                {sizeMode === 'single' && !panel.yoke && <Legend />}
+                {sizeMode === 'single' && panel.direction !== 'side-to-side' && !panel.yoke && (
                   <button className={drawLine ? 'active' : ''} onClick={() => setDrawLine(!drawLine)} title="Draw a shaping line: click its two ends (Esc cancels)">
                     ✎ Line
                   </button>
@@ -302,6 +359,17 @@ export function App() {
                 setSelection(PANEL_SELECTION);
               }}
               onSelectJoin={(id) => setSelection({ kind: 'join', id })}
+            />
+          ) : (center === 'chart' || center === 'schematic') && panel?.yoke && computed ? (
+            <YokeTopView
+              project={project}
+              panel={panel}
+              computed={computed}
+              view={center === 'chart' ? 'chart' : 'schematic'}
+              mode={center === 'chart' && sizeMode === 'overlay' ? 'single' : sizeMode}
+              compare={(sizeMode === 'single' ? [size?.id ?? ''] : compare).map((sid) => computedFor(panel.id, sid))}
+              units={project.units}
+              buttons={yokeButtons}
             />
           ) : center === 'chart' && panel && computed ? (
             <ChartView
@@ -339,6 +407,7 @@ export function App() {
               compare={compare.map((sid) => computedFor(panel.id, sid))}
               align={align}
               project={project}
+              bands={sizeMode === 'single' ? bands : undefined}
               onDragWaypoint={(wpId, ch, sizeOnly, key) => {
                 const w = computed.waypoints.find((x) => x.id === wpId);
                 if (!w || !size) return;
@@ -396,6 +465,7 @@ export function App() {
           )}
         </aside>
       </div>
+      </ErrorBoundary>
       {importing && (
         <ImportDialog
           project={project}

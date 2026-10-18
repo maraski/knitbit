@@ -13,12 +13,17 @@ import { resolveDefinitions } from './expr';
 import { rowsPerCm, stitchesPerCm } from './gauge';
 import { missingAliasHint } from './fit';
 import { buildScope, evaluateDim } from './measurements';
-import type { Id, ManualEvent, Panel, Project, Segment, SegmentMethod, ShapingPlacement } from './model';
+import type { FrontHalf, Id, ManualEvent, Panel, Project, Segment, SegmentMethod, ShapingPlacement } from './model';
 import { defaultAutoMethod, defaultPrincess } from './model';
 import { roundNearest, roundRows, roundStitches, type RoundingResult } from './rounding';
 import { bustValues, computeBust, type ComputedBust } from './bust';
 import { sideEdgeLength } from './edges';
+import { measureEdge } from './joins';
+import { computeYokePanel } from './yokePanel';
+import { yokeNames, type YokeResult } from './contiguous';
 import { defaultSymbol } from './symbols';
+import { bandOnFront } from './bands';
+import { edgePattern } from './edgeTreatments';
 import { freeCells, freeInterior } from './free';
 import { computeLines, type ComputedLine } from './lines';
 
@@ -63,6 +68,8 @@ export interface ComputedWaypoint {
   leftPos: number; // target x of the left edge (≤ 0)
   rightPos: number;
   actualStitches: number; // what the shaping actually reaches at this row
+  /** A cardigan front: the whole front's target width (both fronts, closed) at this waypoint. */
+  wholeCm?: number;
   selvedge: number; // selvedge stitches included in `stitches` (0 in the round)
   inRound: boolean;
   overridden: { height: boolean; width: boolean };
@@ -106,8 +113,10 @@ export interface ComputedNeck {
   openRow: number; // knit row at the neck's open end (the garment's top): totalRows bottom-up, 0 top-down
   centreX: number; // middle of the centre stitches (may be off the centre line by ½ st)
   depthRows: number;
-  centreSts: number;
+  centreSts: number; // a cardigan front: the stitches its own half takes off (or casts on) at the front edge
   widthSts: number;
+  /** A cardigan front: only one neck edge (`perSide` shaping), the centre stitches are at the front edge. */
+  oneSide?: boolean;
   perSide: number;
   events: ShapeEvent[]; // neck-edge decreases, same rows on both sides
   summary: string;
@@ -159,6 +168,26 @@ export interface ComputedPanel {
   outline: Point[]; // closed polygon, stitch/row units
   markers: Marker[];
   issues: Issue[];
+  /**
+   * Cardigan front: the half of the whole front this panel shows, and the whole front's centre per knit row
+   * (for anything placed relative to the centre: princess and shaping lines, darts, painted stitches).
+   */
+  half?: {
+    side: 'left' | 'right';
+    keep: Edge;
+    cfX: number;
+    centre: number[];
+    /** Integrated band: stitches next to the front-edge selvedge, worked in the band pattern. */
+    bandSts: number;
+    band: { name: string; multiple: number; offset: number } | null;
+  };
+  /** A contiguous yoke: the generator's result (rows, zones, phases, held edges). */
+  yoke?: YokeResult;
+}
+
+/** The centre a row's centre-relative positions are measured from (the whole front's centre for a cardigan front). */
+export function rowCentre(c: Pick<ComputedPanel, 'leftEdge' | 'rightEdge' | 'half'>, r: number): number {
+  return c.half ? c.half.centre[r] ?? 0 : (c.leftEdge[r] + c.rightEdge[r]) / 2;
 }
 
 /** Identifier for a waypoint name: "Under arm" → "under_arm". */
@@ -197,12 +226,37 @@ export function waypointDefinitions(panel: Panel, sizeId: Id): Record<string, st
 /** Evaluate all waypoint dimensions of a panel for one size. */
 export function resolvePanelDims(project: Project, panel: Panel, sizeId: Id) {
   const base = buildScope(project, sizeId);
+  const extra = panelExtras(project, panel, sizeId);
+  return resolveDefinitions(waypointDefinitions(panel, sizeId), { ...base, ...bustValues(panel, sizeId, base), ...extra });
+}
+
+/** Names a panel takes from other panels: armhole_len, edge_len / edge_rows / edge_pickup, yoke.* (only those it uses). */
+export function panelExtras(project: Project, panel: Panel, sizeId: Id): Record<string, number> {
   const extra: Record<string, number> = {};
   if (usesName(panel, 'armhole_len')) {
     const a = armholeLength(project, panel, sizeId);
     if ('value' in a) extra.armhole_len = a.value;
   }
-  return resolveDefinitions(waypointDefinitions(panel, sizeId), { ...base, ...bustValues(panel, sizeId, base), ...extra });
+  if (EDGE_NAMES.some((n) => usesName(panel, n))) {
+    const j = joinedEdge(project, panel, sizeId);
+    if ('lengthCm' in j) Object.assign(extra, { edge_len: j.lengthCm, edge_rows: j.rows, edge_pickup: j.pickup });
+  }
+  if (usesYoke(panel)) {
+    const n = yokeNames(project, sizeId);
+    if ('values' in n) Object.assign(extra, n.values);
+  }
+  return extra;
+}
+
+/** The panel's expressions mention a `yoke.*` name (and it isn't the yoke itself). */
+function usesYoke(panel: Panel): boolean {
+  if (panel.yoke) return false;
+  const exprs = [
+    ...panel.waypoints.flatMap((w) => [w.height.expr, w.width.expr, w.left.expr, w.right.expr]),
+    ...panel.sections.flatMap((x) => [x.fromHeight.expr, x.toHeight.expr]),
+    ...(panel.bust ? [panel.bust.apexHeight.expr, panel.bust.apexOffset.expr, panel.bust.vertical.top.expr, panel.bust.vertical.bottom.expr] : []),
+  ];
+  return exprs.some((e) => /(^|[^A-Za-z0-9_.])yoke\./.test(e));
 }
 
 function usesName(panel: Panel, name: string): boolean {
@@ -214,8 +268,41 @@ function usesName(panel: Panel, name: string): boolean {
   return exprs.some((e) => re.test(e));
 }
 
-// Panels being computed while resolving armhole_len, to stop a panel measuring itself (directly or in a loop).
+// Panels being computed while resolving armhole_len / edge_len, to stop a panel measuring itself (directly or in a loop).
 const measuring = new Set<string>();
+
+const EDGE_NAMES = ['edge_len', 'edge_rows', 'edge_pickup'];
+
+/**
+ * The edges a strip (band, neckband) is joined to, for `edge_len` (cm along them), `edge_rows` and `edge_pickup`
+ * (the pick-up helper's count at the join's ratio): the other side of the first join this panel is part of.
+ */
+export function joinedEdge(project: Project, panel: Panel, sizeId: Id): { lengthCm: number; rows: number; pickup: number; source: string } | { error: string } {
+  const key = `${panel.id}|${sizeId}`;
+  if (measuring.has(key)) return { error: 'edge_len refers back to this panel.' };
+  const j = (project.joins ?? []).find((x) => x.partner.some((r) => r.panelId === panel.id) || x.edges.some((r) => r.panelId === panel.id));
+  if (!j) return { error: 'this panel is not in a join; join it to the edges it is attached to.' };
+  const other = j.partner.some((r) => r.panelId === panel.id) ? j.edges : j.partner;
+  if (!other.length || other.some((r) => r.panelId === panel.id)) return { error: `the join "${j.name}" has no other side to measure.` };
+  measuring.add(key);
+  try {
+    let lengthCm = 0;
+    let rows = 0;
+    let pickup = 0;
+    const ratio = j.ratio ?? project.settings.pickUp;
+    for (const r of other) {
+      if (measuring.has(`${r.panelId}|${sizeId}`)) return { error: 'edge_len: the joined panels measure each other.' };
+      const m = measureEdge(project, r, sizeId, ratio);
+      if (!m.ok) return { error: `${m.label}: ${m.error}` };
+      lengthCm += m.lengthCm;
+      rows += m.rows;
+      pickup += m.pickup;
+    }
+    return { lengthCm, rows, pickup, source: `join "${j.name}"` };
+  } finally {
+    measuring.delete(key);
+  }
+}
 
 /**
  * The armhole a sleeve is sewn into, for `armhole_len` (cm, measured along the edges).
@@ -261,7 +348,7 @@ export function armholeLength(project: Project, panel: Panel, sizeId: Id): { val
         const across = Math.max(0, ((m.upper_chest ?? 0) / 2 + (m.ease ?? 0) / 2 - (m.cross_back ?? 0)) / 2);
         return { value: 2 * Math.hypot(m.armhole_depth, across) + 2 * across * 0.4, source: 'an estimate (no Front and Back panels to measure)' };
       }
-      const v = measure(body.id, 'left', u.id, sh.id);
+      const v = measure(body.id, armholeSide(body), u.id, sh.id);
       if (v === null) return { error: `Could not measure the ${body.name} armhole.` };
       total += v;
       names.push(body.name);
@@ -270,6 +357,11 @@ export function armholeLength(project: Project, panel: Panel, sizeId: Id): { val
   } finally {
     measuring.delete(key);
   }
+}
+
+/** The edge an armhole is on: the left edge, except on a left cardigan front (whose left edge is the front edge). */
+export function armholeSide(panel: Panel): Edge {
+  return panel.half?.side === 'left' ? 'right' : 'left';
 }
 
 function emptyPanel(panel: Panel, sizeId: Id, spc: number, rpc: number, issues: Issue[]): ComputedPanel {
@@ -303,7 +395,9 @@ function emptyPanel(panel: Panel, sizeId: Id, spc: number, rpc: number, issues: 
 }
 
 export function computePanel(project: Project, panel: Panel, sizeId: Id): ComputedPanel {
-  const c = computePanelRaw(project, panel, sizeId);
+  if (panel.yoke) return computeYokePanel(project, panel, sizeId);
+  const raw = computePanelRaw(project, panel, sizeId);
+  const c = panel.half ? cropHalf(raw, panel, panel.half, halfFrame(project, panel.half, raw.stitchesPerCm, buildScope(project, sizeId))) : raw;
   // Explain unknown names that follow a fit choice (e.g. hem_circ when the table has no high_hip).
   if (!c.issues.some((i) => /Unknown name "/.test(i.message))) return c;
   const issues = c.issues.map((i) => {
@@ -339,6 +433,18 @@ function computePanelRaw(project: Project, panel: Panel, sizeId: Id): ComputedPa
         : { severity: 'error', message: `armhole_len: ${a.error}`, ref: { kind: 'panel' } },
     );
   }
+  if (EDGE_NAMES.some((n) => usesName(panel, n))) {
+    const j = joinedEdge(project, panel, sizeId);
+    issues.push(
+      'lengthCm' in j
+        ? { severity: 'info', message: `edge_len = ${j.lengthCm.toFixed(1)} cm, edge_rows = ${j.rows}, edge_pickup = ${j.pickup} sts, from ${j.source}.`, ref: { kind: 'panel' } }
+        : { severity: 'error', message: `edge_len: ${j.error}`, ref: { kind: 'panel' } },
+    );
+  }
+  if (usesYoke(panel)) {
+    const n = yokeNames(project, sizeId);
+    if ('error' in n) issues.push({ severity: 'error', message: `yoke.*: ${n.error}`, ref: { kind: 'panel' } });
+  }
   const { values, errors } = resolvePanelDims(project, panel, sizeId);
   let failed = false;
   panel.waypoints.forEach((wp, i) => {
@@ -354,10 +460,14 @@ function computePanelRaw(project: Project, panel: Panel, sizeId: Id): ComputedPa
   if (failed) return emptyPanel(panel, sizeId, spc, rpc, issues);
 
   // ---- in-the-round part and pattern sections (garment heights) ----
-  const joinWp = !panel.inTheRound && panel.joinAt ? panel.waypoints.find((w) => w.id === panel.joinAt) : undefined;
+  // A cardigan front is always flat.
+  const half = panel.half ?? null;
+  const inTheRound = panel.inTheRound && !half;
+  const joinWp = !inTheRound && !half && panel.joinAt ? panel.waypoints.find((w) => w.id === panel.joinAt) : undefined;
   const joinH = joinWp ? values[`${waypointKey(joinWp.name)}.height`] : undefined;
-  const inRoundAt = (h: number) => panel.inTheRound || (joinH !== undefined && h <= joinH + 1e-9);
-  const scope = { ...buildScope(project, sizeId), ...values };
+  const inRoundAt = (h: number) => inTheRound || (joinH !== undefined && h <= joinH + 1e-9);
+  const scope = { ...buildScope(project, sizeId), ...panelExtras(project, panel, sizeId), ...values };
+  const frame = half ? halfFrame(project, half, spc, scope) : null;
   const rawSections = panel.sections.flatMap((sec) => {
     const a = evaluateDim(sec.fromHeight, sizeId, scope);
     const b = evaluateDim(sec.toHeight, sizeId, scope);
@@ -370,6 +480,20 @@ function computePanelRaw(project: Project, panel: Panel, sizeId: Id): ComputedPa
   const sectionAt = (h: number) => rawSections.find((x) => h >= x.from - 1e-9 && h < x.to - 1e-9);
 
   // ---- waypoints: rows and stitches ----
+  // Parity 'start': the waypoint the panel is knitted from rounds freely; the others take its parity, so every
+  // width change is even and both edges shape in pairs.
+  let startIdx = -1;
+  let startParity: 'even' | 'odd' | 'any' = 'any';
+  if (panel.rounding.parity === 'start' && panel.waypoints.length) {
+    const hs = keys.map((k) => values[`${k}.height`]);
+    startIdx = hs.indexOf(topDown ? Math.max(...hs) : Math.min(...hs));
+    const k = keys[startIdx];
+    const sh = values[`${k}.height`];
+    const pat = sectionAt(sh)?.sec.pattern ?? panel.pattern;
+    const sel = inRoundAt(sh) ? 0 : panel.selvedge.left + panel.selvedge.right;
+    const n = roundStitches((values[`${k}.left`] + values[`${k}.right`]) * spc, { multiple: pat.multiple, offset: pat.offset, selvedge: sel }).value;
+    startParity = n % 2 === 0 ? 'even' : 'odd';
+  }
   let wps = panel.waypoints.map((wp, i): ComputedWaypoint => {
     const k = keys[i];
     const heightCm = values[`${k}.height`];
@@ -379,11 +503,27 @@ function computePanelRaw(project: Project, panel: Panel, sizeId: Id): ComputedPa
     const selL = inRound ? 0 : panel.selvedge.left;
     const selR = inRound ? 0 : panel.selvedge.right;
     const pattern = sectionAt(heightCm)?.sec.pattern ?? panel.pattern;
-    const rules = { multiple: pattern.multiple, offset: pattern.offset, parity: panel.rounding.parity };
+    // 'start' gives way where an even pattern multiple (a rib) already fixes the parity.
+    const fixedByPattern = pattern.multiple % 2 === 0;
+    const parity = panel.rounding.parity === 'start' ? (i === startIdx || fixedByPattern ? 'any' : startParity) : panel.rounding.parity;
+    const rules = { multiple: pattern.multiple, offset: pattern.offset, parity };
     let stitchRounding: RoundingResult[];
     let leftPos: number;
     let rightPos: number;
-    if (wp.symmetric) {
+    if (half) {
+      // Round each front on its own (pattern multiple, both selvedges); the whole front is twice that, less the
+      // centre-front selvedges. The other half follows the same rule (mirrored), or its own width when asymmetric.
+      // Each front's body is (whole front − closing_r) / 2; it starts `cut` sts from the centre line.
+      const keepRight = half.side === 'left';
+      const shift = frame!.closingCm / 2;
+      const roundHalf = (cm: number, sel: number) => roundStitches((cm - shift) * spc, { multiple: pattern.multiple, offset: pattern.offset, selvedge: sel + half.cfSelvedge });
+      const kept = roundHalf(keepRight ? rightCm : leftCm, keepRight ? selR : selL);
+      const inner = frame!.cut + kept.value - half.cfSelvedge;
+      const other = wp.symmetric ? inner : frame!.cut + roundHalf(keepRight ? leftCm : rightCm, keepRight ? selL : selR).value - half.cfSelvedge;
+      stitchRounding = [kept];
+      leftPos = -(keepRight ? other : inner);
+      rightPos = keepRight ? inner : other;
+    } else if (wp.symmetric) {
       const r = roundStitches((leftCm + rightCm) * spc, { ...rules, selvedge: selL + selR });
       stitchRounding = [r];
       leftPos = -r.value / 2;
@@ -454,7 +594,7 @@ function computePanelRaw(project: Project, panel: Panel, sizeId: Id): ComputedPa
   // from the row after the join. Top-down: flat from row 1 down to the join, then rounds.
   const joinRow = joinWp ? wps.find((w) => w.id === joinWp.id)!.row : null;
   let roundPart: { from: number; to: number } | null = null;
-  if (panel.inTheRound) roundPart = { from: 1, to: totalRows };
+  if (inTheRound) roundPart = { from: 1, to: totalRows };
   else if (joinRow !== null) {
     let from = joinRow + 1;
     // Top-down with a front neckline: the fronts are joined at the centre when the neck shaping is done. If that is
@@ -542,7 +682,13 @@ function computePanelRaw(project: Project, panel: Panel, sizeId: Id): ComputedPa
       [dL, dR] = offCentre(b, a) <= offCentre(a, b) ? [b, a] : [a, b];
       if (dL !== dR) {
         const which = Math.abs(dL) > Math.abs(dR) ? 'left' : 'right';
-        issues.push({ severity: 'warning', message: `${label}: odd stitch change (${total}); the ${which} edge gets one more ${total < 0 ? 'decrease' : 'increase'}.`, ref });
+        // With parity 'same as the first row' an odd change only happens where a rib's multiple fixes the count: expected.
+        const expected = panel.rounding.parity === 'start';
+        issues.push({
+          severity: expected ? 'info' : 'warning',
+          message: `${label}: odd stitch change (${total}); the ${which} edge gets one more ${total < 0 ? 'decrease' : 'increase'}${expected ? ' (the rib’s multiple fixes the count here)' : ''}.`,
+          ref,
+        });
       }
     } else {
       dL = roundNearest(L - hi.leftPos);
@@ -1074,7 +1220,7 @@ function computeNeck(
 ): ComputedNeck | null {
   const nk = panel.neckline!;
   const ref: IssueRef = { kind: 'neckline' };
-  const scope = { ...buildScope(project, sizeId), ...resolvePanelDims(project, panel, sizeId).values };
+  const scope = { ...buildScope(project, sizeId), ...panelExtras(project, panel, sizeId), ...resolvePanelDims(project, panel, sizeId).values };
   const defs = {
     'neck.width': sizeId in nk.width.overrides ? String(nk.width.overrides[sizeId]) : nk.width.expr,
     'neck.depth': sizeId in nk.depth.overrides ? String(nk.depth.overrides[sizeId]) : nk.depth.expr,
@@ -1262,5 +1408,176 @@ function buildOutline(
     for (const p of [...nr].reverse()) pushPt(poly, p.x, p.y);
     for (const p of nl) pushPt(poly, p.x, p.y);
   }
+  return poly;
+}
+
+// ---------- cardigan fronts ----------
+
+/** Where a cardigan front sits in the whole front: the cut at its front edge and any integrated band. */
+interface HalfFrame {
+  /** Stitches from the centre line to the start of this front's body (closing_r / 2, rounded). */
+  cut: number;
+  /** Integrated band stitches between the front-edge selvedge and the body. */
+  bandSts: number;
+  bandPattern: { name: string; multiple: number; offset: number } | null;
+  closingCm: number;
+  bandCm: number;
+}
+
+function halfFrame(project: Project, half: FrontHalf, spc: number, scope: Record<string, number>): HalfFrame {
+  const closingCm = scope.closing_r ?? 0;
+  const band = bandOnFront(project, half.side);
+  const integrated = band?.attach === 'integrated';
+  const bandCm = integrated ? scope.band_w ?? 0 : 0;
+  const pattern = integrated && project.edges ? edgePattern(project.edges.frontBands) : null;
+  const bandSts = integrated && bandCm > 0 ? roundStitches(bandCm * spc, { multiple: pattern!.multiple, offset: pattern!.offset }).value : 0;
+  return { cut: roundNearest((closingCm / 2) * spc), bandSts, bandPattern: pattern, closingCm, bandCm };
+}
+
+/**
+ * One half of a whole front, computed as a pullover front and cut at the centre line: the left front keeps the
+ * right half (as seen from the RS), the right front the left half. The centre-front edge is straight, gets
+ * `cfSelvedge` stitches, and takes the neck's centre stitches at its top (bound off / cast on at the front edge).
+ */
+function cropHalf(full: ComputedPanel, panel: Panel, half: FrontHalf, frame: HalfFrame): ComputedPanel {
+  if (!full.ok) return full;
+  const keep: Edge = half.side === 'left' ? 'right' : 'left';
+  const drop: Edge = keep === 'right' ? 'left' : 'right';
+  const keepRight = keep === 'right';
+  const cf = half.cfSelvedge;
+  // The front edge: the body starts `cut` sts from the centre; integrated band stitches and the selvedge lie outside it.
+  const edgeIn = frame.cut - frame.bandSts - cf;
+  const cfX = keepRight ? edgeIn : -edgeIn;
+  const T = full.totalRows;
+  const centre = full.leftEdge.map((l, r) => (l + full.rightEdge[r]) / 2);
+  const side = keepRight ? full.rightEdge : full.leftEdge;
+  const leftEdge = keepRight ? full.leftEdge.map(() => cfX) : [...full.leftEdge];
+  const rightEdge = keepRight ? [...full.rightEdge] : full.rightEdge.map(() => cfX);
+
+  // Neck: the cut runs from the centre-front edge to this half's neck edge.
+  const neckLeft = new Array<number | null>(T + 1).fill(null);
+  const neckRight = new Array<number | null>(T + 1).fill(null);
+  const neckEdge = keepRight ? full.neckRight : full.neckLeft;
+  for (let r = 0; r <= T; r++) {
+    const n = neckEdge[r];
+    if (n === null || (keepRight ? n <= cfX : n >= cfX)) continue;
+    if (keepRight) [neckLeft[r], neckRight[r]] = [cfX, n];
+    else [neckLeft[r], neckRight[r]] = [n, cfX];
+  }
+  let neck: ComputedNeck | null = null;
+  if (full.neck) {
+    const n = full.neck;
+    const atSplit = neckEdge[n.atStart ? n.splitRow - 1 : n.splitRow];
+    const centreSts = atSplit === null ? 0 : roundNearest(Math.abs(atSplit - cfX));
+    const summary = n.atStart
+      ? `+${n.perSide} at the neck edge, then cast on ${centreSts} sts at the front edge on row ${n.splitRow}`
+      : `${panel.neckline?.centre === 'hold' ? 'place' : 'bind off'} ${centreSts} sts at the front edge on row ${n.splitRow}${panel.neckline?.centre === 'hold' && centreSts ? ' on hold' : ''}, then −${n.perSide} at the neck edge`;
+    neck = { ...n, centreSts, widthSts: Math.round(n.widthSts / 2), oneSide: true, summary };
+  }
+
+  // The front edge is straight; only this half's side edge keeps its shaping.
+  const straight = (target = 0) => ({ method: 'straight' as const, target, events: [], summary: 'centre front, straight' });
+  const segments = full.segments.map((seg) => ({ ...seg, [drop]: straight() }));
+  const markers = full.markers.filter((m) => {
+    if (m.edge === 'neckLeft' || m.edge === 'neckRight') return m.edge === (keepRight ? 'neckRight' : 'neckLeft');
+    if (m.atLine) return keepRight ? m.x > cfX : m.x < cfX;
+    return m.edge === keep;
+  });
+
+  // Stitches held by short-row segments at this half's side edge.
+  const held = new Array<number>(T + 1).fill(0);
+  for (const seg of segments) {
+    if (seg[keep].method !== 'shortrows') continue;
+    const from = Math.max(0, seg.rowFrom - 1);
+    const slice = side.slice(from, seg.rowTo + 1);
+    const outer = keepRight ? Math.max(...slice) : Math.min(...slice);
+    for (let r = from; r <= seg.rowTo; r++) held[r] += Math.abs(side[r] - outer);
+  }
+  const counts = leftEdge.map((l, r) => roundNearest(rightEdge[r] - l + held[r] - (neckLeft[r] !== null ? neckRight[r]! - neckLeft[r]! : 0)));
+
+  const waypoints = full.waypoints.map((w) => {
+    const leftPos = keepRight ? cfX : w.leftPos;
+    const rightPos = keepRight ? w.rightPos : cfX;
+    const cm = (keepRight ? w.rightCm : w.leftCm) - frame.closingCm / 2 + frame.bandCm;
+    return {
+      ...w,
+      leftPos,
+      rightPos,
+      stitches: rightPos - leftPos,
+      actualStitches: roundNearest(rightEdge[w.row] - leftEdge[w.row]),
+      widthCm: cm,
+      wholeCm: w.widthCm,
+      leftCm: keepRight ? 0 : cm,
+      rightCm: keepRight ? cm : 0,
+      selvedge: (keepRight ? panel.selvedge.right : panel.selvedge.left) + cf,
+    };
+  });
+
+  // Bust short rows turn at this half's side only; the return row runs to the front edge.
+  let bust = full.bust;
+  if (bust?.shortRows) {
+    const sr = bust.shortRows;
+    const live = counts[sr.afterRow] ?? 0;
+    const pairs = sr.pairs.map((p) => {
+      const unworked = keepRight ? p.rightUnworked : p.leftUnworked;
+      return {
+        ...p,
+        leftUnworked: keepRight ? 0 : p.leftUnworked,
+        rightUnworked: keepRight ? p.rightUnworked : 0,
+        leftX: keepRight ? cfX : p.leftX,
+        rightX: keepRight ? p.rightX : cfX,
+        rsWorked: live - unworked,
+        wsWorked: live - unworked,
+      };
+    });
+    bust = { ...bust, shortRows: { ...sr, pairs, liveStitches: live, oneSide: keep } };
+  }
+
+  // Rows where the side edge moves without an edge event (darts, painted stitches): drawn as slopes.
+  const evRows = new Set(segments.flatMap((sg) => sg[keep].events.map((e) => e.row)));
+  const extraRows: number[] = [];
+  for (let r = 1; r <= T; r++) if (side[r] !== side[r - 1] && !evRows.has(r)) extraRows.push(r);
+  const sidePath = edgePath(waypoints, segments, keep, side, full.topDown, extraRows);
+  const outline = halfOutline(sidePath, cfX, keepRight ? neckRight : neckLeft, neck, T, full.topDown);
+
+  return {
+    ...full,
+    waypoints,
+    segments,
+    neck,
+    bust,
+    held,
+    leftEdge,
+    rightEdge,
+    neckLeft,
+    neckRight,
+    counts,
+    outline,
+    markers,
+    half: { side: half.side, keep, cfX, centre, bandSts: frame.bandSts, band: frame.bandPattern },
+  };
+}
+
+/** Outline of a cardigan front: the straight front edge, the neck edge, and the side edge. */
+function halfOutline(sidePath: Point[], cfX: number, neckX: (number | null)[], neck: ComputedNeck | null, T: number, topDown: boolean): Point[] {
+  const poly: Point[] = [];
+  const neckPts: Point[] = [];
+  if (neck) {
+    const lineY = neck.splitRow - 1;
+    const first = neckX[neck.atStart ? lineY : neck.splitRow];
+    pushPt(neckPts, cfX, lineY);
+    if (first !== null && first !== undefined) pushPt(neckPts, first, lineY);
+    const rows = neck.events.map((e) => e.row);
+    for (const r of neck.atStart ? [...rows].reverse() : rows) if (neckX[r] !== null) pushPt(neckPts, neckX[r]!, neck.atStart ? r - 1 : r);
+    if (neckX[neck.openRow] !== null) pushPt(neckPts, neckX[neck.openRow]!, neck.openRow);
+  }
+  // The front edge from the garment's lower edge up to the neck (or the top).
+  const lower = topDown ? T : 0;
+  const upper = topDown ? 0 : T;
+  pushPt(poly, cfX, lower);
+  if (neckPts.length) for (const p of neckPts) pushPt(poly, p.x, p.y);
+  else pushPt(poly, cfX, upper);
+  // Then the side edge from the top back down to the lower edge.
+  for (const p of topDown ? sidePath : [...sidePath].reverse()) pushPt(poly, p.x, p.y);
   return poly;
 }

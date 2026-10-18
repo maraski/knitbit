@@ -375,6 +375,11 @@ function ChartCanvas({ chart, c, panel, update, brush, setBrush, custom, cs, set
       }
     });
     flush(dcols.length);
+    // Contiguous yoke: tint each zone, and draw the markers between zones.
+    for (const zr of chart.zoneRuns?.[row.key] ?? []) {
+      const xs = dcols.map((d, xi) => ('col' in d && d.col >= zr.from && d.col < zr.to ? xi : -1)).filter((xi) => xi >= 0);
+      if (xs.length) parts.push(<rect key={`z${zr.zone}`} x={GUT + xs[0] * cs} y={y} width={(xs[xs.length - 1] - xs[0] + 1) * cs} height={cs} className={`zone-tint zone-${zr.zone}`} />);
+    }
     // Symbol cells.
     dcols.forEach((d, xi) => {
       if (!('col' in d)) return;
@@ -405,6 +410,10 @@ function ChartCanvas({ chart, c, panel, update, brush, setBrush, custom, cs, set
         </g>,
       );
     });
+    for (const mc of chart.markerCols?.[row.key] ?? []) {
+      const xi = xOfCol.get(mc);
+      if (xi !== undefined) parts.push(<line key={`m${mc}`} x1={GUT + xi * cs} x2={GUT + xi * cs} y1={y} y2={y + cs} className="marker-line" />);
+    }
     // Row labels: where the row starts.
     const label = (
       <text className={`row-label${row.shortRow ? ' sr' : ''}`} y={y + cs / 2 + 3.5}>
@@ -419,6 +428,7 @@ function ChartCanvas({ chart, c, panel, update, brush, setBrush, custom, cs, set
         {countChanged.has(row.key) && cs >= 8 && (
           <text x={GUT + W + 30} y={y + cs / 2 + 3.5} className="row-count">
             {row.count}
+            {chart.zoneCounts?.[row.key] && <tspan className="zone-counts"> {chart.zoneCounts[row.key].join(' · ')}</tspan>}
           </text>
         )}
       </g>,
@@ -485,6 +495,45 @@ function ChartCanvas({ chart, c, panel, update, brush, setBrush, custom, cs, set
     });
   }
 
+  // Vertical stripes (an integrated front band): tinted columns with a label above.
+  const stripes: React.ReactNode[] = chart.stripes.map((st, k) => {
+    const xs = dcols.map((d, xi) => ('col' in d && d.col >= st.fromCol && d.col < st.toCol ? xi : -1)).filter((xi) => xi >= 0);
+    if (!xs.length) return null;
+    const x1 = GUT + Math.min(...xs) * cs;
+    const x2 = GUT + (Math.max(...xs) + 1) * cs;
+    return (
+      <g key={`st${k}`}>
+        <rect x={x1} y={TOP} width={x2 - x1} height={H} className="chart-stripe" />
+        <text x={(x1 + x2) / 2} y={TOP - 14} textAnchor="middle" className="repeat-label">{st.name}</text>
+      </g>
+    );
+  });
+  // Buttonhole rows: a mark in the right gutter.
+  const holeMarks: React.ReactNode[] = [];
+  display.forEach((r, i) => {
+    const b = !r.shortRow && chart.buttonholeRows[r.knitRow];
+    if (!b) return;
+    holeMarks.push(
+      <text key={`bh${i}`} x={GUT * 2 + W + 34} y={TOP + i * cs + cs / 2 + 3.5} className="buttonhole-mark">
+        ◦ buttonhole {b.join(', ')}
+      </text>,
+    );
+  });
+
+  // Contiguous yoke phases: a labelled band down the left gutter.
+  const phaseCol: React.ReactNode[] = (chart.phases ?? []).map((ph, k) => {
+    const idx = display.map((r, i) => (!r.shortRow && r.knitRow >= ph.fromRow && r.knitRow <= ph.toRow ? i : -1)).filter((i) => i >= 0);
+    if (!idx.length) return null;
+    const y1 = TOP + Math.min(...idx) * cs;
+    const y2 = TOP + (Math.max(...idx) + 1) * cs;
+    return (
+      <g key={`ph${k}`} className={`phase-band phase-${k % 2}`}>
+        <rect x={2} y={y1} width={12} height={y2 - y1} />
+        <text transform={`translate(${11},${(y1 + y2) / 2}) rotate(-90)`} textAnchor="middle">{ph.label}</text>
+      </g>
+    );
+  });
+
   // Pattern sections: a bracket in the left gutter and repeat lines.
   const repeats: React.ReactNode[] = chart.repeats.map((rp, k) => {
     const idx = display.map((r, i) => (!r.shortRow && r.knitRow >= rp.fromRow && r.knitRow <= rp.toRow ? i : -1)).filter((i) => i >= 0);
@@ -511,7 +560,9 @@ function ChartCanvas({ chart, c, panel, update, brush, setBrush, custom, cs, set
   });
 
   const hoverText = hover
-    ? `${hover.row.shortRow ? `${hover.row.label} (after row ${hover.row.knitRow})` : `Row ${hover.row.knitRow}`} · ${hover.row.round ? 'round' : hover.row.rs ? 'RS' : 'WS'} ${hover.row.rtl ? '←' : '→'} · st ${chart.cols - hover.col} · ${hover.row.worked} worked · ${hover.row.count} on needle`
+    ? `${hover.row.shortRow ? `${hover.row.label} (after row ${hover.row.knitRow})` : `Row ${hover.row.knitRow}`} · ${hover.row.round ? 'round' : hover.row.rs ? 'RS' : 'WS'} ${hover.row.rtl ? '←' : '→'} · st ${chart.cols - hover.col} · ${hover.row.worked} worked · ${hover.row.count} on needle` +
+      (chart.zoneCounts?.[hover.row.key] ? ` (${chart.zoneCounts[hover.row.key].map((n, i) => `${chart.zoneNames?.[i] ?? i} ${n}`).join(', ')})` : '') +
+      (chart.phases ? ` · ${chart.phases.find((p) => hover.row.knitRow >= p.fromRow && hover.row.knitRow <= p.toRow)?.label ?? ''}` : '')
     : null;
 
   return (
@@ -573,7 +624,7 @@ function ChartCanvas({ chart, c, panel, update, brush, setBrush, custom, cs, set
         onPointerLeave={() => setHover(null)}
         onContextMenu={(e) => brush.on && e.preventDefault()}
       >
-        <svg width={GUT * 2 + W + 30} height={TOP + H + BOT} className="chart-svg">
+        <svg width={GUT * 2 + W + 30 + (holeMarks.length ? 110 : 0) + (chart.zoneCounts ? 110 : 0)} height={TOP + H + BOT} className="chart-svg">
           <defs>
             <pattern id="chart-grid" patternUnits="userSpaceOnUse" x={GUT} y={TOP} width={cs} height={cs}>
               <rect width={cs} height={cs} fill="var(--cell)" />
@@ -589,6 +640,9 @@ function ChartCanvas({ chart, c, panel, update, brush, setBrush, custom, cs, set
           {tens}
           {colLabels}
           {repeats}
+          {phaseCol}
+          {stripes}
+          {holeMarks}
           <text x={GUT + W / 2} y={chart.topDown ? TOP + H + BOT - 2 : TOP + H + BOT - 2} textAnchor="middle" className="chart-note">
             {chart.topDown ? `Worked top-down: row 1 at the top · ${panelStart === 'pickup' ? 'pick up' : 'cast on'} ${chart.castOn} sts` : `Cast on ${chart.castOn} sts`}
           </text>

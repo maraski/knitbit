@@ -8,8 +8,10 @@
 import type { CustomSymbol, FreeStitch, Id, Panel, Project } from './model';
 import { freeCells, freeFor, freeInterior } from './free';
 import { lineX } from './lines';
-import type { ComputedPanel, ComputedSegment, Edge, ShapeEvent } from './panel';
+import { rowCentre, type ComputedPanel, type ComputedSegment, type Edge, type ShapeEvent } from './panel';
 import { defaultSymbol, symbolInfo, type SymbolInfo } from './symbols';
+import { buttonholeCells, buttonPlan } from './buttons';
+import { buildYokeChart } from './yokePanel';
 
 /** '' = no stitch (outside the panel), 'k' = plain stitch, 'h' = held (live, not worked), else a symbol id. */
 export type Cell = string;
@@ -52,6 +54,15 @@ export interface ChartRepeat {
   startCol: number;
 }
 
+/** A vertical stripe of columns worked in another pattern, e.g. an integrated front band. */
+export interface ChartStripe {
+  name: string;
+  fromCol: number; // first column
+  toCol: number; // one past the last
+  multiple: number;
+  offset: number;
+}
+
 export interface Chart {
   panelId: Id;
   sizeId: Id;
@@ -62,7 +73,16 @@ export interface Chart {
   topDown: boolean;
   castOn: number;
   repeats: ChartRepeat[];
+  stripes: ChartStripe[];
+  /** Knit rows with a buttonhole, by row: which button (1 = top). */
+  buttonholeRows: Record<number, number[]>;
   legend: SymbolInfo[];
+  /** Contiguous yoke: coloured zones per row (columns from–to), marker lines (a marker before these columns), per-zone counts and phases. */
+  zoneRuns?: Record<string, { from: number; to: number; zone: number }[]>;
+  markerCols?: Record<string, number[]>;
+  zoneCounts?: Record<string, number[]>;
+  zoneNames?: string[];
+  phases?: { label: string; fromRow: number; toRow: number }[];
 }
 
 /** Leaning stitches swap when mirrored across a marker. */
@@ -80,6 +100,7 @@ export function cellInfo(id: string, custom: CustomSymbol[] = []): SymbolInfo {
 }
 
 export function buildChart(project: Project, panel: Panel, c: ComputedPanel): Chart {
+  if (c.yoke) return buildYokeChart(project, panel, c);
   const T = c.totalRows;
   const inset = Math.max(0, panel.shapingInset);
   const darts = c.bust?.darts?.interior ?? new Array<number>(T + 1).fill(0);
@@ -185,7 +206,7 @@ export function buildChart(project: Project, panel: Panel, c: ComputedPanel): Ch
           mark(left ? now + inset : now - 1 - inset, defaultSymbol(ev.kind, edge, Math.sign(ev.delta)));
           n -= 1;
         }
-        const centre = (c.leftEdge[r] + c.rightEdge[r]) / 2;
+        const centre = rowCentre(c, r);
         const k = col(centre + (left ? -1 : 1) * c.princess.offset);
         const outer = left ? k - 1 : k;
         const innerK = left ? k : k - 1;
@@ -229,8 +250,8 @@ export function buildChart(project: Project, panel: Panel, c: ComputedPanel): Ch
       const d = c.bust.darts;
       const change = darts[r] - darts[r - 1]; // both darts together
       const per = Math.abs(change) / 2;
-      const centre = (c.leftEdge[r] + c.rightEdge[r]) / 2;
-      const mid = (c.leftEdge[r - 1] + c.rightEdge[r - 1]) / 2;
+      const centre = rowCentre(c, r);
+      const mid = rowCentre(c, r - 1);
       for (const x of [d.leftX, d.rightX]) {
         const k = col(x - mid + centre);
         if (change > 0) {
@@ -248,7 +269,7 @@ export function buildChart(project: Project, panel: Panel, c: ComputedPanel): Ch
       const ev = l.events.find((e) => e.row === r);
       if (!ev) continue;
       const kind = ev.delta < 0 ? 'dec' : 'inc';
-      const centre = (c.leftEdge[r] + c.rightEdge[r]) / 2;
+      const centre = rowCentre(c, r);
       for (const sgn of l.mirror ? [1, -1] : [1]) {
         const x = sgn * lineX(l, r);
         const k = col(centre + x);
@@ -261,7 +282,7 @@ export function buildChart(project: Project, panel: Panel, c: ComputedPanel): Ch
 
     // Painted stitches, drawn over whatever is there (only inside the fabric).
     const free: Record<number, Id> = {};
-    const centreR = (c.leftEdge[r] + c.rightEdge[r]) / 2;
+    const centreR = rowCentre(c, r);
     for (const f of freeByRow.get(r) ?? []) {
       for (const cell of freeCells(f)) {
         const k = col(centreR + cell.x);
@@ -278,10 +299,33 @@ export function buildChart(project: Project, panel: Panel, c: ComputedPanel): Ch
     return { key: String(r), knitRow: r, label: String(r), shortRow: null, round, rs, rtl: round || rs, cells, refs, free, worked, count: c.counts[r] };
   };
 
+  // Buttonholes worked on this panel (a buttonhole band, or a front with an integrated band).
+  const plan = buttonPlan(project, c.sizeId);
+  const holeCells = buttonholeCells(project);
+  const holes = (plan?.holes ?? []).filter((h) => h.panelId === panel.id);
+  const holesByRow = new Map<number, typeof holes>();
+  for (const h of holes) holesByRow.set(h.row, [...(holesByRow.get(h.row) ?? []), h]);
+  const buttonholeRows: Record<number, number[]> = {};
+  const withHoles = (row: ChartRow): ChartRow => {
+    const hs = row.shortRow ? undefined : holesByRow.get(row.knitRow);
+    if (!hs) return row;
+    for (const h of hs) {
+      holeCells.forEach((sym, k) => {
+        const kk = col(h.x) + k;
+        if (kk >= 0 && kk < cols && row.cells[kk] !== '' && row.cells[kk] !== HELD) {
+          row.cells[kk] = sym;
+          delete row.refs[kk];
+        }
+      });
+      (buttonholeRows[row.knitRow] ??= []).push(h.index + 1);
+    }
+    return row;
+  };
+
   const rows: ChartRow[] = [];
   const sr = c.bust?.shortRows;
   for (let r = 1; r <= T; r++) {
-    rows.push(knitRow(r));
+    rows.push(withHoles(knitRow(r)));
     if (sr && sr.pairs.length && r === sr.afterRow) rows.push(...shortRows(c, sr, col, cols, r));
   }
   if (sr && sr.pairs.length && sr.afterRow === 0) rows.unshift(...shortRows(c, sr, col, cols, 0));
@@ -296,6 +340,14 @@ export function buildChart(project: Project, panel: Panel, c: ComputedPanel): Ch
     startCol: col(c.leftEdge[Math.max(0, Math.min(T, s.fromRow))]),
   }));
 
+  // An integrated front band: the columns next to the front-edge selvedge.
+  const stripes: ChartStripe[] = [];
+  if (c.half && c.half.bandSts > 0 && c.half.band) {
+    const sel = panel.half?.cfSelvedge ?? 0;
+    const start = c.half.keep === 'right' ? c.half.cfX + sel : c.half.cfX - sel - c.half.bandSts;
+    stripes.push({ name: `Band: ${c.half.band.name}`, fromCol: col(start), toCol: col(start) + c.half.bandSts, multiple: c.half.band.multiple, offset: c.half.band.offset });
+  }
+
   // Legend: what the chart actually uses.
   const used = new Set<string>();
   for (const row of rows) for (const v of row.cells) if (v !== '') used.add(v);
@@ -307,7 +359,7 @@ export function buildChart(project: Project, panel: Panel, c: ComputedPanel): Ch
   });
   const legend = ids.map((id) => cellInfo(id, project.symbols));
 
-  return { panelId: c.panelId, sizeId: c.sizeId, cols, x0, rows, topDown: c.topDown, castOn: c.counts[0] ?? 0, repeats, legend };
+  return { panelId: c.panelId, sizeId: c.sizeId, cols, x0, rows, topDown: c.topDown, castOn: c.counts[0] ?? 0, repeats, stripes, buttonholeRows, legend };
 }
 
 function shortRows(c: ComputedPanel, sr: NonNullable<NonNullable<ComputedPanel['bust']>['shortRows']>, col: (x: number) => number, cols: number, after: number): ChartRow[] {
@@ -317,15 +369,23 @@ function shortRows(c: ComputedPanel, sr: NonNullable<NonNullable<ComputedPanel['
   const out: ChartRow[] = [];
   sr.pairs.forEach((p, i) => {
     const prevRight = i === 0 ? 0 : sr.pairs[i - 1].rightUnworked;
+    // A cardigan front turns at its side edge only: the turning row runs from the front edge, the return row back to it.
+    const one = sr.oneSide;
     const make = (rs: boolean): ChartRow => {
       const cells: Cell[] = new Array(cols).fill('');
       for (let k = L; k < R; k++) cells[k] = HELD;
       const a = L + p.leftUnworked;
-      const b = rs ? R - prevRight : R - p.rightUnworked;
+      const b = one ? R - p.rightUnworked : rs ? R - prevRight : R - p.rightUnworked;
       for (let k = a; k < b; k++) cells[k] = PLAIN;
-      if (rs) cells[a] = turn;
+      // RS rows run right to left: the right front (side at the left) turns on RS rows, the left front on WS rows.
+      if (one === 'left') {
+        if (rs) cells[a] = turn;
+      } else if (one === 'right') {
+        if (!rs) cells[b - 1] = turn;
+      } else if (rs) cells[a] = turn;
       else cells[b - 1] = turn;
-      const index = 2 * p.index - (rs ? 1 : 0);
+      const first = one === 'right' ? !rs : rs; // worked first in the pair
+      const index = 2 * p.index - (first ? 1 : 0);
       return {
         key: `${after}-sr${index}`,
         knitRow: after,
@@ -341,7 +401,7 @@ function shortRows(c: ComputedPanel, sr: NonNullable<NonNullable<ComputedPanel['
         count: sr.liveStitches,
       };
     };
-    out.push(make(true), make(false));
+    out.push(...(one === 'right' ? [make(false), make(true)] : [make(true), make(false)]));
   });
   return out;
 }
