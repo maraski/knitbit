@@ -12,6 +12,20 @@ optional region sizing (upper body, lower body and sleeves from different sizes)
 **Sizing data credit:** Body measurements adapted from Ysolda Teague's designer size chart, ysolda.com/designer-size-chart.
 The adapted table (`samples/sizing_table_ysolda_cm.csv`) is for personal use and should not be redistributed as a chart.
 
+**Garment options** (Project → Garment), combined freely: **Construction** *Panels* (the panels you draw) or
+*Contiguous, top-down* (a generator that makes a contiguous yoke and the body and sleeves that continue from it, all
+ordinary editable panels), and **Front opening** *Closed / pullover* or *Cardigan* (mirrored left/right fronts,
+bands, buttons). Edge treatments (hem, cuff, neckband, front bands) are set once for the project. See *Garment
+options*, *Cardigan fronts*, *Edge treatments*, *Cardigan bands and buttons* and *Contiguous yoke*.
+
+**Contiguous method credit:** The contiguous construction follows the contiguous sleeve method developed by Susie
+Myers, SusieM on Ravelry (http://www.ravelry.com/people/SusieM). It is a method, not a pattern; Knitbit only models
+its phases. Projects that use it get the tag *contiguous*, and exports carry this line in their footer (Project →
+Garment → *Credit the construction method in export footers*, on by default): *"This garment is worked seamlessly
+from the top-down using the contiguous sleeve method developed by Susie Myers, SusieM on Ravelry
+(http://www.ravelry.com/people/SusieM)"*. (PDF/PNG export itself is not built yet; `exportFooter()` in
+`src/engine/garment.ts` gives it the footer lines.)
+
 ## Running
 
 Requires Node 20+.
@@ -52,9 +66,16 @@ npm run typecheck
   - `layout.ts`: garment layout geometry (local cm frame, rotation, placement), size alignment, T-shape auto-arrange.
   - `free.ts`: painted stitches (paint, erase, repeat, mirror, copy to all sizes). `lines.ts`: shaping lines.
   - `chart.ts`: the stitch chart grid built from a computed panel (cells, short rows, repeats, legend, column folding).
+  - `garment.ts`: the garment options (construction, front opening), tags, the export credit line, schema 2 → 3.
+  - `cardigan.ts`: cardigan fronts as a mirrored pair (split, merge, link, keep in step).
+  - `edgeTreatments.ts`: hem, cuff, neckband and front band settings applied as sections, strips and joins.
+  - `bands.ts`, `buttons.ts`: band width / overlap / closing width, button positions, buttonholes, band checks.
+  - `contiguous.ts`: the contiguous yoke generator (phases A–F, neck, row-by-row zones and increases) and `yoke.*` names.
+  - `yokePanel.ts`, `yokeTop.ts`: the yoke as a panel and chart; its top-view geometry.
+  - `contiguousGarment.ts`: body and sleeves from the yoke's held stitches. `contiguousChecks.ts`: their checks.
 - `src/ui/`: React views.
 - `samples/`: the sample sizing table (`sizing_table_ysolda_cm.csv`, and `.json` with the same data).
-- `src/engine/fixtures/`: test data: the old sample table and a schema-1 project file.
+- `src/engine/fixtures/`: test data: the old sample table, and schema-1 and schema-2 project files.
 
 ## Expression syntax
 
@@ -331,6 +352,32 @@ put when other shaping changes the width.
 Rows are spread evenly (centred) between the ends; a slanted line moves across as it rises. Per size you can edit the
 rows by hand in the line's table (Reset to auto goes back). Presets: fisheye dart through the bust point, waist dart
 ⅓ in from the side, slanted side-front dart, sway-back dart at the centre back.
+
+## Garment options
+
+Project → **Garment** sets two options that combine freely (schema 3; older projects load as Panels + Closed, and
+the upgrade says so):
+
+| | Panels | Contiguous, top-down |
+|---|---|---|
+| **Closed / pullover** | the panels you draw (the original behaviour) | a contiguous yoke, joined in the round at the neck; back, front and sleeves in the round |
+| **Cardigan** | each front becomes a mirrored Left / Right front pair; body flat | the yoke stays open at centre front; back, Left / Right fronts and sleeves flat |
+
+Nothing is made or removed behind your back: switching an option never adds panels. Cardigan splits each front into a
+pair (and Closed merges it back), and **Add strips** / **Add yoke, body and sleeves** make the strips and the
+contiguous panels when you ask. The contiguous construction adds the project tag *contiguous* (removed again when you
+switch back) and the export credit (above).
+
+**Formulas confirmed while building these options** (each is an editable expression with per-size values):
+
+| Decision | Formula / default |
+|---|---|
+| Shoulder seam (phase A) | until the back, after the markers move, is `cross_back_w + 1` (the cross back is followed; the back shoulder width is a style option): rows = (target + 2·k − back neck − phase B increases) / 2, k = (cap top − seam) / 2. Option: the sloped length `sqrt(((back_shoulder_width − back_neck_width)/2)² + shoulder_drop²)` − shorten (0) + extra rows (0) |
+| Back neck increases (phase B) | during phase A, 2 per row on RS rows 1–7 (the first 8 rows), spread evenly and symmetrically, offset half a gap each row; positions per size by hand |
+| Pullover front neck | R = front neck depth × row gauge, made a RS row; increases per side = (back neck − centre) / 2 with centre = 0.4 × `back_neck_width` (round); cast on back neck − 2 × increases at the end of row R and join |
+| Underarm cast-on | `underarm_co` each side, with body increases low in the armhole bringing the body to `upper_chest + ease`; without them, (body target − yoke body) / 2 |
+| Split | `shoulder_drop + armhole_depth − back_neck_drop` from the neck, deepened until the sleeve reaches `bicep + ease.bicep` with at most half the armhole rows rapid |
+| Cardigan closing width | each front = (whole front − `closing_r`) / 2, `closing_r = 2 × band_w − band_overlap`, overlap = band width |
 
 ## Cardigan fronts
 

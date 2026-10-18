@@ -117,3 +117,31 @@ describe('garment options', () => {
     expect(CONTIGUOUS_CREDIT).toContain('Susie Myers, SusieM on Ravelry (http://www.ravelry.com/people/SusieM)');
   });
 });
+
+describe('an old project, end to end', () => {
+  it('loads, becomes a contiguous cardigan with bands, and computes and charts every panel in every size without errors', async () => {
+    const { generateBodyAndSleeves } = await import('./contiguousGarment');
+    const { addStrips, defaultEdges } = await import('./edgeTreatments');
+    const { defaultCardigan } = await import('./bands');
+    const { projectChecks } = await import('./checks');
+    const { buildChart } = await import('./chart');
+    const r = loadProject(V2_TEXT);
+    if (!r.ok) throw new Error(r.errors.join('\n'));
+    let p = setOpening(setConstruction(r.project, 'contiguous'), 'cardigan');
+    p = addStrips(generateBodyAndSleeves({ ...p, edges: defaultEdges(), cardigan: defaultCardigan() }));
+    expect(p.tags).toContain(CONTIGUOUS_TAG);
+    expect(exportFooter(p)).toEqual([CONTIGUOUS_CREDIT]);
+    expect(p.panels.filter((x) => x.fromYoke).length).toBe(5); // back, two fronts, two sleeves
+    for (const panel of p.panels) {
+      for (const s of p.sizes) {
+        const c = computePanel(p, panel, s.id);
+        if (c.ok) buildChart(p, panel, c);
+      }
+    }
+    const errors = projectChecks(p).filter((c) => c.issue.severity === 'error' && p.panels.find((x) => x.id === c.panelId)?.fromYoke);
+    expect(errors).toEqual([]);
+    // Saves and loads as schema 3 with nothing to migrate.
+    const again = loadProject(serializeProject(p));
+    expect(again.ok && again.migratedFrom).toBeNull();
+  });
+});

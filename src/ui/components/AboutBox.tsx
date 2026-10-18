@@ -1,3 +1,4 @@
+import { CONTIGUOUS_CREDIT } from '../../engine/garment';
 export const SIZING_CREDIT = 'Body measurements adapted from Ysolda Teague’s designer size chart, ysolda.com/designer-size-chart';
 
 export function AboutBox({ onClose }: { onClose: () => void }) {
@@ -19,6 +20,13 @@ export function AboutBox({ onClose }: { onClose: () => void }) {
           <p className="hint">
             The adapted table is for personal use only and should not be redistributed as a chart.
           </p>
+          <h4>Contiguous method</h4>
+          <p>
+            The contiguous construction follows the contiguous sleeve method developed by Susie Myers, SusieM on Ravelry (
+            <a href="http://www.ravelry.com/people/SusieM" target="_blank" rel="noreferrer">ravelry.com/people/SusieM</a>): a top-down yoke worked in one piece from the
+            back neck, with set-in-look sleeves. Knitbit models its phases; it is her method, not a pattern.
+          </p>
+          <p className="hint">Projects using it are tagged “contiguous”, and exports carry: “{CONTIGUOUS_CREDIT}”.</p>
           <div className="modal-foot">
             <button className="primary" onClick={onClose}>Close</button>
           </div>
