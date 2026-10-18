@@ -4,7 +4,8 @@ import { markerFor, readSyncMarker, toRemoteDoc, writeSyncMarker, type SyncOutco
 import type { Project } from '../../engine/model';
 import { fixtureProject } from '../../engine/testFixtures';
 import { MemoryRemote } from '../../engine/testRemote';
-import { CloudSaver, SAVE_DELAY_MS, SIGNED_OUT, scopedStorage, stateAfter, statusLabel, type CloudState } from './saver';
+import { CloudSaver, SAVE_DELAY_MS, scopedStorage, stateAfter } from './saver';
+import { SIGNED_OUT, statusLabel, type CloudState } from './status';
 
 function memoryStorage(): KVStorage & { data: Map<string, string> } {
   const data = new Map<string, string>();

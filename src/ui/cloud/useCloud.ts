@@ -8,7 +8,8 @@ import type { Project } from '../../engine/model';
 import type { Notice } from '../store';
 import { cloudConfig, rememberSignIn, rememberedSignIn } from './config';
 import type { CloudUser } from './firebase';
-import { CloudSaver, SIGNED_OUT, scopedStorage, type CloudState } from './saver';
+import type { CloudSaver } from './saver';
+import { SIGNED_OUT, type CloudState } from './status';
 
 type FirebaseModule = typeof import('./firebase');
 
@@ -60,8 +61,8 @@ export function useCloud(project: Project, open: (p: Project) => void, notify: (
     let s: CloudSaver | null = null;
     void mod.current.then((m) => {
       if (cancelled) return;
-      s = new CloudSaver(
-        { remote: m.remoteFor(user.uid), storage: scopedStorage(window.localStorage, user.uid), isOnline: () => navigator.onLine, now: () => Date.now() },
+      s = new m.CloudSaver(
+        { remote: m.remoteFor(user.uid), storage: m.scopedStorage(window.localStorage, user.uid), isOnline: () => navigator.onLine, now: () => Date.now() },
         { onState: setState, onOutcome: (o) => handleOutcome(o, latest.current.open, latest.current.notify) },
       );
       saver.current = s;

@@ -3,7 +3,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import type { Cloud } from '../cloud/useCloud';
-import { statusLabel } from '../cloud/saver';
+import { statusLabel } from '../cloud/status';
 
 export function CloudStatus({ cloud }: { cloud: Cloud }) {
   const [now, setNow] = useState(() => Date.now());

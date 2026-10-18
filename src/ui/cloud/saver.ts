@@ -5,22 +5,9 @@
 import type { KVStorage } from '../../engine/autosave';
 import { fingerprint, readSyncMarker, syncProject, writeSyncMarker, type LocalCopy, type ProjectRemote, type SyncOutcome } from '../../engine/cloudSync';
 import type { Project } from '../../engine/model';
+import { type CloudState } from './status';
 
-export type CloudStatus = 'signed-out' | 'saving' | 'saved' | 'offline' | 'conflict' | 'error';
-
-export type ConflictOutcome = Extract<SyncOutcome, { kind: 'conflict' }>;
-
-export interface CloudState {
-  status: CloudStatus;
-  /** When the project was last confirmed online (ms since epoch). */
-  lastSavedAt: number | null;
-  /** Detail for 'error' and 'offline' (shown as a tooltip). */
-  message: string | null;
-  /** The conflict to resolve (milestone 4); cloud saving of that project is paused meanwhile. */
-  conflict: ConflictOutcome | null;
-}
-
-export const SIGNED_OUT: CloudState = { status: 'signed-out', lastSavedAt: null, message: null, conflict: null };
+export type { CloudState, CloudStatus, ConflictOutcome } from './status';
 
 export interface SaverDeps {
   remote: ProjectRemote;
@@ -186,30 +173,4 @@ export function scopedStorage(storage: KVStorage, uid: string): KVStorage {
     setItem: (key, value) => storage.setItem(k(key), value),
     removeItem: (key) => storage.removeItem(k(key)),
   };
-}
-
-/** The toolbar's save status text. */
-export function statusLabel(state: CloudState, now: number): string {
-  switch (state.status) {
-    case 'signed-out':
-      return '';
-    case 'saving':
-      return 'Saving…';
-    case 'saved':
-      return state.lastSavedAt === null ? 'Saved online' : `Saved online · ${ago(now - state.lastSavedAt, state.lastSavedAt)}`;
-    case 'offline':
-      return 'Offline: saved on this device';
-    case 'conflict':
-      return 'Conflict';
-    case 'error':
-      return 'Not saved online';
-  }
-}
-
-function ago(ms: number, at: number): string {
-  const min = Math.floor(ms / 60000);
-  if (min < 1) return 'just now';
-  if (min < 60) return `${min} min ago`;
-  const d = new Date(at);
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }

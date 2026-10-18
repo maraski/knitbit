@@ -4,11 +4,17 @@
 // Firestore document projects/{id}: owner, name, data (serializeProject text), schema, rev, updatedAt, createdAt,
 // deleted?. `rev` is a random token written by every save; it is the RemoteDoc `updatedAt` that conditional saves
 // compare, because a server timestamp isn't known until after the write. `updatedAt` (server time) is for display.
+//
+// Firestore *lite* (plain HTTPS, no offline cache or live listeners) and auth with localStorage persistence keep this
+// chunk about 200 kB instead of 560 kB. Offline edits are covered by the local auto-save; switch the import to
+// 'firebase/firestore' if the offline cache is ever wanted.
 
 import { initializeApp } from 'firebase/app';
 import {
   GoogleAuthProvider,
-  getAuth,
+  browserLocalPersistence,
+  browserPopupRedirectResolver,
+  initializeAuth,
   getRedirectResult,
   onAuthStateChanged,
   signInWithPopup,
@@ -26,9 +32,12 @@ import {
   runTransaction,
   serverTimestamp,
   where,
-} from 'firebase/firestore';
+} from 'firebase/firestore/lite';
 import type { ProjectRemote, RemoteDoc, RemoteSummary, SaveResult } from '../../engine/cloudSync';
 import { cloudConfig } from './config';
+
+// The saver comes along in this chunk: it is only needed once signed in.
+export { CloudSaver, scopedStorage } from './saver';
 
 export interface CloudUser {
   uid: string;
@@ -39,7 +48,7 @@ export interface CloudUser {
 
 if (!cloudConfig) throw new Error('Firebase is not configured (VITE_FIREBASE_* env vars).');
 const app = initializeApp(cloudConfig);
-const auth = getAuth(app);
+const auth = initializeAuth(app, { persistence: browserLocalPersistence, popupRedirectResolver: browserPopupRedirectResolver });
 const db = getFirestore(app);
 const COLLECTION = 'projects';
 
