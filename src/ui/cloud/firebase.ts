@@ -86,6 +86,11 @@ function message(e: unknown): string {
   return (e as Error)?.message ?? String(e);
 }
 
+/** A Firestore Timestamp field as ms since epoch (null if missing). */
+function millis(v: unknown): number | null {
+  return v && typeof (v as { toMillis?: unknown }).toMillis === 'function' ? (v as { toMillis(): number }).toMillis() : null;
+}
+
 function newRev(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
@@ -98,7 +103,7 @@ export function remoteFor(uid: string): ProjectRemote {
       const snap = await getDocs(query(collection(db, COLLECTION), where('owner', '==', uid)));
       return snap.docs
         .filter((d) => !d.get('deleted'))
-        .map((d) => ({ id: d.id, name: String(d.get('name') ?? ''), updatedAt: String(d.get('rev') ?? '') }));
+        .map((d) => ({ id: d.id, name: String(d.get('name') ?? ''), updatedAt: String(d.get('rev') ?? ''), editedAt: millis(d.get('updatedAt')) }));
     },
 
     async get(id: string): Promise<RemoteDoc | null> {

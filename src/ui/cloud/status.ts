@@ -3,7 +3,8 @@
 
 import type { SyncOutcome } from '../../engine/cloudSync';
 
-export type CloudStatus = 'signed-out' | 'saving' | 'saved' | 'offline' | 'conflict' | 'error';
+/** 'not-uploaded': the open project isn't online and the knitter hasn't chosen to upload it (first sign-in). */
+export type CloudStatus = 'signed-out' | 'saving' | 'saved' | 'offline' | 'conflict' | 'error' | 'not-uploaded';
 
 export type ConflictOutcome = Extract<SyncOutcome, { kind: 'conflict' }>;
 
@@ -34,6 +35,8 @@ export function statusLabel(state: CloudState, now: number): string {
       return 'Conflict';
     case 'error':
       return 'Not saved online';
+    case 'not-uploaded':
+      return 'Only on this device';
   }
 }
 

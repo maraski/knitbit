@@ -16,17 +16,22 @@ function edited(p: Project, name: string): Project {
   return { ...p, name, updatedAt: new Date().toISOString() };
 }
 
-function setup(opts: { online?: boolean } = {}) {
+function setup(opts: { online?: boolean; ask?: boolean } = {}) {
   const remote = new MemoryRemote();
   const storage = memoryStorage();
   const states: CloudState[] = [];
   const outcomes: SyncOutcome[] = [];
+  const asked: { project: Project; online: string[] }[] = [];
   let online = opts.online ?? true;
   const saver = new CloudSaver(
     { remote, storage, isOnline: () => online, now: () => Date.now() },
-    { onState: (s) => states.push(s), onOutcome: (o) => outcomes.push(o) },
+    {
+      onState: (s) => states.push(s),
+      onOutcome: (o) => outcomes.push(o),
+      ...(opts.ask ? { onAskUpload: (project: Project, list: { name: string }[]) => asked.push({ project, online: list.map((s) => s.name) }) } : {}),
+    },
   );
-  return { remote, storage, states, outcomes, saver, setOnline: (v: boolean) => (online = v) };
+  return { remote, storage, states, outcomes, asked, saver, setOnline: (v: boolean) => (online = v) };
 }
 
 beforeEach(() => {
@@ -166,6 +171,86 @@ describe('CloudSaver', () => {
   });
 });
 
+describe('CloudSaver: first sign-in', () => {
+  const other = () => ({ ...fixtureProject(), id: 'project-online', name: 'Online one' });
+
+  it('uploads straight away when nothing is online yet', async () => {
+    const { remote, saver, asked } = setup({ ask: true });
+    const p = fixtureProject();
+    await saver.start(p);
+    expect(asked).toEqual([]);
+    expect(remote.docs.get(p.id)?.name).toBe(p.name);
+  });
+
+  it('asks instead of uploading when other projects are online, and waits', async () => {
+    const { remote, saver, asked } = setup({ ask: true });
+    remote.put(toRemoteDoc(other()));
+    const p = fixtureProject();
+    await saver.start(p);
+    expect(asked.map((a) => [a.project.id, a.online])).toEqual([[p.id, ['Online one']]]);
+    expect(saver.current.status).toBe('not-uploaded');
+    saver.changed(edited(p, 'Edited meanwhile'));
+    await vi.advanceTimersByTimeAsync(SAVE_DELAY_MS * 2);
+    expect(remote.docs.has(p.id)).toBe(false);
+  });
+
+  it('"Upload this project" saves the latest edit', async () => {
+    const { remote, saver } = setup({ ask: true });
+    remote.put(toRemoteDoc(other()));
+    const p = fixtureProject();
+    await saver.start(p);
+    saver.changed(edited(p, 'Edited meanwhile'));
+    await saver.uploadNow();
+    expect(remote.docs.get(p.id)?.name).toBe('Edited meanwhile');
+    expect(saver.current.status).toBe('saved');
+  });
+
+  it("doesn't ask about a project this device already synced", async () => {
+    const { remote, storage, saver, asked } = setup({ ask: true });
+    const p = fixtureProject();
+    writeSyncMarker(storage, markerFor(p, remote.put(toRemoteDoc(p))));
+    remote.put(toRemoteDoc(other()));
+    await saver.start(p);
+    expect(asked).toEqual([]);
+    expect(saver.current.status).toBe('saved');
+  });
+
+  it('opening an online project marks it in sync, so nothing is written', async () => {
+    const { remote, saver, outcomes } = setup({ ask: true });
+    const o = other();
+    const at = remote.put(toRemoteDoc(o));
+    await saver.start(fixtureProject());
+    const save = vi.spyOn(remote, 'save');
+    saver.opened(o, at);
+    saver.changed(o);
+    await vi.advanceTimersByTimeAsync(SAVE_DELAY_MS * 2);
+    expect(save).not.toHaveBeenCalled();
+    expect(outcomes).toEqual([]);
+    expect(saver.current.status).toBe('saved');
+  });
+});
+
+describe('CloudSaver: deleting the open project', () => {
+  it('forget stops a pending save and ignores the project if undo brings it back', async () => {
+    const { remote, saver, outcomes } = setup();
+    const p = fixtureProject();
+    await saver.start(p);
+    saver.changed(edited(p, 'Pending'));
+    saver.forget(p.id);
+    await remote.remove(p.id);
+    await vi.advanceTimersByTimeAsync(SAVE_DELAY_MS * 2);
+    saver.changed(edited(p, 'Undone back'));
+    await vi.advanceTimersByTimeAsync(SAVE_DELAY_MS * 2);
+    expect(await remote.get(p.id)).toBeNull();
+    expect(outcomes).toEqual([]); // no "deleted online" warning
+
+    const next = { ...fixtureProject(), id: 'project-next', name: 'Next' };
+    saver.changed(next);
+    await saver.flush();
+    expect(remote.docs.get('project-next')?.name).toBe('Next');
+  });
+});
+
 describe('stateAfter', () => {
   it('keeps lastSavedAt through errors', () => {
     const saved = stateAfter(SIGNED_OUT, { kind: 'uploaded', marker: { projectId: 'p', remoteUpdatedAt: 't', fingerprint: 'f' } }, true, 1000);
@@ -186,6 +271,7 @@ describe('statusLabel', () => {
     expect(statusLabel(s('saving'), at)).toBe('Saving…');
     expect(statusLabel(s('offline'), at)).toBe('Offline: saved on this device');
     expect(statusLabel(s('conflict'), at)).toBe('Conflict');
+    expect(statusLabel(s('not-uploaded'), at)).toBe('Only on this device');
     expect(statusLabel(s('signed-out'), at)).toBe('');
   });
 });

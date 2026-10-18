@@ -4,6 +4,7 @@ import type { ProjectRemote, RemoteDoc, RemoteSummary, SaveResult } from './clou
 
 interface Stored extends RemoteDoc {
   deleted: boolean;
+  editedAt: number;
 }
 
 export class MemoryRemote implements ProjectRemote {
@@ -19,20 +20,25 @@ export class MemoryRemote implements ProjectRemote {
     return `t${this.clock}`;
   }
 
+  /** Server time of a write: one second per tick, so later saves list as newer. */
+  private editedAt(): number {
+    return Date.UTC(2026, 9, 18) + this.clock * 1000;
+  }
+
   private check(): void {
     if (this.offline) throw new Error('offline');
   }
 
   async list(): Promise<RemoteSummary[]> {
     this.check();
-    return [...this.docs.values()].filter((d) => !d.deleted).map(({ id, name, updatedAt }) => ({ id, name, updatedAt }));
+    return [...this.docs.values()].filter((d) => !d.deleted).map(({ id, name, updatedAt, editedAt }) => ({ id, name, updatedAt, editedAt }));
   }
 
   async get(id: string): Promise<RemoteDoc | null> {
     this.check();
     const d = this.docs.get(id);
     if (!d || d.deleted) return null;
-    const { deleted: _, ...doc } = d;
+    const { deleted: _, editedAt: __, ...doc } = d;
     return doc;
   }
 
@@ -44,20 +50,20 @@ export class MemoryRemote implements ProjectRemote {
     const current = this.docs.get(doc.id)?.updatedAt ?? null;
     if (current !== ifUpdatedAt) return { ok: false, conflict: true, currentUpdatedAt: current };
     const updatedAt = this.tick();
-    this.docs.set(doc.id, { ...doc, updatedAt, deleted: false });
+    this.docs.set(doc.id, { ...doc, updatedAt, deleted: false, editedAt: this.editedAt() });
     return { ok: true, updatedAt };
   }
 
   async remove(id: string): Promise<void> {
     this.check();
     const d = this.docs.get(id);
-    if (d) this.docs.set(id, { ...d, deleted: true, updatedAt: this.tick() });
+    if (d) this.docs.set(id, { ...d, deleted: true, updatedAt: this.tick(), editedAt: this.editedAt() });
   }
 
   /** Writes directly, as another device or app version would, ignoring conditions. Returns the new updatedAt. */
   put(doc: Omit<RemoteDoc, 'updatedAt'>): string {
     const updatedAt = this.tick();
-    this.docs.set(doc.id, { ...doc, updatedAt, deleted: false });
+    this.docs.set(doc.id, { ...doc, updatedAt, deleted: false, editedAt: this.editedAt() });
     return updatedAt;
   }
 }

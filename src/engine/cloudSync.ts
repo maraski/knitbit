@@ -17,7 +17,8 @@ export interface RemoteDoc {
   updatedAt: string;
 }
 
-export type RemoteSummary = Pick<RemoteDoc, 'id' | 'name' | 'updatedAt'>;
+/** A list entry. `editedAt` is when it was last saved online (ms since epoch), for display; null if unknown. */
+export type RemoteSummary = Pick<RemoteDoc, 'id' | 'name' | 'updatedAt'> & { editedAt: number | null };
 
 export type SaveResult =
   | { ok: true; updatedAt: string }

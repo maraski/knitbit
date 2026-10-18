@@ -94,6 +94,11 @@ new project's `owner` must be your user id, and `data` must be under 900 kB (Fir
 2. **Sign-in + cloud save of the current project**: Firebase module (lazy), Google sign-in, debounced save, status
    label, security rules.
 3. **Projects dialog**: list, open, rename, duplicate, delete. First-sign-in upload of the local project.
+   Done: `ProjectsDialog.tsx` (lazy) with the operations in `src/engine/cloudProjects.ts`. At sign-in, a project this
+   device never synced is uploaded straight away only when nothing else is online; otherwise the dialog asks
+   (Upload this project, or open an online one; "Not now" keeps it on this device, status "Only on this device").
+   Deleting the open project opens the most recently edited remaining one, or a fresh sample when none is left
+   (a sample every time would add a new "My top" online after each delete).
 4. **Conflicts + offline**: conflict notice with its three choices, Firestore offline cache, save when the tab is
    hidden.
 5. **Docs**: README section, HANDOFF goal/architecture update, setup steps.

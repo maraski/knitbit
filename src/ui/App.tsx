@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { CascadePicker } from './components/CascadePicker';
 import { sizeText } from './components/EstMark';
 import type { Id } from '../engine/model';
@@ -11,7 +11,7 @@ import { ChartView } from './components/ChartView';
 import { lineFromPoints } from '../engine/lines';
 import { dragHeight, dragWidth } from '../engine/waypointDrag';
 import { editPanel } from './edit';
-import { loadProject, serializeProject } from '../engine/schema';
+import { loadProject, serializeProject, type LoadResult } from '../engine/schema';
 import { CheckPanel } from './components/CheckPanel';
 import { ImportDialog } from './components/ImportDialog';
 import { JoinProps } from './components/JoinProps';
@@ -33,6 +33,9 @@ import { bandOnFront, setButtonPosition } from '../engine/bands';
 import { applyEdgeTreatments } from '../engine/edgeTreatments';
 import { PANEL_SELECTION, type Selection } from './selection';
 import { mergeSampleTable, migrationNotice, sampleProject, useProjectStore, type Notice } from './store';
+
+// Signed-in Open…: loaded on first use, with the sync code it needs (kept out of the main chunk).
+const ProjectsDialog = lazy(() => import('./components/ProjectsDialog').then((m) => ({ default: m.ProjectsDialog })));
 
 const VIEW_KEY = 'knitbit.view.v1';
 type CenterView = 'schematic' | 'chart' | 'layout' | 'measurements';
@@ -157,25 +160,35 @@ export function App() {
   };
 
   const save = () => downloadText(`${safeFilename(project.name)}.knitbit.json`, serializeProject(project));
-  const open = async () => {
+  // A loaded project (from a file or online) becomes the open one, with any upgrade notices.
+  const openLoaded = (r: Extract<LoadResult, { ok: true }>, title: string) => {
+    store.replace(r.project);
+    setSizeId(r.project.baseSizeId);
+    selectPanel(r.project.panels[0]?.id ?? null);
+    if (r.migratedFrom !== null) return store.setNotice(migrationNotice(title, r.migratedFrom, r.migrationNotes, r.warnings));
+    const lines = r.warnings;
+    store.setNotice(lines.length ? { kind: 'warning', title, lines } : { kind: 'info', title, lines: [] });
+  };
+  const openFile = async () => {
     const f = await pickTextFile('.json,application/json');
     if (!f) return;
     const r = loadProject(f.text);
     if (!r.ok) return store.setNotice({ kind: 'error', title: `Could not open ${f.name}`, lines: r.errors });
-    store.replace(r.project);
-    setSizeId(r.project.baseSizeId);
-    selectPanel(r.project.panels[0]?.id ?? null);
-    if (r.migratedFrom !== null) return store.setNotice(migrationNotice(`Opened ${f.name}`, r.migratedFrom, r.migrationNotes, r.warnings));
-    const lines = r.warnings;
-    store.setNotice(lines.length ? { kind: 'warning', title: `Opened ${f.name}`, lines } : { kind: 'info', title: `Opened ${f.name}`, lines: [] });
+    openLoaded(r, `Opened ${f.name}`);
   };
-  const newProject = () => {
-    if (!window.confirm('Start a new project from the sample sizing table? The current project stays in undo history.')) return;
+  // Signed in, Open… shows the Projects dialog (which also opens files).
+  const open = () => (cloud.user && cloud.remote ? cloud.showProjects() : void openFile());
+  // Signed in, the new project saves online through the normal cloud save.
+  const startSample = (title: string | null) => {
     const p = sampleProject();
     store.replace(p);
     setSizeId(p.baseSizeId);
     selectPanel(p.panels[0]?.id ?? null);
-    store.setNotice(null);
+    store.setNotice(title ? { kind: 'info', title, lines: [] } : null);
+  };
+  const newProject = () => {
+    if (!window.confirm('Start a new project from the sample sizing table? The current project stays in undo history.')) return;
+    startSample(null);
   };
 
   useEffect(() => {
@@ -469,6 +482,19 @@ export function App() {
         </aside>
       </div>
       </ErrorBoundary>
+      {cloud.dialog !== 'closed' && cloud.remote && (
+        <Suspense fallback={null}>
+          <ProjectsDialog
+            cloud={cloud}
+            remote={cloud.remote}
+            project={project}
+            onOpen={openLoaded}
+            onOpenFile={() => void openFile()}
+            onSample={startSample}
+            onRenameOpen={(name) => update((p) => ({ ...p, name }))}
+          />
+        </Suspense>
+      )}
       {importing && (
         <ImportDialog
           project={project}

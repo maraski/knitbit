@@ -140,7 +140,7 @@ describe('syncProject', () => {
     const remote = new MemoryRemote();
     const r = await syncProject(remote, local(p), null);
     expect(r).toEqual({ kind: 'uploaded', marker: markerFor(p, 't1') });
-    expect(await remote.list()).toEqual([{ id: p.id, name: p.name, updatedAt: 't1' }]);
+    expect(await remote.list()).toEqual([{ id: p.id, name: p.name, updatedAt: 't1', editedAt: expect.any(Number) }]);
     expect(remote.docs.get(p.id)?.data).toBe(serializeProject(p));
   });
 
