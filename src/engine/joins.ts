@@ -56,6 +56,8 @@ export function edgeLabel(project: Project, ref: EdgeRef): string {
       return `${panel.name} · upper edge`;
     case 'front':
       return `${panel.name} · front edge`;
+    case 'held':
+      return `${panel.name} · held ${e.part === 'body' ? 'body' : e.part === 'leftSleeve' ? 'left sleeve' : 'right sleeve'}`;
     default:
       return `${panel.name} · neckline`;
   }
@@ -106,6 +108,12 @@ export function measureEdge(
     if (c.neckLeft[r] !== null) sts -= roundNearest(c.neckRight[r]! - c.neckLeft[r]!);
     sts = Math.max(0, sts);
     return { ok: true, label, rows: 0, stitches: sts, lengthCm: sts / spc, pickup: sts, parts: [`${sts} sts`], rowRange: null };
+  }
+
+  if (e.kind === 'held') {
+    if (!c.yoke) return blankMeasure(label, 'Only a contiguous yoke has held stitches.');
+    const sts = c.yoke.held[e.part];
+    return { ok: true, label, rows: 0, stitches: sts, lengthCm: sts / spc, pickup: sts, parts: [`${sts} sts held`], rowRange: null };
   }
 
   if (e.kind === 'front') {

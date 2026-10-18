@@ -72,6 +72,7 @@ Waypoint dimensions and custom measurements are expressions. They evaluate to **
 | Armhole | `armhole_len`: the armhole a sleeve is sewn into (see Templates) |
 | Cardigan bands | `band_w` (front band width), `band_overlap`, `closing_r` (width taken off the whole front); 0 without bands (see Cardigan bands and buttons) |
 | Joined edges | `edge_len` (cm), `edge_rows`, `edge_pickup` (sts at the join's ratio): the edges a strip is joined to, e.g. a band's `edge_pickup * st_w` |
+| Contiguous yoke | `yoke.back_w`, `yoke.front_w`, `yoke.sleeve_w` (held stitches + underarm cast-on share, cm), `yoke.underarm_co` (cm), `yoke.depth` (neck to split, cm); see Contiguous yoke |
 
 Examples:
 
@@ -467,6 +468,28 @@ per phase, back length, underarm cast-on, held stitches). Removing a size clears
   stitches, symbols pointing away from the neck (the knitting direction); markers as bold red lines; row numbers down
   centre front; the symbol legend (incl. *place marker on row 1, slip after*) at the bottom right.
 
+**Body and sleeves.** *Add body and sleeves* (Project → Garment with the contiguous construction, or the yoke's
+properties) adds the yoke if there is none and the panels it lacks, all top-down; it never runs on its own and adds
+nothing a second time:
+
+| Panel | Starts with (`underarm` width) | Below |
+|---|---|---|
+| Back | the yoke's back + half the underarm cast-on each side (`yoke.back_w`) | waist and hem as the bodice template |
+| Front (pullover) | both fronts + the centre cast-on + half the cast-on each side (`yoke.front_w`) | the same, with bust shaping |
+| Left / Right front (cardigan) | each front + its half of the cast-on; `yoke.front_w` describes the whole front, so each half rounds to exactly that | a mirrored pair, as in Panels mode |
+| Left / right sleeve | the held sleeve + the whole underarm cast-on (`yoke.sleeve_w`) | tapering to `wrist + ease.wrist` at `arm_length` |
+
+Pullovers work the body and sleeves in the round, cardigans flat (each panel's *Worked* setting can be changed). The
+panels use *Stitch count: Same as the first row* (parity of the waypoint the panel starts from), so every change
+below the yoke is even and both sides shape in pairs. Selvedges are 0: the stitches continue from the yoke.
+Joins record it: *Body continues from the yoke* and *Left/Right sleeve continues from the yoke* (live stitches, from
+the yoke's held edges: a new edge kind `{ "kind": "held", "part": "leftSleeve" | "body" | "rightSleeve" }`), and
+*Underarm cast-on*. Change the yoke and the body and sleeves follow in every size.
+
+**Bust from the top.** The front's bust point is `underarm.height + yoke.depth − (hps_to_apex − bust_apex_corr)` up
+from the hem: measured down from the neck point, where the fronts begin. Short rows add the length; the bust helper
+doesn't add side width at the underarm (the yoke sets it).
+
 Body increases bring the body at the underarm (cast-ons included) to `upper_chest + ease`; without them the underarm
 cast-on is (body target − yoke body) / 2. The result lists every row's zone counts, increases (with positions and
 symbols), cast-ons and marker moves, a phase table, the held edges, and warnings (e.g. a sleeve that can't reach its
@@ -686,7 +709,7 @@ A **Panel**:
   "inTheRound": false,
   "selvedge": { "left": 0-2, "right": 0-2 },
   "shapingInset": 2,                            // stitches in from the edge
-  "rounding": { "parity": "any" | "even" | "odd", "rowParity": "any" | "even" | "odd" },
+  "rounding": { "parity": "any" | "even" | "odd" | "start", "rowParity": "any" | "even" | "odd" },   // start = same as the first row
   "pattern": { "name": "stockinette", "multiple": 1, "offset": 0 },
   "sections": [{ "id": "…", "name": "Hem rib", "fromHeight": Dim, "toHeight": Dim, "pattern": { … },
                  "edge": "hem" }],               // edge optional: made by an edge treatment
@@ -729,6 +752,8 @@ A **Panel**:
                    "cfSelvedge": 0-2 },
   "edge": "neckband",                          // optional: made by an edge treatment
   "band": "button" | "buttonhole" | "continuous",   // optional: a cardigan band strip
+  "yoke": null | YokeSpec,                     // optional: a contiguous yoke (see Contiguous yoke)
+  "fromYoke": "back" | "front" | "leftSleeve" | "rightSleeve",   // optional: continues from the yoke
   "layout": { "x": 0, "y": 0, "rotation": 0 | 90 | 180 | 270 },
   "notes": ""
 }

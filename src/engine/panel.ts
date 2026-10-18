@@ -20,7 +20,7 @@ import { bustValues, computeBust, type ComputedBust } from './bust';
 import { sideEdgeLength } from './edges';
 import { measureEdge } from './joins';
 import { computeYokePanel } from './yokePanel';
-import type { YokeResult } from './contiguous';
+import { yokeNames, type YokeResult } from './contiguous';
 import { defaultSymbol } from './symbols';
 import { bandOnFront } from './bands';
 import { edgePattern } from './edgeTreatments';
@@ -226,6 +226,12 @@ export function waypointDefinitions(panel: Panel, sizeId: Id): Record<string, st
 /** Evaluate all waypoint dimensions of a panel for one size. */
 export function resolvePanelDims(project: Project, panel: Panel, sizeId: Id) {
   const base = buildScope(project, sizeId);
+  const extra = panelExtras(project, panel, sizeId);
+  return resolveDefinitions(waypointDefinitions(panel, sizeId), { ...base, ...bustValues(panel, sizeId, base), ...extra });
+}
+
+/** Names a panel takes from other panels: armhole_len, edge_len / edge_rows / edge_pickup, yoke.* (only those it uses). */
+export function panelExtras(project: Project, panel: Panel, sizeId: Id): Record<string, number> {
   const extra: Record<string, number> = {};
   if (usesName(panel, 'armhole_len')) {
     const a = armholeLength(project, panel, sizeId);
@@ -235,7 +241,22 @@ export function resolvePanelDims(project: Project, panel: Panel, sizeId: Id) {
     const j = joinedEdge(project, panel, sizeId);
     if ('lengthCm' in j) Object.assign(extra, { edge_len: j.lengthCm, edge_rows: j.rows, edge_pickup: j.pickup });
   }
-  return resolveDefinitions(waypointDefinitions(panel, sizeId), { ...base, ...bustValues(panel, sizeId, base), ...extra });
+  if (usesYoke(panel)) {
+    const n = yokeNames(project, sizeId);
+    if ('values' in n) Object.assign(extra, n.values);
+  }
+  return extra;
+}
+
+/** The panel's expressions mention a `yoke.*` name (and it isn't the yoke itself). */
+function usesYoke(panel: Panel): boolean {
+  if (panel.yoke) return false;
+  const exprs = [
+    ...panel.waypoints.flatMap((w) => [w.height.expr, w.width.expr, w.left.expr, w.right.expr]),
+    ...panel.sections.flatMap((x) => [x.fromHeight.expr, x.toHeight.expr]),
+    ...(panel.bust ? [panel.bust.apexHeight.expr, panel.bust.apexOffset.expr, panel.bust.vertical.top.expr, panel.bust.vertical.bottom.expr] : []),
+  ];
+  return exprs.some((e) => /(^|[^A-Za-z0-9_.])yoke\./.test(e));
 }
 
 function usesName(panel: Panel, name: string): boolean {
@@ -420,6 +441,10 @@ function computePanelRaw(project: Project, panel: Panel, sizeId: Id): ComputedPa
         : { severity: 'error', message: `edge_len: ${j.error}`, ref: { kind: 'panel' } },
     );
   }
+  if (usesYoke(panel)) {
+    const n = yokeNames(project, sizeId);
+    if ('error' in n) issues.push({ severity: 'error', message: `yoke.*: ${n.error}`, ref: { kind: 'panel' } });
+  }
   const { values, errors } = resolvePanelDims(project, panel, sizeId);
   let failed = false;
   panel.waypoints.forEach((wp, i) => {
@@ -441,7 +466,7 @@ function computePanelRaw(project: Project, panel: Panel, sizeId: Id): ComputedPa
   const joinWp = !inTheRound && !half && panel.joinAt ? panel.waypoints.find((w) => w.id === panel.joinAt) : undefined;
   const joinH = joinWp ? values[`${waypointKey(joinWp.name)}.height`] : undefined;
   const inRoundAt = (h: number) => inTheRound || (joinH !== undefined && h <= joinH + 1e-9);
-  const scope = { ...buildScope(project, sizeId), ...values };
+  const scope = { ...buildScope(project, sizeId), ...panelExtras(project, panel, sizeId), ...values };
   const frame = half ? halfFrame(project, half, spc, scope) : null;
   const rawSections = panel.sections.flatMap((sec) => {
     const a = evaluateDim(sec.fromHeight, sizeId, scope);
@@ -455,6 +480,20 @@ function computePanelRaw(project: Project, panel: Panel, sizeId: Id): ComputedPa
   const sectionAt = (h: number) => rawSections.find((x) => h >= x.from - 1e-9 && h < x.to - 1e-9);
 
   // ---- waypoints: rows and stitches ----
+  // Parity 'start': the waypoint the panel is knitted from rounds freely; the others take its parity, so every
+  // width change is even and both edges shape in pairs.
+  let startIdx = -1;
+  let startParity: 'even' | 'odd' | 'any' = 'any';
+  if (panel.rounding.parity === 'start' && panel.waypoints.length) {
+    const hs = keys.map((k) => values[`${k}.height`]);
+    startIdx = hs.indexOf(topDown ? Math.max(...hs) : Math.min(...hs));
+    const k = keys[startIdx];
+    const sh = values[`${k}.height`];
+    const pat = sectionAt(sh)?.sec.pattern ?? panel.pattern;
+    const sel = inRoundAt(sh) ? 0 : panel.selvedge.left + panel.selvedge.right;
+    const n = roundStitches((values[`${k}.left`] + values[`${k}.right`]) * spc, { multiple: pat.multiple, offset: pat.offset, selvedge: sel }).value;
+    startParity = n % 2 === 0 ? 'even' : 'odd';
+  }
   let wps = panel.waypoints.map((wp, i): ComputedWaypoint => {
     const k = keys[i];
     const heightCm = values[`${k}.height`];
@@ -464,7 +503,8 @@ function computePanelRaw(project: Project, panel: Panel, sizeId: Id): ComputedPa
     const selL = inRound ? 0 : panel.selvedge.left;
     const selR = inRound ? 0 : panel.selvedge.right;
     const pattern = sectionAt(heightCm)?.sec.pattern ?? panel.pattern;
-    const rules = { multiple: pattern.multiple, offset: pattern.offset, parity: panel.rounding.parity };
+    const parity = panel.rounding.parity === 'start' ? (i === startIdx ? 'any' : startParity) : panel.rounding.parity;
+    const rules = { multiple: pattern.multiple, offset: pattern.offset, parity };
     let stitchRounding: RoundingResult[];
     let leftPos: number;
     let rightPos: number;
@@ -1172,7 +1212,7 @@ function computeNeck(
 ): ComputedNeck | null {
   const nk = panel.neckline!;
   const ref: IssueRef = { kind: 'neckline' };
-  const scope = { ...buildScope(project, sizeId), ...resolvePanelDims(project, panel, sizeId).values };
+  const scope = { ...buildScope(project, sizeId), ...panelExtras(project, panel, sizeId), ...resolvePanelDims(project, panel, sizeId).values };
   const defs = {
     'neck.width': sizeId in nk.width.overrides ? String(nk.width.overrides[sizeId]) : nk.width.expr,
     'neck.depth': sizeId in nk.depth.overrides ? String(nk.depth.overrides[sizeId]) : nk.depth.expr,

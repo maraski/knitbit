@@ -33,6 +33,20 @@ export function edgePaths(c: ComputedPanel, edge: EdgeKey): Point[][] {
     }
     return [[{ x: c.leftEdge[r], y: r }, { x: c.rightEdge[r], y: r }]];
   }
+  if (edge.kind === 'held') {
+    // The yoke's last row, by zone: the body is the two fronts and the back.
+    if (!c.yoke || !c.yoke.rows.length) return [];
+    const row = c.yoke.rows[c.yoke.rows.length - 1];
+    const z = row.zones;
+    let x = -row.total / 2;
+    const spans: Record<string, [number, number]> = {};
+    for (const k of ['leftFront', 'leftSleeve', 'back', 'rightSleeve', 'rightFront'] as const) {
+      spans[k] = [x, x + z[k]];
+      x += z[k];
+    }
+    const seg = (k: string) => [{ x: spans[k][0], y: top }, { x: spans[k][1], y: top }];
+    return edge.part === 'body' ? [seg('leftFront'), seg('back'), seg('rightFront')] : [seg(edge.part)];
+  }
   if (edge.kind === 'front') {
     if (!c.half) return [];
     // From the garment's lower edge up to the neck (the front edge's rows).

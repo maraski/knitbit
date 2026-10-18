@@ -507,3 +507,40 @@ export function yokePanel(shape: NecklineShape = 'round'): Panel {
   p.notes = 'Contiguous method by Susie Myers (SusieM on Ravelry): worked top-down in one piece from the back neck.';
   return p;
 }
+
+// ---------- names for the panels that continue from the yoke ----------
+
+/** `yoke.*` names: each held part plus its share of the underarm cast-on, as widths (cm), and the yoke depth. */
+export const YOKE_NAMES = ['yoke.back_w', 'yoke.front_w', 'yoke.sleeve_w', 'yoke.underarm_co', 'yoke.depth'] as const;
+
+/**
+ * Values of the `yoke.*` names in one size, from the project's contiguous yoke: the back and front at the split with
+ * half the underarm cast-on at each side, the sleeve with the whole cast-on, and the yoke's depth (rows from the neck).
+ * A cardigan front is described as the whole front (both halves), as cardigan fronts are, so that each half rounds to
+ * exactly the yoke's front plus its cast-on.
+ */
+export function yokeNames(project: Project, sizeId: Id): { values: Record<string, number> } | { error: string } {
+  const panel = project.panels.find((p) => p.yoke);
+  if (!panel) return { error: 'there is no contiguous yoke panel.' };
+  const y = generateYoke(project, panel.yoke!, sizeId);
+  if (!y.ok || !y.rows.length) return { error: `the yoke can't be computed in this size (${y.issues.find((i) => i.severity === 'error')?.message ?? 'no rows'}).` };
+  const spc = y.stitchesPerCm;
+  const last = y.rows[y.rows.length - 1].zones;
+  const N = y.underarmCo;
+  const backHalf = Math.floor(N / 2);
+  const frontHalf = N - backHalf;
+  const cardigan = project.garment.opening === 'cardigan';
+  const closing = cardigan ? buildScope(project, sizeId).closing_r ?? 0 : 0;
+  const front = cardigan
+    ? 2 * (last.leftFront + frontHalf - 1) / spc + closing // the edge stitch is the front-edge selvedge
+    : (last.leftFront + last.rightFront + 2 * frontHalf) / spc;
+  return {
+    values: {
+      'yoke.back_w': (last.back + 2 * backHalf) / spc,
+      'yoke.front_w': front,
+      'yoke.sleeve_w': (last.leftSleeve + N) / spc,
+      'yoke.underarm_co': N / spc,
+      'yoke.depth': y.rows.length / y.rowsPerCm,
+    },
+  };
+}

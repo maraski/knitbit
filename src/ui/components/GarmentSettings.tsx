@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { CONSTRUCTIONS, CONTIGUOUS_CREDIT, OPENINGS, parseTags, setConstruction, setOpening } from '../../engine/garment';
 import type { Construction, FrontOpening, Project } from '../../engine/model';
+import { generateBodyAndSleeves, missingYokePanels } from '../../engine/contiguousGarment';
 
 interface Props {
   project: Project;
@@ -45,7 +46,7 @@ export function GarmentSettings({ project, update }: Props) {
           {changes.map((n, i) => <li key={i}>{n}</li>)}
         </ul>
       )}
-      {g.construction !== 'panels' && <p className="hint warn">Recorded for now: the contiguous generator is not built yet.</p>}
+      {g.construction === 'contiguous' && <ContiguousPanels project={project} update={update} />}
       <TagsField project={project} update={update} />
       <label className="check">
         <input type="checkbox" checked={project.settings.exportCredit !== false} onChange={(e) => update((p) => ({ ...p, settings: { ...p.settings, exportCredit: e.target.checked } }))} />
@@ -53,6 +54,22 @@ export function GarmentSettings({ project, update }: Props) {
       </label>
       {g.construction === 'contiguous' && <p className="hint credit">{CONTIGUOUS_CREDIT}</p>}
     </>
+  );
+}
+
+/** Contiguous construction: make the yoke, body and sleeves when asked (never automatically). */
+function ContiguousPanels({ project, update }: Props) {
+  const hasYoke = project.panels.some((p) => p.yoke);
+  const missing = missingYokePanels(project);
+  if (hasYoke && !missing.length) return <p className="hint">The yoke, body and sleeves are in the panel list; the body and sleeves follow the yoke in every size.</p>;
+  const what = [...(hasYoke ? [] : ['yoke']), ...missing.map((m) => ({ back: 'back', front: 'front', leftSleeve: 'left sleeve', rightSleeve: 'right sleeve' })[m])];
+  return (
+    <div className="strips-missing">
+      <span className="hint">
+        Not made yet: {what.join(', ')}.{project.panels.some((p) => !p.yoke && !p.fromYoke && (p.template === 'back' || p.template === 'front' || (p.template ?? '').startsWith('sleeve'))) ? ' Your other body and sleeve panels are kept; delete them if you don’t need them.' : ''}
+      </span>{' '}
+      <button onClick={() => update((p) => generateBodyAndSleeves(p))}>Add {hasYoke ? 'body and sleeves' : 'yoke, body and sleeves'}</button>
+    </div>
   );
 }
 

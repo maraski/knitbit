@@ -335,7 +335,8 @@ export interface Panel {
   joinAt?: Id | null;
   selvedge: { left: number; right: number }; // 0–2 each, flat parts only
   shapingInset: number; // stitches between the edge and the shaping (default 2)
-  rounding: { parity: Parity; rowParity: Parity };
+  /** Stitch-count parity; 'start' = the same parity as the waypoint the panel starts from (every change is even). */
+  rounding: { parity: Parity | 'start'; rowParity: Parity };
   pattern: StitchPattern; // main stitch pattern
   sections: PatternSection[];
   waypoints: Waypoint[]; // ordered by height
@@ -347,6 +348,8 @@ export interface Panel {
   edge?: EdgeTreatmentId;
   /** A cardigan band strip: which band it is. */
   band?: BandRole;
+  /** Made from a contiguous yoke's held stitches (body and sleeves continue from the split). */
+  fromYoke?: 'back' | 'front' | 'leftSleeve' | 'rightSleeve';
   /** A contiguous yoke: worked from these phases row by row, not from waypoints. */
   yoke?: YokeSpec | null;
   /** Cardigan front: this panel is one half of the front it describes. */
@@ -425,7 +428,8 @@ export type EdgeKey =
   | { kind: 'bottom' } // the garment's lower edge
   | { kind: 'top' } // the garment's upper edge outside any neckline
   | { kind: 'neck' } // the whole neckline (both slopes and the centre)
-  | { kind: 'front' }; // a cardigan front's straight front edge, from the lower edge up to the neck
+  | { kind: 'front' } // a cardigan front's straight front edge, from the lower edge up to the neck
+  | { kind: 'held'; part: 'leftSleeve' | 'body' | 'rightSleeve' }; // a contiguous yoke's stitches held at the split
 
 export interface EdgeRef {
   panelId: Id;

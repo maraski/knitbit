@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { backNeckPositions, defaultYoke, type YokeParam } from '../../engine/contiguous';
+import { generateBodyAndSleeves, missingYokePanels } from '../../engine/contiguousGarment';
 import { FRONT_NECKS } from '../../engine/templates';
 import type { DimExpr, NecklineShape, YokeSpec } from '../../engine/model';
 import { computePanel } from '../../engine/panel';
@@ -176,6 +177,22 @@ export function YokeProps({ ctx }: { ctx: PropsContext }) {
           {y.held.leftSleeve + y.underarmCo} sts ({len(y.derived.sleeveCm, ctx.units)}).
         </p>
       )}
+
+      <h4>Body and sleeves</h4>
+      {(() => {
+        const missing = missingYokePanels(project);
+        const made = project.panels.filter((p) => p.fromYoke);
+        return (
+          <>
+            {made.length > 0 && <p className="hint">Continuing from the held stitches: {made.map((p) => p.name).join(', ')}. Their underarm widths are yoke.back_w, yoke.front_w and yoke.sleeve_w.</p>}
+            {missing.length > 0 && (
+              <button onClick={() => update((p) => generateBodyAndSleeves(p))}>
+                Add {missing.map((m) => ({ back: 'back', front: 'front', leftSleeve: 'left sleeve', rightSleeve: 'right sleeve' })[m]).join(', ')}
+              </button>
+            )}
+          </>
+        );
+      })()}
 
       <h4>All sizes</h4>
       <AllSizes ctx={ctx} />

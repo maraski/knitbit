@@ -189,6 +189,7 @@ function PanelProps({ ctx }: { ctx: PropsContext }) {
             <option value="any">Any</option>
             <option value="even">Even</option>
             <option value="odd">Odd</option>
+            <option value="start">Same as the first row</option>
           </select>
         </div>
         <div className="field">

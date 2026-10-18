@@ -150,7 +150,7 @@ const panel = obj({
   joinAt: optional(nullable(str)),
   selvedge: obj({ left: oneOf(0, 1, 2), right: oneOf(0, 1, 2) }),
   shapingInset: num,
-  rounding: obj({ parity, rowParity: parity }),
+  rounding: obj({ parity: oneOf('any', 'even', 'odd', 'start'), rowParity: parity }),
   pattern: stitchPattern,
   sections: arr(obj({ id: str, name: str, fromHeight: dimExpr, toHeight: dimExpr, pattern: stitchPattern, edge: optional(edgeId) })),
   waypoints: arr(obj({ id: str, name: str, height: dimExpr, symmetric: bool, width: dimExpr, left: dimExpr, right: dimExpr })),
@@ -206,6 +206,7 @@ const panel = obj({
   linkedTo: optional(nullable(str)),
   edge: optional(edgeId),
   band: optional(oneOf('button', 'buttonhole', 'continuous')),
+  fromYoke: optional(oneOf('back', 'front', 'leftSleeve', 'rightSleeve')),
   yoke: optional(
     nullable(
       obj({
@@ -246,7 +247,7 @@ const panel = obj({
 
 const edgeRef = obj({
   panelId: str,
-  edge: tagged('kind', { side: { side: oneOf('left', 'right'), from: str, to: str }, bottom: {}, top: {}, neck: {}, front: {} }),
+  edge: tagged('kind', { side: { side: oneOf('left', 'right'), from: str, to: str }, bottom: {}, top: {}, neck: {}, front: {}, held: { part: oneOf('leftSleeve', 'body', 'rightSleeve') } }),
 });
 
 const project = obj({

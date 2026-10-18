@@ -3,7 +3,7 @@ import { CascadePicker } from './components/CascadePicker';
 import { sizeText } from './components/EstMark';
 import type { Id } from '../engine/model';
 import { buildScope } from '../engine/measurements';
-import { computePanel, resolvePanelDims, type ComputedPanel } from '../engine/panel';
+import { computePanel, panelExtras, resolvePanelDims, type ComputedPanel } from '../engine/panel';
 import type { AlignRef } from '../engine/layout';
 import { LayoutView } from './components/LayoutView';
 import { SizeModeBar, type SizeMode } from './components/SizeModeBar';
@@ -93,7 +93,7 @@ export function App() {
   const fitOutlines = useMemo(() => allSizes.filter((c) => c.ok).map((c) => c.outline), [allSizes]);
   const scope = useMemo(() => {
     if (!panel || !size) return {};
-    return { ...buildScope(project, size.id), ...resolvePanelDims(project, panel, size.id).values };
+    return { ...buildScope(project, size.id), ...panelExtras(project, panel, size.id), ...resolvePanelDims(project, panel, size.id).values };
   }, [project, panel, size]);
 
   const markers = useMemo(() => (panel && size ? markerActions(update, panel.id, size.id) : undefined), [update, panel?.id, size?.id]);
