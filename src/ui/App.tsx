@@ -24,6 +24,7 @@ import { YokeTopView, type YokeButtons } from './components/YokeTopView';
 import { len } from './format';
 import { Sidebar } from './components/Sidebar';
 import { Toolbar } from './components/Toolbar';
+import { useCloud } from './cloud/useCloud';
 import { downloadText, pickTextFile, safeFilename } from './fileio';
 import { markerActions } from './markerActions';
 import { frontEdgeRows, panelJoins, type PanelCache } from '../engine/joins';
@@ -47,6 +48,7 @@ function readView(): { sizeId?: Id; panelId?: Id; center?: CenterView; mode?: Si
 export function App() {
   const store = useProjectStore();
   const { project, update } = store;
+  const cloud = useCloud(project, store.replace, store.setNotice);
   const [view] = useState(readView);
   const [sizeId, setSizeId] = useState<Id>(view.sizeId ?? project.baseSizeId);
   const [panelId, setPanelId] = useState<Id | null>(view.panelId ?? project.panels[0]?.id ?? null);
@@ -261,6 +263,7 @@ export function App() {
         onNew={newProject}
         onOpen={open}
         onSave={save}
+        cloud={cloud}
       />
       {store.notice && (
         <NoticeBar

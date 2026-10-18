@@ -37,6 +37,24 @@ npm test           # unit tests (Vitest)
 npm run typecheck
 ```
 
+## Cloud save setup
+
+Optional. Without it the app works as before (auto-save in this browser, Save / Open… files) and shows no sign-in.
+With it, a **Sign in with Google** button appears and the open project is saved online about 2 s after each edit
+and when the tab is hidden. See `docs/cloud-save-plan.md`.
+
+1. Create a Firebase project. Enable **Authentication → Sign-in method → Google** and **Firestore** (production mode).
+2. Under Authentication → Settings → Authorised domains, add the Vercel domain (`localhost` is there by default).
+3. Add a web app (Project settings → Your apps) and copy its config into Vercel → Project → Settings → Environment
+   Variables as `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID` and
+   `VITE_FIREBASE_APP_ID`, then redeploy. For local dev, copy `.env.example` to `.env.local` (git-ignored) and fill
+   it in. These values are public by design; the security rules protect the data.
+4. Deploy `firestore.rules`: paste it into Firestore → Rules in the console, or run
+   `firebase deploy --only firestore:rules` (uses `firebase.json`).
+
+Firebase is loaded only after you click Sign in, or at startup when you were signed in last time
+(`knitbit.cloud.signedIn` in localStorage), so it stays out of the main bundle.
+
 ## Project layout
 
 - `src/engine/`: pure TypeScript calculation engine (no React). Everything is stored in centimetres.
@@ -73,7 +91,7 @@ npm run typecheck
   - `contiguous.ts`: the contiguous yoke generator (phases A–F, neck, row-by-row zones and increases) and `yoke.*` names.
   - `yokePanel.ts`, `yokeTop.ts`: the yoke as a panel and chart; its top-view geometry.
   - `contiguousGarment.ts`: body and sleeves from the yoke's held stitches. `contiguousChecks.ts`: their checks.
-- `src/ui/`: React views.
+- `src/ui/`: React views. `src/ui/cloud/`: online saving (`config.ts` env check, `firebase.ts` loaded lazily, `saver.ts` debounce and status, `useCloud.ts` hook).
 - `samples/`: the sample sizing table (`sizing_table_ysolda_cm.csv`, and `.json` with the same data).
 - `src/engine/fixtures/`: test data: the old sample table, and schema-1 and schema-2 project files.
 

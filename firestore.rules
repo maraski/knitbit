@@ -1,0 +1,33 @@
+rules_version = '2';
+
+// Knitbit online projects (docs/cloud-save-plan.md). Each signed-in user can only see and change their own projects.
+// Document projects/{id}: owner, name, data (serialized project, a string), schema, rev, updatedAt, createdAt, deleted?.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /projects/{projectId} {
+      function signedIn() {
+        return request.auth != null;
+      }
+      function ownsStored() {
+        return signedIn() && resource.data.owner == request.auth.uid;
+      }
+      function validNew() {
+        let d = request.resource.data;
+        return d.owner == request.auth.uid
+          && d.name is string && d.name.size() <= 500
+          && d.data is string && d.data.size() < 900000
+          && d.schema is number
+          && d.rev is string;
+      }
+
+      // A missing document may be read (the app checks whether a project is online yet); it reveals nothing.
+      allow get: if signedIn() && (resource == null || resource.data.owner == request.auth.uid);
+      // Listing must be filtered by owner == your uid.
+      allow list: if ownsStored();
+      allow create: if signedIn() && validNew();
+      // The owner can't be changed: validNew() requires it to stay your uid.
+      allow update: if ownsStored() && validNew();
+      allow delete: if ownsStored();
+    }
+  }
+}
