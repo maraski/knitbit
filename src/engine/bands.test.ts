@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { bandValues, buttonPositions, defaultCardigan, setButtonPosition } from './bands';
 import { bandChecks, buttonPlan } from './buttons';
 import { buildChart } from './chart';
-import { applyEdgeTreatments, defaultEdges } from './edgeTreatments';
+import { addStrips, applyEdgeTreatments, defaultEdges, missingStrips, staleStrips } from './edgeTreatments';
 import { setOpening } from './garment';
 import { joinReport, measureEdge } from './joins';
 import { buildScope } from './measurements';
@@ -14,7 +14,7 @@ import { fixtureProject, sizeId } from './testFixtures';
 function cardigan(opts: Partial<CardiganOptions> = {}, attach: BandAttach = 'pickup', direction: 'bottom-up' | 'top-down' = 'bottom-up'): Project {
   const base = { ...fixtureProject(), panels: [bodice('back', { direction }), bodice('front', { direction })] };
   const c = { ...defaultCardigan(), attach: { button: attach, buttonhole: attach, continuous: attach === 'integrated' ? 'pickup' : attach }, ...opts } as CardiganOptions;
-  return applyEdgeTreatments({ ...setOpening(base, 'cardigan'), edges: defaultEdges(), cardigan: c });
+  return addStrips({ ...setOpening(base, 'cardigan'), edges: defaultEdges(), cardigan: c });
 }
 
 const front = (p: Project, side: 'left' | 'right') => p.panels.find((x) => x.half?.side === side)!;
@@ -103,14 +103,37 @@ describe('band strips', () => {
     expect(names).toEqual(['Right front:front', 'Right front:neck', 'Back:neck', 'Left front:neck', 'Left front:front']);
   });
 
-  it('removes the strips for a pullover and keeps strip ids when settings change', () => {
+  it('never adds or removes panels when settings change; strips you made follow them', () => {
+    const base = { ...fixtureProject(), panels: [bodice('back'), bodice('front')] };
+    const p = applyEdgeTreatments({ ...setOpening(base, 'cardigan'), edges: defaultEdges(), cardigan: defaultCardigan() });
+    expect(p.panels.map((x) => x.name)).toEqual(['Back', 'Right front', 'Left front']);
+    expect(missingStrips(p)).toEqual(['Neckband', 'Button band', 'Buttonhole band']);
+    const made = addStrips(p);
+    expect(made.panels.map((x) => x.name)).toEqual(['Back', 'Right front', 'Left front', 'Neckband', 'Button band', 'Buttonhole band']);
+    expect(missingStrips(made)).toEqual([]);
+    // A setting change updates the strip in place (same id), never adds one.
+    const id = made.panels.find((x) => x.band === 'buttonhole')!.id;
+    const sideways = applyEdgeTreatments({ ...made, cardigan: { ...made.cardigan!, attach: { ...made.cardigan!.attach, buttonhole: 'sideways' } } });
+    expect(sideways.panels.find((x) => x.band === 'buttonhole')!.id).toBe(id);
+    expect(sideways.panels.find((x) => x.band === 'buttonhole')!.waypoints[1].height.expr).toBe('edge_len');
+    const continuous = applyEdgeTreatments({ ...made, cardigan: { ...made.cardigan!, bands: 'continuous' } });
+    expect(continuous.panels.length).toBe(made.panels.length);
+    expect(missingStrips(continuous)).toEqual(['Front band']);
+    expect(staleStrips(continuous).map((x) => x.name)).toEqual(['Button band', 'Buttonhole band']);
+  });
+
+  it('keeps strips when the neckband is switched off or the garment becomes a pullover, and says so', () => {
     const p = cardigan();
-    const id = p.panels.find((x) => x.band === 'buttonhole')!.id;
-    const again = applyEdgeTreatments({ ...p, cardigan: { ...p.cardigan!, buttonholeSide: 'right' } });
-    expect(again.panels.find((x) => x.band === 'buttonhole')!.id).toBe(id);
-    const closed = setOpening(p, 'closed');
-    expect(closed.panels.some((x) => x.band)).toBe(false);
-    expect(closed.joins!.some((j) => j.edge === 'frontBands')).toBe(false);
+    const off = applyEdgeTreatments({ ...p, edges: { ...p.edges!, neckband: { ...p.edges!.neckband, enabled: false } } });
+    expect(off.panels.length).toBe(p.panels.length);
+    expect(off.joins!.some((j) => j.name === 'Neckband picked up')).toBe(true);
+    const closed = setOpening(off, 'closed');
+    expect(closed.panels.filter((x) => x.band).length).toBe(2);
+    const msgs = bandChecks(closed, M(closed), new Map()).map((c) => c.issue.message);
+    expect(msgs).toEqual(expect.arrayContaining([
+      "Neckband no longer matches the edge settings (Project → Edges); delete it if you don't need it.",
+      "Button band no longer matches the edge settings (Project → Edges); delete it if you don't need it.",
+    ]));
   });
 });
 

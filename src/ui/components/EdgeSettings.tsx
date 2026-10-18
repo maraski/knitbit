@@ -1,4 +1,4 @@
-import { applyEdgeTreatments, EDGE_STITCHES, EDGE_TREATMENTS, edgePattern, edgesOf } from '../../engine/edgeTreatments';
+import { addStrips, applyEdgeTreatments, EDGE_STITCHES, EDGE_TREATMENTS, edgePattern, edgesOf, missingStrips } from '../../engine/edgeTreatments';
 import { buildScope } from '../../engine/measurements';
 import type { EdgeStitch, EdgeTreatment, EdgeTreatmentId, Id, Project } from '../../engine/model';
 import { ExprField } from './ExprField';
@@ -17,12 +17,19 @@ export function EdgeSettings({ project, sizeId, update }: Props) {
   const sizeName = project.sizes.find((s) => s.id === sizeId)?.name ?? '';
   const set = (id: EdgeTreatmentId, t: EdgeTreatment, key: string | null = null) =>
     update((p) => applyEdgeTreatments({ ...p, edges: { ...edgesOf(p), [id]: t } }), key);
+  const missing = missingStrips({ ...project, edges: edges });
   const shown = EDGE_TREATMENTS.filter((d) => d.id !== 'frontBands' || project.garment.opening === 'cardigan');
 
   return (
     <>
       <h4>Edges</h4>
-      {!project.edges && <p className="hint">Not applied yet: changing any of these applies them all to the panels.</p>}
+      {!project.edges && <p className="hint">Not applied yet: changing any of these applies them to the panels you have (it never adds or removes panels).</p>}
+      {missing.length > 0 && (
+        <div className="strips-missing">
+          <span className="hint">Not made yet: {missing.join(', ')}.</span>{' '}
+          <button onClick={() => update((p) => addStrips({ ...p, edges: edgesOf(p) }))}>Add {missing.length === 1 ? 'strip' : 'strips'}</button>
+        </div>
+      )}
       {shown.map((d) => {
         const t = edges[d.id];
         const p = edgePattern(t);

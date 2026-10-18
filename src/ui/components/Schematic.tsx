@@ -104,6 +104,7 @@ export function Schematic({ computed: c, direction, units, selection, onSelect, 
   const drag = useRef<{ x: number; y: number; ox: number; oy: number; moved: boolean } | null>(null);
   const suppressClick = useRef(false);
   const markerDrag = useRef<MarkerDrag | null>(null);
+  const buttonDrag = useRef<{ index: number; key: string; last: number } | null>(null);
   const [dragRow, setDragRow] = useState<number | null>(null);
 
   const spc = c.stitchesPerCm;
@@ -254,7 +255,6 @@ export function Schematic({ computed: c, direction, units, selection, onSelect, 
     return edge === 'left' ? c.leftEdge[row] : c.rightEdge[row];
   };
 
-  const buttonDrag = useRef<{ index: number; key: string; last: number } | null>(null);
   /** Garment point under the pointer: cm up from the lower edge and cm from that row's centre. */
   const garmentAt = (clientX: number, clientY: number) => {
     const r = wrapRef.current!.getBoundingClientRect();
@@ -553,7 +553,7 @@ export function Schematic({ computed: c, direction, units, selection, onSelect, 
           const a = S(c.leftEdge[w.row], w.row);
           const b = S(c.rightEdge[w.row], w.row);
           const sel = isSel({ kind: 'waypoint', id: w.id });
-          const showWidth = i > 0 && !(w === topWp && c.neck) && !inNeck(w.row);
+          const showWidth = i > 0 && !(w === topWp && c.neck) && !inNeck(w.row) && !c.yoke; // a yoke labels its own widths
           const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
           return (
             <g key={w.id} className={`wp${sel ? ' selected' : ''}`} onClick={click({ kind: 'waypoint', id: w.id })}>
@@ -583,8 +583,8 @@ export function Schematic({ computed: c, direction, units, selection, onSelect, 
           );
         })}
 
-        {/* hem width below the panel */}
-        {vertical && (() => {
+        {/* hem width below the panel (a yoke labels its held edges instead) */}
+        {vertical && !c.yoke && (() => {
           const a = S(c.leftEdge[hem.row], hem.row);
           const b = S(c.rightEdge[hem.row], hem.row);
           const dy = 22;
@@ -599,8 +599,8 @@ export function Schematic({ computed: c, direction, units, selection, onSelect, 
           );
         })()}
 
-        {/* top-down: how the first row is made */}
-        {vertical && c.topDown && (() => {
+        {/* top-down: how the first row is made (a yoke labels its cast-on) */}
+        {vertical && c.topDown && !c.yoke && (() => {
           const a = S(minX, 0);
           const n = c.counts[0];
           const pickup = project?.panels.find((x) => x.id === c.panelId)?.startFrom === 'pickup';

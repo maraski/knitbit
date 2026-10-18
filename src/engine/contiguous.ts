@@ -12,7 +12,7 @@ import { evaluate, scopeFrom } from './expr';
 import { rowsPerCm, stitchesPerCm } from './gauge';
 import { buildScope } from './measurements';
 import type { DimExpr, Id, NecklineShape, Project, YokeSpec } from './model';
-import { dim } from './model';
+import { dim, newPanel, type Panel } from './model';
 import { FRONT_NECKS } from './templates';
 
 export type Zone = 'leftFront' | 'leftSleeve' | 'back' | 'rightSleeve' | 'rightFront';
@@ -496,4 +496,14 @@ export function backNeckPositions(backSts: number, n: number, rowIndex: number):
 
 export function zoneName(z: Zone): string {
   return { leftFront: 'left front', leftSleeve: 'left sleeve', back: 'back', rightSleeve: 'right sleeve', rightFront: 'right front' }[z];
+}
+
+/** A new contiguous yoke panel (top-down, flat, generated from its phases). */
+export function yokePanel(shape: NecklineShape = 'round'): Panel {
+  const p = newPanel('Yoke');
+  p.template = 'yoke';
+  p.direction = 'top-down';
+  p.yoke = defaultYoke(shape);
+  p.notes = 'Contiguous method by Susie Myers (SusieM on Ravelry): worked top-down in one piece from the back neck.';
+  return p;
 }

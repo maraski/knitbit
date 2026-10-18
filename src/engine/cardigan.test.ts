@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { linkFronts, syncFrontPairs, unlinkFronts } from './cardigan';
 import { buildChart } from './chart';
-import { applyEdgeTreatments, defaultEdges } from './edgeTreatments';
+import { addStrips, applyEdgeTreatments, defaultEdges } from './edgeTreatments';
 import { setOpening } from './garment';
 import { measureEdge } from './joins';
 import type { Panel, Project } from './model';
@@ -186,7 +186,7 @@ describe('linked fronts', () => {
 describe('edge treatments', () => {
   it('adds hem sections to body panels, a cuff to sleeves, and a neckband strip with its pick-up', () => {
     const p0 = withPanels([bodice('back'), bodice('front'), sleeve('set-in')]);
-    const p = applyEdgeTreatments({ ...p0, edges: { ...defaultEdges(), hem: { ...defaultEdges().hem, enabled: true } } });
+    const p = addStrips({ ...p0, edges: { ...defaultEdges(), hem: { ...defaultEdges().hem, enabled: true } } });
     expect(p.panels[0].sections.map((s) => [s.name, s.edge, s.pattern.multiple])).toEqual([['Hem rib', 'hem', 4]]);
     expect(p.panels[2].sections.map((s) => [s.name, s.edge])).toEqual([['Cuff rib', 'cuff']]);
     const strip = p.panels.find((x) => x.edge === 'neckband')!;

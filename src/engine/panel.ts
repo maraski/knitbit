@@ -19,6 +19,8 @@ import { roundNearest, roundRows, roundStitches, type RoundingResult } from './r
 import { bustValues, computeBust, type ComputedBust } from './bust';
 import { sideEdgeLength } from './edges';
 import { measureEdge } from './joins';
+import { computeYokePanel } from './yokePanel';
+import type { YokeResult } from './contiguous';
 import { defaultSymbol } from './symbols';
 import { bandOnFront } from './bands';
 import { edgePattern } from './edgeTreatments';
@@ -179,6 +181,8 @@ export interface ComputedPanel {
     bandSts: number;
     band: { name: string; multiple: number; offset: number } | null;
   };
+  /** A contiguous yoke: the generator's result (rows, zones, phases, held edges). */
+  yoke?: YokeResult;
 }
 
 /** The centre a row's centre-relative positions are measured from (the whole front's centre for a cardigan front). */
@@ -370,6 +374,7 @@ function emptyPanel(panel: Panel, sizeId: Id, spc: number, rpc: number, issues: 
 }
 
 export function computePanel(project: Project, panel: Panel, sizeId: Id): ComputedPanel {
+  if (panel.yoke) return computeYokePanel(project, panel, sizeId);
   const raw = computePanelRaw(project, panel, sizeId);
   const c = panel.half ? cropHalf(raw, panel, panel.half, halfFrame(project, panel.half, raw.stitchesPerCm, buildScope(project, sizeId))) : raw;
   // Explain unknown names that follow a fit choice (e.g. hem_circ when the table has no high_hip).

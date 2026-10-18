@@ -4,7 +4,7 @@
 
 import { defaultAutoMethod, defaultBust, dim, newId, newPanel, newSegment, newWaypoint, type Join, type KnitDirection, type NecklineShape, type Panel } from './model';
 
-export type TemplateId = 'top' | 'back' | 'front' | 'sleeve' | 'rectangle' | 'neckband';
+export type TemplateId = 'top' | 'back' | 'front' | 'sleeve' | 'rectangle' | 'neckband' | 'yoke';
 export type SleeveType = 'set-in' | 'drop' | 'straight';
 
 export interface TemplateOptions {
@@ -38,6 +38,12 @@ export const TEMPLATES: { id: TemplateId; label: string; description: string; op
   { id: 'sleeve', label: 'Sleeve', description: 'Set-in cap, drop shoulder or straight, with a ribbed cuff.', options: ['direction', 'sleeve'] },
   { id: 'rectangle', label: 'Plain rectangle', description: 'Two waypoints, no shaping.', options: ['direction'] },
   { id: 'neckband', label: 'Neckband strip', description: 'A ribbed strip; its length is a starting estimate.', options: [] },
+  {
+    id: 'yoke',
+    label: 'Contiguous yoke',
+    description: 'A top-down yoke worked in one piece from the back neck, with set-in-look sleeve caps (the contiguous method by Susie Myers, SusieM on Ravelry). Its phases are set in the panel properties.',
+    options: ['neckline'],
+  },
 ];
 
 /** Measurements each template's expressions rely on that may be missing (seeded estimates). */
@@ -48,6 +54,7 @@ export const TEMPLATE_MEASUREMENTS: Record<TemplateId, string[]> = {
   sleeve: ['cap_height', 'cap_ease'],
   rectangle: [],
   neckband: ['back_neck_width', 'front_neck_drop'],
+  yoke: ['back_neck_width', 'back_shoulder_width', 'shoulder_drop', 'back_neck_drop', 'front_neck_drop', 'underarm_co'],
 };
 
 // ---------- bodices ----------

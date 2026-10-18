@@ -4,6 +4,7 @@ import { FitSettings } from './FitSettings';
 import { GarmentSettings } from './GarmentSettings';
 import { EdgeSettings } from './EdgeSettings';
 import { conformToGarment } from '../../engine/garment';
+import { yokePanel } from '../../engine/contiguous';
 import { convertGauge, type GaugeBasis } from '../../engine/gauge';
 import { newId, type Id, type Project } from '../../engine/model';
 import { ensureEstimates } from '../../engine/seed';
@@ -62,7 +63,7 @@ function PanelList({ project, panelId, update, selectPanel }: Props) {
   const shouldersFirst = tpl === 'top' || (opts.direction === 'top-down' && opts.construction === 'shoulders-first');
 
   const add = () => {
-    const set = tpl === 'top' ? topDownTop(opts) : { panels: [fromTemplate(tpl, opts)], joins: [] };
+    const set = tpl === 'top' ? topDownTop(opts) : tpl === 'yoke' ? { panels: [yokePanel(opts.neckline)], joins: [] } : { panels: [fromTemplate(tpl, opts)], joins: [] };
     const names = new Set(project.panels.map((p) => p.name));
     for (const panel of set.panels) {
       if (names.has(panel.name)) for (let i = 2; ; i++) if (!names.has(`${panel.name} ${i}`)) { panel.name = `${panel.name} ${i}`; break; }

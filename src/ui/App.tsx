@@ -19,6 +19,8 @@ import { MeasurementProps, SizesProps } from './components/MeasurementProps';
 import { MeasurementsView } from './components/MeasurementsView';
 import { Properties, type PropsContext } from './components/Properties';
 import { Schematic, type SchematicBands } from './components/Schematic';
+import { ErrorBoundary } from './components/ErrorBoundary';
+import { YokeTopView } from './components/YokeTopView';
 import { len } from './format';
 import { Sidebar } from './components/Sidebar';
 import { Toolbar } from './components/Toolbar';
@@ -257,6 +259,7 @@ export function App() {
           }}
         />
       )}
+      <ErrorBoundary onUndo={store.undo} resetKey={project}>
       <div className="main">
         <Sidebar
           project={project}
@@ -302,7 +305,7 @@ export function App() {
               <>
                 <strong>{panel.name}</strong>
                 <span className="muted">
-                  · size {size ? sizeText(size, project) : ''} · {panel.direction === 'top-down' ? 'row 1 at top' : 'row 1 at bottom'}
+                  · size {size ? sizeText(size, project) : ''} · {panel.yoke ? 'seen from above, row 1 at the neck' : panel.direction === 'top-down' ? 'row 1 at top' : 'row 1 at bottom'}
                   {panel.direction === 'side-to-side' ? ' · worked side to side (chart in knitting orientation)' : ''}
                 </span>
               </>
@@ -311,14 +314,14 @@ export function App() {
               <>
                 <strong>{panel.name}</strong>
                 <span className="muted">
-                  · size {size ? sizeText(size, project) : ''} · {panel.direction}
-                  {panel.direction === 'top-down' ? ' (row 1 at top)' : panel.direction === 'bottom-up' ? ' (row 1 at bottom)' : ''}
+                  · size {size ? sizeText(size, project) : ''} · {panel.yoke ? 'seen from above' : panel.direction}
+                  {panel.yoke ? '' : panel.direction === 'top-down' ? ' (row 1 at top)' : panel.direction === 'bottom-up' ? ' (row 1 at bottom)' : ''}
                   {panel.inTheRound ? ' · in the round' : panel.joinAt ? ' · round below ' + (panel.waypoints.find((w) => w.id === panel.joinAt)?.name ?? '?') : ''}
                 </span>
                 <span className="spacer" />
-                {sizeMode === 'single' && size && <CascadePicker project={project} currentSizeId={size.id} cascade={cascade ?? null} setCascade={setCascade} />}
-                {sizeMode === 'single' && <Legend />}
-                {sizeMode === 'single' && panel.direction !== 'side-to-side' && (
+                {sizeMode === 'single' && size && !panel.yoke && <CascadePicker project={project} currentSizeId={size.id} cascade={cascade ?? null} setCascade={setCascade} />}
+                {sizeMode === 'single' && !panel.yoke && <Legend />}
+                {sizeMode === 'single' && panel.direction !== 'side-to-side' && !panel.yoke && (
                   <button className={drawLine ? 'active' : ''} onClick={() => setDrawLine(!drawLine)} title="Draw a shaping line: click its two ends (Esc cancels)">
                     ✎ Line
                   </button>
@@ -342,6 +345,16 @@ export function App() {
                 setSelection(PANEL_SELECTION);
               }}
               onSelectJoin={(id) => setSelection({ kind: 'join', id })}
+            />
+          ) : (center === 'chart' || center === 'schematic') && panel?.yoke && computed ? (
+            <YokeTopView
+              project={project}
+              panel={panel}
+              computed={computed}
+              view={center === 'chart' ? 'chart' : 'schematic'}
+              mode={center === 'chart' && sizeMode === 'overlay' ? 'single' : sizeMode}
+              compare={(sizeMode === 'single' ? [size?.id ?? ''] : compare).map((sid) => computedFor(panel.id, sid))}
+              units={project.units}
             />
           ) : center === 'chart' && panel && computed ? (
             <ChartView
@@ -437,6 +450,7 @@ export function App() {
           )}
         </aside>
       </div>
+      </ErrorBoundary>
       {importing && (
         <ImportDialog
           project={project}

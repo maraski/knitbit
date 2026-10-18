@@ -352,9 +352,9 @@ table.events.editable select { font-size: 11.5px; max-width: 110px; padding: 1px
 .chart-svg .cell-plain { fill: url(#chart-grid); }
 .chart-svg .cell-held { fill: url(#chart-held); }
 .chart-svg .cell-border, .swatch-cell .cell-border { stroke: var(--grid); stroke-width: 0.6px; vector-effect: non-scaling-stroke; }
-.chart-svg .glyph, .swatch-cell .glyph { fill: none; stroke: var(--fg); stroke-width: 1.3px; vector-effect: non-scaling-stroke; stroke-linecap: round; stroke-linejoin: round; }
-.chart-svg .glyph-fill, .swatch-cell .glyph-fill { fill: var(--fg); }
-.chart-svg .glyph-text, .swatch-cell .glyph-text { fill: var(--fg); font-weight: 600; font-family: system-ui, sans-serif; }
+.chart-svg .glyph, .swatch-cell .glyph, .yoke-glyph .glyph { fill: none; stroke: var(--fg); stroke-width: 1.3px; vector-effect: non-scaling-stroke; stroke-linecap: round; stroke-linejoin: round; }
+.chart-svg .glyph-fill, .swatch-cell .glyph-fill, .yoke-glyph .glyph-fill { fill: var(--fg); }
+.chart-svg .glyph-text, .swatch-cell .glyph-text, .yoke-glyph .glyph-text { fill: var(--fg); font-weight: 600; font-family: system-ui, sans-serif; }
 .chart-svg .sym.editable { cursor: ns-resize; }
 .chart-svg .cell-selected { fill: none; stroke: var(--accent); stroke-width: 2.5; }
 .chart-svg .ten { stroke: var(--muted); stroke-width: 0.9; opacity: 0.55; pointer-events: none; }
@@ -430,3 +430,51 @@ table.events.editable select { font-size: 11.5px; max-width: 110px; padding: 1px
 .button-mark circle, .button-mark rect, rect.button-mark { fill: #fff; stroke: #333; stroke-width: 1.4; }
 .button-mark.button circle { fill: #333; }
 .button-mark.draggable { cursor: ns-resize; }
+.chart-svg .zone-tint { pointer-events: none; opacity: 0.16; }
+.chart-svg .zone-0, .chart-svg .zone-4 { fill: #3f8a5a; }
+.chart-svg .zone-1, .chart-svg .zone-3 { fill: #b0662a; }
+.chart-svg .zone-2 { fill: #2f6690; }
+.chart-svg .marker-line { stroke: #c0392b; stroke-width: 2; pointer-events: none; }
+.chart-svg .zone-counts { fill: var(--muted); font-size: 0.9em; }
+.chart-svg .phase-band rect { fill: var(--accent); opacity: 0.12; }
+.chart-svg .phase-band.phase-1 rect { opacity: 0.24; }
+.chart-svg .phase-band text { fill: var(--accent); font-size: 10px; }
+.marker-glyph { stroke: #c0392b !important; stroke-width: 3 !important; }
+.yoke-marker-line { fill: none; stroke: #c0392b; stroke-width: 1; stroke-opacity: 0.7; pointer-events: none; }
+.yoke-phase-line { stroke: var(--accent); stroke-dasharray: 3 3; stroke-width: 1; pointer-events: none; }
+.yoke-phase-label, .yoke-dim, .yoke-held { fill: var(--accent); font-size: 10.5px; pointer-events: none; }
+.yoke-held { fill: var(--ink, #333); }
+.yoke-seam { stroke: #c0392b; stroke-width: 2.5; stroke-opacity: 0.5; pointer-events: none; }
+.yoke-table { width: 100%; border-collapse: collapse; font-size: 11.5px; margin: 4px 0 8px; }
+.yoke-table th, .yoke-table td { text-align: left; padding: 2px 4px; border-bottom: 1px solid var(--line, #e4e0d8); white-space: nowrap; }
+.yoke-table tr.current td { font-weight: 600; }
+.table-scroll { overflow-x: auto; }
+.error-box { margin: 24px auto; max-width: 720px; padding: 16px 20px; border: 1px solid var(--warn, #8a6320); background: var(--warn-bg, #fbf3e0); border-radius: 6px; }
+.error-box pre { white-space: pre-wrap; font-size: 11px; background: #fff; padding: 8px; border-radius: 4px; max-height: 200px; overflow: auto; }
+.error-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.strips-missing { margin: 4px 0 8px; display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; }
+
+/* contiguous yoke, top view */
+.yoke-top { position: relative; overflow: hidden; cursor: grab; }
+.yoke-top .yz { stroke: none; opacity: 0.22; }
+.yoke-top .yz.chart { opacity: 0.14; }
+.yoke-top .yz-0, .yoke-top .yz-4 { fill: #3f8a5a; }
+.yoke-top .yz-1, .yoke-top .yz-3 { fill: #b0662a; }
+.yoke-top .yz-2 { fill: #2f6690; }
+.yoke-edge { fill: none; stroke: var(--ink, #333); stroke-width: 1.2; }
+.yoke-row-line { fill: none; stroke: var(--grid, #d9d4ca); stroke-width: 0.6; }
+.yoke-st-line { stroke: var(--grid, #d9d4ca); stroke-width: 0.5; }
+.yoke-cell { stroke: var(--grid, #d9d4ca); stroke-width: 0.5; }
+.yoke-marker-line.strong { stroke-width: 2; stroke-opacity: 0.9; }
+.yoke-row-num { fill: var(--muted); font-size: 9.5px; pointer-events: none; }
+.yoke-ov { fill: none; stroke-width: 1; opacity: 0.8; }
+.yoke-ov.current { stroke-width: 2.2; opacity: 1; }
+.yoke-ov.thin { stroke-width: 0.7; opacity: 0.6; }
+.yoke-ov-label { font-size: 10.5px; }
+.yoke-legend { position: absolute; right: 10px; bottom: 40px; display: flex; flex-direction: column; gap: 3px; background: rgba(255,255,255,0.9); padding: 6px 8px; border-radius: 6px; font-size: 11px; max-width: 240px; }
+.yoke-legend span { display: flex; gap: 5px; align-items: center; }
+.hover-readout { position: absolute; background: rgba(255,255,255,0.95); border: 1px solid var(--line, #e4e0d8); border-radius: 4px; padding: 3px 6px; font-size: 11px; pointer-events: none; max-width: 320px; }
+.yoke-grid { display: flex; flex-wrap: wrap; gap: 10px; overflow: auto; padding: 10px; align-content: flex-start; cursor: default; }
+.yoke-card { margin: 0; text-align: center; font-size: 11px; }
+.yoke-key { position: absolute; left: 10px; top: 10px; background: rgba(255,255,255,0.9); padding: 6px 8px; border-radius: 6px; font-size: 11px; line-height: 1.45; max-width: 260px; pointer-events: none; }
+.yoke-key .key-rings { color: var(--muted); margin-top: 3px; }

@@ -11,6 +11,7 @@ import { lineX } from './lines';
 import { rowCentre, type ComputedPanel, type ComputedSegment, type Edge, type ShapeEvent } from './panel';
 import { defaultSymbol, symbolInfo, type SymbolInfo } from './symbols';
 import { buttonholeCells, buttonPlan } from './buttons';
+import { buildYokeChart } from './yokePanel';
 
 /** '' = no stitch (outside the panel), 'k' = plain stitch, 'h' = held (live, not worked), else a symbol id. */
 export type Cell = string;
@@ -76,6 +77,12 @@ export interface Chart {
   /** Knit rows with a buttonhole, by row: which button (1 = top). */
   buttonholeRows: Record<number, number[]>;
   legend: SymbolInfo[];
+  /** Contiguous yoke: coloured zones per row (columns from–to), marker lines (a marker before these columns), per-zone counts and phases. */
+  zoneRuns?: Record<string, { from: number; to: number; zone: number }[]>;
+  markerCols?: Record<string, number[]>;
+  zoneCounts?: Record<string, number[]>;
+  zoneNames?: string[];
+  phases?: { label: string; fromRow: number; toRow: number }[];
 }
 
 /** Leaning stitches swap when mirrored across a marker. */
@@ -93,6 +100,7 @@ export function cellInfo(id: string, custom: CustomSymbol[] = []): SymbolInfo {
 }
 
 export function buildChart(project: Project, panel: Panel, c: ComputedPanel): Chart {
+  if (c.yoke) return buildYokeChart(project, panel, c);
   const T = c.totalRows;
   const inset = Math.max(0, panel.shapingInset);
   const darts = c.bust?.darts?.interior ?? new Array<number>(T + 1).fill(0);

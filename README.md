@@ -368,8 +368,12 @@ a stitch (1×1 rib = 2n, 2×2 rib = 4n + 2, garter, seed = 2n + 1, or a custom m
 | Neckband | (not available for necklines yet) | a *Neckband* strip, picked up from every neckline |
 | Front bands | integrated: extra stitches at each front edge | picked up, or knit sideways and sewn on (per band, see below) |
 
-Changing any setting applies them all; things made by a treatment are marked (`edge`) and replaced the next time, so
-nothing is duplicated. Sections you add by hand are left alone, except the templates' *Hem rib* / *Cuff rib*, which
+Changing any setting applies them to the panels you have; things made by a treatment are marked (`edge`) and
+replaced the next time, so nothing is duplicated. **Settings never add or remove panels.** Strips (the neckband,
+front band strips) are made only with **Add strips** in Project → Edges, which lists what the settings call for
+that doesn't exist yet. Once made, a strip follows the settings (same panel, updated in place). A strip the settings
+no longer call for (neckband switched off, a band that became integrated or continuous, a cardigan turned pullover)
+is kept, with a note in the Checks bar so you can delete it. Sections you add by hand are left alone, except the templates' *Hem rib* / *Cuff rib*, which
 the treatment takes over. New panels pick up the settings once you have changed them. Defaults: hem off, cuff 2×2
 rib 5 cm with the sleeve, neckband 1×1 rib 2.5 cm added later, front bands 1×1 rib 2.5 cm added later.
 
@@ -444,6 +448,24 @@ between the back length (body fit) and `armhole_depth` below the seam end (sleev
 × 30 that adds 1.3 cm (4XS) to 4 cm (M) to 9 cm (4X); allowing 0.6 / 0.67 / 0.75 rapid adds 3 / 2.3 / 1.7 cm in M and
 7.3 / 6.3 / 5.3 cm in 4X. Switch deepening off to split exactly at the back length (a sleeve that falls short is
 then a warning).
+
+**The yoke panel.** *Add panel → Contiguous yoke* makes a panel that holds the phases (`Panel.yoke`) instead of
+waypoints; its properties edit every phase (expressions with per-size values, numbers plugged in) and show the phase
+table for this size (rows, stitches before → after, increases per row) and every size side by side (cast-on, rows
+per phase, back length, underarm cast-on, held stitches). Removing a size clears its hand-placed back neck positions.
+
+- **Seen from above.** Both the Schematic and the Chart show the yoke from above: the neck in the middle, each row a
+  ring around it (spaced by the row height), each stitch an angle by its share of the ring. Back at the top, fronts at
+  the bottom, the wearer's left sleeve on the right. Before a pullover's neck is joined (and on a cardigan, all the
+  way) the ring is open at centre front. Scroll to zoom, drag to pan, F to fit; hover a stitch for its row, RS/WS,
+  phase, zone and the per-zone counts. A key (top left) lists the cast-on, shoulder seam, cap height, the phase rings
+  and the split. (The Layout still shows the yoke unrolled, each row as wide as its stitches.)
+- **Schematic:** the five zones tinted (fronts green, seams/sleeves orange, back blue), the four markers as red lines
+  from the neck out, the front edges, dashed rings at the end of A, C and D and where the neck is joined, and the
+  held stitches at the split. Overlay draws every size's outline and markers at one scale; Grid shows every size.
+- **Chart:** the same rings, one per row, with stitch boundaries when zoomed in; increases and cast-ons drawn at their
+  stitches, symbols pointing away from the neck (the knitting direction); markers as bold red lines; row numbers down
+  centre front; the symbol legend (incl. *place marker on row 1, slip after*) at the bottom right.
 
 Body increases bring the body at the underarm (cast-ons included) to `upper_chest + ease`; without them the underarm
 cast-on is (body target − yoke body) / 2. The result lists every row's zone counts, increases (with positions and

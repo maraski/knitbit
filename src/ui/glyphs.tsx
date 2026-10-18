@@ -101,6 +101,8 @@ export function Glyph({ id, custom = [] }: { id: string; custom?: CustomSymbol[]
       return <path d="M0.3,0.25 L0.3,0.75 M0.7,0.25 L0.7,0.75 M0.3,0.5 L0.7,0.5" className="glyph" />;
     case 'buttonhole':
       return <rect x={0.22} y={0.36} width={0.56} height={0.28} rx={0.12} className="glyph" />;
+    case 'marker':
+      return <path d="M0.5,0.08 L0.5,0.92" className="glyph marker-glyph" />;
     case 'c4f':
       return <path d="M0.15,0.8 L0.85,0.2 M0.15,0.2 L0.4,0.42 M0.6,0.58 L0.85,0.8" className="glyph" />;
     case 'c4b':

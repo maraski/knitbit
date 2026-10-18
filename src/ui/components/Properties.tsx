@@ -1,6 +1,7 @@
 import type { DimExpr, Id, Panel, Project, SegmentMethod, Waypoint } from '../../engine/model';
 import { defaultAutoMethod, defaultBust, defaultPrincess, dim, newId, newWaypoint, type ShapingPlacement } from '../../engine/model';
 import { BustProps } from './BustProps';
+import { YokeProps } from './YokeProps';
 import { LineProps, linePresets } from './LineProps';
 import { linkPanels, matchPartner, partnerWaypoint } from '../../engine/waypointDrag';
 import { frontPartner, linkFronts, unlinkFronts } from '../../engine/cardigan';
@@ -32,6 +33,7 @@ export interface PropsContext {
 }
 
 export function Properties({ ctx, selection }: { ctx: PropsContext; selection: Selection }) {
+  if (ctx.panel.yoke) return <YokeProps ctx={ctx} />;
   switch (selection.kind) {
     case 'waypoint': {
       const wp = ctx.panel.waypoints.find((w) => w.id === selection.id);

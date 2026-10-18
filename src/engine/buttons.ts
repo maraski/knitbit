@@ -2,7 +2,7 @@
 // buttonhole band, or on the front for an integrated band), and whether bands, holes and the closed width work out.
 
 import { attachOf, bandOnFront, bandRoles, buttonPositions, cardiganOf } from './bands';
-import { edgePattern, edgesOf } from './edgeTreatments';
+import { edgePattern, edgesOf, staleStrips } from './edgeTreatments';
 import { cachedPanel, frontEdgeRows, measureEdge, type PanelCache } from './joins';
 import type { BandAttach, BandRole, Id, Panel, Project } from './model';
 import { buildScope } from './measurements';
@@ -92,7 +92,7 @@ export function buttonPlan(project: Project, sizeId: Id, cache: PanelCache = new
     const strip = project.panels.find((p) => p.edge === 'frontBands' && p.band === hole.role);
     const sc = strip ? cachedPanel(project, strip.id, sizeId, cache) : null;
     if (!strip || !sc?.ok) {
-      issues.push({ severity: 'warning', message: `No ${hole.role === 'continuous' ? 'front band' : 'buttonhole band'} strip to put the buttonholes on: change any band setting (Project → Edges) to make it.` });
+      issues.push({ severity: 'warning', message: `No ${hole.role === 'continuous' ? 'front band' : 'buttonhole band'} strip to put the buttonholes on: use Add band strips in Project → Edges.` });
       return plan;
     }
     // Distance along the band from its start (the right front's lower edge for a continuous band).
@@ -145,6 +145,9 @@ export function bandChecks(project: Project, sizeId: Id, cache: PanelCache): Ban
   const out: BandCheck[] = [];
   const roles = bandRoles(project);
   const fronts = project.panels.filter((p) => p.half);
+  for (const p of staleStrips(project)) {
+    out.push({ panelId: p.id, panelName: p.name, issue: { severity: 'info', message: `${p.name} no longer matches the edge settings (Project → Edges); delete it if you don't need it.`, ref: { kind: 'panel' } } });
+  }
   if (project.garment.opening !== 'cardigan' || !fronts.length) return out;
   const scope = buildScope(project, sizeId);
   const tol = project.settings.seamToleranceCm;

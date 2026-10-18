@@ -83,18 +83,27 @@ function laterJoin(id: EdgeTreatmentId, t: EdgeTreatment, edges: EdgeRef[], name
   };
 }
 
-/**
- * Apply the project's edge treatments to its panels. Front bands are only stored here; the bands themselves are
- * made by the cardigan band helper.
- */
-export function applyEdgeTreatments(project: Project, notes: string[] = []): Project {
+export interface ApplyOptions {
+  /**
+   * Make missing strips (the neckband, front band strips). Off by default: changing a setting never adds or removes
+   * panels; strips you made follow the settings, and strips that no longer fit them are left for you to delete.
+   */
+  create?: boolean;
+}
+
+/** Apply the project's edge treatments to its panels: sections, pick-up joins, and the strips that exist. */
+export function applyEdgeTreatments(project: Project, notes: string[] = [], opts: ApplyOptions = {}): Project {
   const e = edgesOf(project);
   let panels = project.panels.map((p) => {
     if (isBodyPanel(p)) return withSection(p, 'hem', e.hem);
     if (isSleevePanel(p)) return withSection(p, 'cuff', e.cuff);
     return p;
   });
-  let joins = (project.joins ?? []).filter((j) => j.edge !== 'hem' && j.edge !== 'cuff' && j.edge !== 'neckband');
+  const existing = panels.find((p) => p.edge === 'neckband') ?? panels.find((p) => p.template === 'neckband');
+  const nb = e.neckband;
+  // A neckband that is switched off keeps its strip and pick-up join as they are (the knitter deletes them).
+  const keepNeckJoin = !nb.enabled && !!existing;
+  let joins = (project.joins ?? []).filter((j) => j.edge !== 'hem' && j.edge !== 'cuff' && (j.edge !== 'neckband' || keepNeckJoin));
 
   for (const [id, pick] of [['hem', isBodyPanel], ['cuff', isSleevePanel]] as const) {
     const t = e[id];
@@ -103,10 +112,8 @@ export function applyEdgeTreatments(project: Project, notes: string[] = []): Pro
     if (edges.length) joins.push(laterJoin(id, t, edges, id === 'hem' ? 'Hem rib (added later)' : 'Cuff rib (added later)'));
   }
 
-  // Neckband: a strip picked up around the neck edges of the body panels.
-  const nb = e.neckband;
-  const existing = panels.find((p) => p.edge === 'neckband') ?? panels.find((p) => p.template === 'neckband');
-  if (nb.enabled) {
+  // Neckband: a strip picked up around the neck edges of the body panels (made only when asked for).
+  if (nb.enabled && (existing || opts.create)) {
     const pattern = edgePattern(nb);
     const base = existing ?? { ...neckband(), name: 'Neckband' };
     const top = base.waypoints[base.waypoints.length - 1];
@@ -121,12 +128,32 @@ export function applyEdgeTreatments(project: Project, notes: string[] = []): Pro
     if (!existing) notes.push('Added a Neckband strip.');
     const necks = panels.filter((p) => isBodyPanel(p) && p.neckline).map((p): EdgeRef => ({ panelId: p.id, edge: { kind: 'neck' } }));
     if (necks.length) joins.push({ ...laterJoin('neckband', nb, necks, 'Neckband picked up'), partner: [{ panelId: strip.id, edge: { kind: 'bottom' } }] });
-  } else if (existing?.edge === 'neckband') {
-    panels = panels.filter((p) => p.id !== existing.id);
-    joins = joins.filter((j) => ![...j.edges, ...j.partner].some((r) => r.panelId === existing.id));
-    notes.push('Removed the Neckband strip.');
   }
-  return applyFrontBands({ ...project, panels, joins }, notes);
+  return applyFrontBands({ ...project, panels, joins }, notes, opts);
+}
+
+/** Strips the settings call for that don't exist yet: the neckband, front band strips. */
+export function missingStrips(project: Project): string[] {
+  const out: string[] = [];
+  const e = edgesOf(project);
+  if (project.edges && e.neckband.enabled && !project.panels.some((p) => p.edge === 'neckband' || p.template === 'neckband')) out.push('Neckband');
+  for (const role of bandRoles(project)) {
+    if (attachOf(project, role) === 'integrated') continue;
+    if (!project.panels.some((p) => p.edge === 'frontBands' && p.band === role)) out.push(BAND_NAMES[role]);
+  }
+  return out;
+}
+
+/** Strips left from earlier settings: a neckband that is switched off, bands the settings no longer call for. */
+export function staleStrips(project: Project): Panel[] {
+  const e = edgesOf(project);
+  const roles = bandRoles(project).filter((r) => attachOf(project, r) !== 'integrated');
+  return project.panels.filter((p) => (p.edge === 'neckband' && !e.neckband.enabled) || (p.edge === 'frontBands' && (!p.band || !roles.includes(p.band))));
+}
+
+/** Make the strips the settings call for (the knitter asked for them). */
+export function addStrips(project: Project, notes: string[] = []): Project {
+  return applyEdgeTreatments(project, notes, { create: true });
 }
 
 // ---------- cardigan front bands ----------
@@ -185,19 +212,21 @@ function bandStrip(role: BandRole, attach: 'pickup' | 'sideways', pattern: Stitc
   return p;
 }
 
-/** Make the band strips and their joins match the settings (cardigan, front bands on, not integrated). */
-export function applyFrontBands(project: Project, notes: string[] = []): Project {
-  const roles = bandRoles(project);
+/**
+ * Make the band strips that exist (or, with `create`, all of them) and their joins match the settings. Strips the
+ * settings no longer call for are left as they are, joins included.
+ */
+export function applyFrontBands(project: Project, notes: string[] = [], opts: ApplyOptions = {}): Project {
+  const roles = bandRoles(project).filter((r) => attachOf(project, r) !== 'integrated');
   const pattern = edgePattern(edgesOf(project).frontBands);
   let panels = project.panels;
-  let joins = (project.joins ?? []).filter((j) => j.edge !== 'frontBands');
-  const keep = new Set<string>();
+  const active = (id: string) => panels.some((p) => p.id === id && p.edge === 'frontBands' && p.band && roles.includes(p.band));
+  const joins = (project.joins ?? []).filter((j) => j.edge !== 'frontBands' || !j.partner.some((r) => active(r.panelId)));
   for (const role of roles) {
-    const attach = attachOf(project, role);
-    if (attach === 'integrated') continue;
+    const attach = attachOf(project, role) as 'pickup' | 'sideways';
     const existing = panels.find((p) => p.edge === 'frontBands' && p.band === role);
+    if (!existing && !opts.create) continue;
     const strip = bandStrip(role, attach, pattern, existing);
-    keep.add(strip.id);
     panels = existing ? panels.map((p) => (p.id === existing.id ? strip : p)) : [...panels, strip];
     if (!existing) notes.push(`Added a ${strip.name} strip.`);
     const edges = bandEdges({ ...project, panels }, role);
@@ -212,13 +241,6 @@ export function applyFrontBands(project: Project, notes: string[] = []): Project
       note: `${edgeStitchLabel(edgesOf(project).frontBands)}, band_w wide.`,
       edge: 'frontBands',
     });
-  }
-  const gone = panels.filter((p) => p.edge === 'frontBands' && !keep.has(p.id));
-  if (gone.length) {
-    const ids = new Set(gone.map((p) => p.id));
-    panels = panels.filter((p) => !ids.has(p.id));
-    joins = joins.filter((j) => ![...j.edges, ...j.partner].some((r) => ids.has(r.panelId)));
-    notes.push(`Removed ${gone.map((p) => p.name).join(', ')}.`);
   }
   return { ...project, panels, joins };
 }

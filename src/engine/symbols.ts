@@ -22,7 +22,8 @@ export type SymbolId =
   | 'bo'
   | 'buttonhole'
   | 'c4f'
-  | 'c4b';
+  | 'c4b'
+  | 'marker';
 
 export interface StitchSymbol {
   id: SymbolId;
@@ -53,6 +54,7 @@ export const SYMBOLS: Record<SymbolId, StitchSymbol> = {
   buttonhole: { id: 'buttonhole', label: 'Buttonhole', abbr: 'bh', change: null, group: 'other' },
   c4f: { id: 'c4f', label: '2/2 cable, front (left cross)', abbr: 'C4F', change: null, group: 'cable' },
   c4b: { id: 'c4b', label: '2/2 cable, back (right cross)', abbr: 'C4B', change: null, group: 'cable' },
+  marker: { id: 'marker', label: 'Place marker (row 1), slip marker after', abbr: 'pm/sm', change: null, group: 'other' },
 };
 
 /** Symbols that make sense as an edge shaping marker, in menu order. */
