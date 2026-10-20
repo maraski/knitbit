@@ -164,7 +164,8 @@ export type SyncOutcome =
   | { kind: 'conflict'; local: LocalCopy; remote: Project | null; remoteUpdatedAt: string | null; message: string }
   | { kind: 'remote-deleted'; message: string }
   | { kind: 'blocked'; message: string; errors: string[] }
-  | { kind: 'error'; message: string };
+  /** `cause` is the thrown error, so callers can tell a network problem from a sign-in one. */
+  | { kind: 'error'; message: string; cause?: unknown };
 
 /** Fetches the online copy, decides, and uploads when that's the decision. Network errors become `error`, never throws. */
 export async function syncProject(remote: ProjectRemote, local: LocalCopy | null, marker: SyncMarker | null, id = local?.project.id): Promise<SyncOutcome> {
@@ -186,7 +187,7 @@ export async function syncProject(remote: ProjectRemote, local: LocalCopy | null
         return await upload(remote, local!, d.ifUpdatedAt);
     }
   } catch (e) {
-    return { kind: 'error', message: `Couldn't reach the online copy: ${(e as Error).message}` };
+    return { kind: 'error', message: `Couldn't reach the online copy: ${(e as Error).message}`, cause: e };
   }
 }
 
@@ -238,7 +239,7 @@ export async function resolveConflict(
       }
     }
   } catch (e) {
-    return { kind: 'error', message: `Couldn't reach the online copy: ${(e as Error).message}` };
+    return { kind: 'error', message: `Couldn't reach the online copy: ${(e as Error).message}`, cause: e };
   }
 }
 

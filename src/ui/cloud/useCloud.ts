@@ -3,7 +3,7 @@
 // vars nothing here runs and `available` is false. The localStorage auto-save (store.ts) is unaffected.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { ProjectRemote, SyncOutcome } from '../../engine/cloudSync';
+import type { ProjectRemote, Resolution, SyncOutcome } from '../../engine/cloudSync';
 import type { Project } from '../../engine/model';
 import type { Notice } from '../store';
 import { cloudConfig, rememberSignIn, rememberedSignIn } from './config';
@@ -34,6 +34,10 @@ export interface Cloud {
   opened: (project: Project, remoteUpdatedAt: string) => void;
   /** Call before deleting a project online, so it is never saved again (`on = false` if the delete failed). */
   forget: (id: string, on?: boolean) => void;
+  /** The open project (this device's version in a conflict). */
+  project: Project;
+  /** Answers the conflict in state.conflict; resolves to an error message to show, or null. */
+  resolveConflict: (choice: Resolution) => Promise<string | null>;
 }
 
 export function useCloud(project: Project, open: (p: Project) => void, notify: (n: Notice) => void): Cloud {
@@ -105,13 +109,16 @@ export function useCloud(project: Project, open: (p: Project) => void, notify: (
       if (document.visibilityState === 'hidden') void saver.current?.flush();
     };
     const onOnline = () => void saver.current?.retry();
+    const onOffline = () => saver.current?.wentOffline();
     document.addEventListener('visibilitychange', onHidden);
     window.addEventListener('pagehide', onHidden);
     window.addEventListener('online', onOnline);
+    window.addEventListener('offline', onOffline);
     return () => {
       document.removeEventListener('visibilitychange', onHidden);
       window.removeEventListener('pagehide', onHidden);
       window.removeEventListener('online', onOnline);
+      window.removeEventListener('offline', onOffline);
     };
   }, []);
 
@@ -121,7 +128,9 @@ export function useCloud(project: Project, open: (p: Project) => void, notify: (
     load()
       .then((m) => m.signIn())
       .then((how) => {
-        if (how === 'cancelled') rememberSignIn(false);
+        // Signing in again as the same account doesn't change `user`, so restart saving that stopped on sign-in.
+        if (how === 'popup' && saver.current?.current.status === 'auth') void saver.current.start(latest.current.project);
+        if (how === 'cancelled' && !saver.current) rememberSignIn(false);
       })
       .catch((e: Error) => {
         rememberSignIn(false);
@@ -144,7 +153,20 @@ export function useCloud(project: Project, open: (p: Project) => void, notify: (
   const opened = useCallback((p: Project, at: string) => saver.current?.opened(p, at), []);
   const forget = useCallback((id: string, on?: boolean) => saver.current?.forget(id, on), []);
 
-  return { available, user, state, signIn, signOut, remote, dialog, showProjects, closeProjects, flush, uploadNow, opened, forget };
+  const resolveConflict = useCallback(async (choice: Resolution): Promise<string | null> => {
+    const o = (await saver.current?.resolve(choice)) ?? null;
+    if (o?.kind === 'downloaded') {
+      latest.current.open(o.project);
+      latest.current.notify(
+        choice === 'copy'
+          ? { kind: 'info', title: `Saved this device's version online as "${o.project.name}"`, lines: ['The online version stays as it was.'] }
+          : { kind: 'info', title: `Opened the online version of "${o.project.name}" (undo to go back)`, lines: [] },
+      );
+    }
+    return o?.kind === 'error' ? o.message : null;
+  }, []);
+
+  return { available, user, state, signIn, signOut, remote, dialog, showProjects, closeProjects, flush, uploadNow, opened, forget, project, resolveConflict };
 }
 
 function handleOutcome(o: SyncOutcome, open: (p: Project) => void, notify: (n: Notice) => void): void {
@@ -153,16 +175,7 @@ function handleOutcome(o: SyncOutcome, open: (p: Project) => void, notify: (n: N
       open(o.project);
       notify({ kind: 'info', title: `Opened the newer online copy of "${o.project.name}" (undo to go back)`, lines: o.notes });
       break;
-    case 'conflict':
-      notify({
-        kind: 'warning',
-        title: 'Conflict: not saved online',
-        lines: [
-          o.message,
-          'Nothing was overwritten. Online saving of this project is paused; your edits are still saved on this device. Use Save to download a copy of this version.',
-        ],
-      });
-      break;
+    // 'conflict' opens ConflictDialog (CloudStatus) from state.conflict.
     case 'remote-deleted':
       notify({ kind: 'warning', title: 'Not saved online', lines: [o.message, 'Online saving of this project is paused; it is still saved on this device.'] });
       break;

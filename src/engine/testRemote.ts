@@ -12,6 +12,8 @@ export class MemoryRemote implements ProjectRemote {
   private clock = 0;
   /** Set to simulate network failures. */
   offline = false;
+  /** Thrown by every call while set, e.g. `{ code: 'permission-denied' }` like a Firestore error. */
+  failWith: unknown = null;
   /** Runs once before the next save is checked, e.g. to make another device save first. */
   beforeNextSave: (() => void) | null = null;
 
@@ -27,6 +29,7 @@ export class MemoryRemote implements ProjectRemote {
 
   private check(): void {
     if (this.offline) throw new Error('offline');
+    if (this.failWith) throw this.failWith;
   }
 
   async list(): Promise<RemoteSummary[]> {

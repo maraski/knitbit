@@ -1,0 +1,12 @@
+/* Conflict dialog; loads with the lazy ConflictDialog chunk. */
+.modal.conflict { width: min(560px, calc(100vw - 32px)); }
+.conflict p { margin: 0 0 12px; }
+.conflict-versions { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin-bottom: 14px; }
+.conflict-version { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; }
+.conflict-version h4 { margin: 0 0 2px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+.conflict-version strong { overflow-wrap: anywhere; }
+.conflict-version .muted { font-size: 12px; }
+.conflict-choices { display: flex; flex-direction: column; gap: 8px; }
+.conflict-choices button { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 8px 10px; text-align: left; font-weight: 600; }
+.conflict-choices button span { font-weight: 400; font-size: 12px; opacity: 0.8; }
+.conflict .err { margin: 10px 0 0; }

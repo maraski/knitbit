@@ -1,10 +1,26 @@
 // Cloud saving of the open project, without React or Firebase: debounces edits, runs one sync at a time, keeps the
 // sync marker and turns outcomes into a save status. useCloud.ts wires it to the app; saver.test.ts drives it with
 // the in-memory remote and fake timers.
+//
+// Offline: Firestore lite has no offline cache, so nothing is queued here. Edits stay in the localStorage auto-save;
+// while the browser is offline no save is attempted, and when it's back (retry) syncProject compares the open project
+// with the online copy, which uploads offline edits or reports a conflict. Failed saves retry with backoff.
 
 import type { KVStorage } from '../../engine/autosave';
 import { shouldAskBeforeUpload } from '../../engine/cloudProjects';
-import { fingerprint, markerFor, readSyncMarker, syncProject, writeSyncMarker, type LocalCopy, type ProjectRemote, type RemoteSummary, type SyncOutcome } from '../../engine/cloudSync';
+import {
+  fingerprint,
+  markerFor,
+  readSyncMarker,
+  resolveConflict,
+  syncProject,
+  writeSyncMarker,
+  type LocalCopy,
+  type ProjectRemote,
+  type RemoteSummary,
+  type Resolution,
+  type SyncOutcome,
+} from '../../engine/cloudSync';
 import type { Project } from '../../engine/model';
 import { type CloudState } from './status';
 
@@ -17,6 +33,8 @@ export interface SaverDeps {
   isOnline: () => boolean;
   now: () => number;
   delayMs?: number;
+  /** Waits before retrying failed saves: one per attempt, the last repeats. */
+  retryDelaysMs?: readonly number[];
 }
 
 export interface SaverEvents {
@@ -34,6 +52,28 @@ export interface SaverEvents {
 }
 
 export const SAVE_DELAY_MS = 2000;
+export const RETRY_DELAYS_MS: readonly number[] = [2000, 5000, 15000, 60000];
+
+/** Wait before retry number `attempt` (1 = the first retry). */
+export function retryDelay(attempt: number, delays: readonly number[] = RETRY_DELAYS_MS): number {
+  return delays[Math.min(Math.max(attempt, 1), delays.length) - 1];
+}
+
+/**
+ * Why a save failed, from the thrown error. 'auth': refused for sign-in reasons, so retrying won't help.
+ * 'network': no connection or the service is unreachable. Codes are Firebase's (Firestore and Auth).
+ */
+export function errorKind(cause: unknown): 'auth' | 'network' | 'other' {
+  const code = String((cause as { code?: unknown } | null)?.code ?? '');
+  if (/^(permission-denied|unauthenticated)$|^auth\/(user-token-expired|user-disabled|invalid-user-token|user-not-found|requires-recent-login)$/.test(code)) return 'auth';
+  if (/^(unavailable|deadline-exceeded)$|^auth\/network-request-failed$/.test(code)) return 'network';
+  // fetch() rejects with a TypeError when there is no connection.
+  if (cause instanceof TypeError && /fetch|network|load failed/i.test(cause.message)) return 'network';
+  return 'other';
+}
+
+const AUTH_MESSAGE = 'Online saving stopped: your sign-in ended (signed out on another device, or it expired). Edits are still saved on this device. Sign in again to keep saving online.';
+const OFFLINE_MESSAGE = 'No connection. Edits are saved on this device and go online when the connection is back.';
 
 export function localCopy(project: Project): LocalCopy {
   return { project, savedAt: project.updatedAt };
@@ -51,10 +91,13 @@ export function stateAfter(prev: CloudState, outcome: SyncOutcome, online: boole
     case 'remote-deleted':
     case 'blocked':
       return { ...prev, status: 'error', message: outcome.message, conflict: null };
-    case 'error':
-      return online
+    case 'error': {
+      const kind = errorKind(outcome.cause);
+      if (kind === 'auth') return { ...prev, status: 'auth', message: AUTH_MESSAGE, conflict: null };
+      return online && kind !== 'network'
         ? { ...prev, status: 'error', message: outcome.message, conflict: null }
         : { ...prev, status: 'offline', message: outcome.message, conflict: null };
+    }
   }
 }
 
@@ -73,6 +116,12 @@ export class CloudSaver {
   /** Projects deleted online from this device: never saved again (e.g. after undo brings one back). */
   private readonly dropped = new Set<string>();
   private disposed = false;
+  /** Failed attempts in a row; the timer is a retry (not an edit's debounce) while this is above 0 and it's set. */
+  private attempts = 0;
+  private retrying = false;
+  /** Saves were refused for sign-in reasons: nothing is sent until start() (signed in again). */
+  private authBlocked = false;
+  private resolving = false;
   private readonly deps: SaverDeps;
   private readonly events: SaverEvents;
 
@@ -92,6 +141,8 @@ export class CloudSaver {
   async start(project: Project): Promise<void> {
     this.local = localCopy(project);
     this.pausedId = null;
+    this.authBlocked = false;
+    this.attempts = 0;
     this.cancelTimer();
     const m = readSyncMarker(this.deps.storage);
     if (this.events.onAskUpload && m?.projectId !== project.id) {
@@ -156,10 +207,14 @@ export class CloudSaver {
       this.cancelTimer();
       return;
     }
+    if (this.authBlocked) return; // kept on this device; start() syncs it after signing in again
     if (this.pausedId !== null) {
       if (this.pausedId === project.id) return;
-      this.pausedId = null; // another project was opened
+      this.pausedId = null; // another project was opened: its conflict no longer applies
+      if (this.state.conflict) this.set({ ...this.state, status: 'saving', message: null, conflict: null });
     }
+    // A pending retry sends the latest edit anyway; a shorter debounce would only hit a failing service sooner.
+    if (this.retrying && this.timer !== null) return;
     this.cancelTimer();
     const m = readSyncMarker(this.deps.storage);
     if (m && m.projectId === project.id && m.fingerprint === fingerprint(project)) {
@@ -179,12 +234,62 @@ export class CloudSaver {
     return this.run();
   }
 
-  /** Tries again after 'offline' or 'error' (back online). */
+  /** Back online: tries again now after 'offline' or 'error', and restarts the backoff. */
   retry(): Promise<void> {
-    if (this.disposed || this.pausedId !== null || !this.local) return Promise.resolve();
+    if (this.disposed || this.pausedId !== null || this.authBlocked || !this.local) return Promise.resolve();
     if (this.state.status !== 'offline' && this.state.status !== 'error') return Promise.resolve();
+    this.attempts = 0;
     this.cancelTimer();
     return this.run();
+  }
+
+  /** The browser went offline: say so now rather than at the next save. */
+  wentOffline(): void {
+    if (this.disposed || this.pausedId !== null || this.authBlocked) return;
+    if (this.state.status === 'saved') this.set({ ...this.state, status: 'offline', message: OFFLINE_MESSAGE });
+  }
+
+  /**
+   * Answers the conflict in `current.conflict` (ConflictDialog). Edits made while it was open count as this device's
+   * version. Returns the outcome: 'downloaded' means the app must open `project` (the online version, or the copy);
+   * 'conflict' means another device saved again meanwhile (the state carries the newer one); 'error' leaves the
+   * conflict as it was. Null when there was nothing to resolve.
+   */
+  async resolve(choice: Resolution): Promise<SyncOutcome | null> {
+    const c = this.state.conflict;
+    if (this.disposed || !c || this.resolving) return null;
+    this.resolving = true;
+    try {
+      const local = this.local?.project.id === c.local.project.id ? this.local : c.local;
+      const outcome = await resolveConflict(this.deps.remote, { ...c, local }, choice);
+      // Disposed, or another project opened meanwhile: that project's saving has taken over.
+      if (this.disposed || this.state.conflict !== c) return null;
+      switch (outcome.kind) {
+        case 'uploaded':
+        case 'downloaded':
+          writeSyncMarker(this.deps.storage, outcome.marker);
+          if (outcome.kind === 'downloaded') this.local = localCopy(outcome.project);
+          this.pausedId = null;
+          this.attempts = 0;
+          this.set(stateAfter(this.state, outcome, this.deps.isOnline(), this.deps.now()));
+          // Edited while "keep this device's version" was on its way: save that too.
+          if (outcome.kind === 'uploaded' && this.local && this.local !== local) this.changed(this.local.project);
+          break;
+        case 'conflict':
+          this.set(stateAfter(this.state, outcome, this.deps.isOnline(), this.deps.now()));
+          break;
+        case 'blocked':
+        case 'remote-deleted':
+          this.set(stateAfter(this.state, outcome, this.deps.isOnline(), this.deps.now()));
+          this.events.onOutcome(outcome);
+          break;
+        default:
+          break; // 'error': the conflict stays for another try
+      }
+      return outcome;
+    } finally {
+      this.resolving = false;
+    }
   }
 
   dispose(): void {
@@ -195,6 +300,18 @@ export class CloudSaver {
   private cancelTimer(): void {
     if (this.timer !== null) clearTimeout(this.timer);
     this.timer = null;
+    this.retrying = false;
+  }
+
+  private scheduleRetry(): void {
+    this.cancelTimer();
+    this.attempts++;
+    this.retrying = true;
+    this.timer = setTimeout(() => {
+      this.timer = null;
+      this.retrying = false;
+      void this.run();
+    }, retryDelay(this.attempts, this.deps.retryDelaysMs));
   }
 
   private set(state: CloudState): void {
@@ -211,7 +328,13 @@ export class CloudSaver {
       do {
         this.again = false;
         const sent = this.local;
-        if (!sent || this.disposed || this.pausedId !== null || this.dropped.has(sent.project.id)) break;
+        if (!sent || this.disposed || this.authBlocked || this.pausedId !== null || this.dropped.has(sent.project.id)) break;
+        if (!this.deps.isOnline()) {
+          // Nothing to try until the 'online' event (retry); the edit is in the local auto-save.
+          this.cancelTimer();
+          this.set({ ...this.state, status: 'offline', message: OFFLINE_MESSAGE, conflict: null });
+          break;
+        }
         this.set({ ...this.state, status: 'saving' });
         const outcome = await syncProject(this.deps.remote, sent, readSyncMarker(this.deps.storage));
         if (this.disposed) break;
@@ -223,7 +346,12 @@ export class CloudSaver {
         }
         if ('marker' in outcome && outcome.marker) writeSyncMarker(this.deps.storage, outcome.marker);
         if (pauses(outcome)) this.pausedId = sent.project.id;
-        this.set(stateAfter(this.state, outcome, this.deps.isOnline(), this.deps.now()));
+        const online = this.deps.isOnline();
+        this.set(stateAfter(this.state, outcome, online, this.deps.now()));
+        if (outcome.kind !== 'error') this.attempts = 0;
+        else if (this.state.status === 'auth') this.authBlocked = true;
+        else if (online && !this.again) this.scheduleRetry(); // offline: the 'online' event retries
+
         if (outcome.kind !== 'in-sync' && outcome.kind !== 'uploaded' && outcome.kind !== 'error') this.events.onOutcome(outcome);
       } while (this.again);
     })().finally(() => {

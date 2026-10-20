@@ -482,7 +482,8 @@ table.events.editable select { font-size: 11.5px; max-width: 110px; padding: 1px
 /* online saving (toolbar) */
 .cloud { position: relative; display: flex; align-items: center; gap: 6px; }
 .cloud-status { font-size: 12px; color: var(--muted, #666); white-space: nowrap; }
-.cloud-status.cloud-conflict, .cloud-status.cloud-error { color: #b4441b; font-weight: 600; }
+.cloud-status.cloud-conflict, .cloud-status.cloud-error, .cloud-status.cloud-auth { color: #b4441b; font-weight: 600; }
+button.cloud-status { padding: 0; border: 0; background: none; text-decoration: underline; cursor: pointer; }
 .cloud-avatar { width: 26px; height: 26px; padding: 0; border-radius: 50%; overflow: hidden; display: grid; place-items: center; }
 .cloud-avatar img { width: 100%; height: 100%; object-fit: cover; }
 .cloud-menu { position: absolute; right: 0; top: calc(100% + 4px); z-index: 20; min-width: 180px; padding: 8px; display: flex; flex-direction: column; gap: 6px; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12); }

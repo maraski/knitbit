@@ -20,7 +20,7 @@ write or run**. Security rules make each signed-in user's projects readable and 
 
 | Option | Good | Watch out for |
 |---|---|---|
-| **Firebase** (recommended) | One-click Google sign-in. Built-in offline cache, so edits made offline sync later. The free tier doesn't go to sleep. Limits (20k writes and 50k reads a day, 1 GiB stored) are far more than one knitter needs. | Google-owned. Firestore can't store arrays inside arrays, so the project is stored as one JSON string (see below). |
+| **Firebase** (recommended) | One-click Google sign-in. Built-in offline cache, so edits made offline sync later (not used: the app uses Firestore lite, see milestone 4). The free tier doesn't go to sleep. Limits (20k writes and 50k reads a day, 1 GiB stored) are far more than one knitter needs. | Google-owned. Firestore can't store arrays inside arrays, so the project is stored as one JSON string (see below). |
 | Supabase | Postgres, open source, connects to Vercel in one step. Email magic link or Google sign-in. | **Free projects pause after about a week without use** and have to be woken from the dashboard. That's a poor fit for a hobby tool you might not open for a few weeks. Pro plan is about $25 a month. |
 | Vercel Functions + Neon/Blob + Auth.js | Everything stays on Vercel. | You'd write and maintain an API, sessions and auth yourself. The most code and the most to keep secure. |
 | Google Drive files | Projects stay in your own Drive. | Google's OAuth verification, plus clumsier listing and conflict handling. Overkill for this. |
@@ -50,7 +50,7 @@ new project's `owner` must be your user id, and `data` must be under 900 kB (Fir
 2. **Cloud save.** When you're signed in, the project is saved online about 2 s after you stop editing, and when the
    tab is hidden or closed. The save only goes through if the online copy hasn't changed since it was last read (a
    transaction on `updatedAt`).
-3. **Conflict.** If another device saved in between, nothing is overwritten. A notice offers: keep this device's
+3. **Conflict.** If another device saved in between, nothing is overwritten. A dialog offers: keep this device's
    version, keep the online version, or save this one as a copy.
 4. **Opening the app.** If you're signed in, the last project opens. If the local auto-save is newer than the online
    copy (for example, after editing offline), it's uploaded. If both changed, you get the conflict notice above.
@@ -99,8 +99,32 @@ new project's `owner` must be your user id, and `data` must be under 900 kB (Fir
    (Upload this project, or open an online one; "Not now" keeps it on this device, status "Only on this device").
    Deleting the open project opens the most recently edited remaining one, or a fresh sample when none is left
    (a sample every time would add a new "My top" online after each delete).
-4. **Conflicts + offline**: conflict notice with its three choices, Firestore offline cache, save when the tab is
-   hidden.
+4. **Conflicts + offline**: conflict dialog with its three choices, offline handling, save when the tab is hidden.
+   Done: `ConflictDialog.tsx` (lazy, opened from `CloudStatus.tsx`) shows both versions' name and last-edited time
+   and calls `CloudSaver.resolve` (M1's `resolveConflict`). Edits made while it's open count as this device's
+   version; if another device saves again meanwhile, the dialog shows the newer conflict. "Keep the online version"
+   and "Save as a copy" open the result with the store's `replace`, so undo goes back. "Decide later" leaves saving
+   paused; clicking "Conflict" in the toolbar reopens it.
+
+   **How offline works with Firestore lite.** The app uses `firebase/firestore/lite` (plain HTTPS requests) to keep
+   the Firebase chunk about 200 kB instead of about 560 kB. Lite has **no offline cache and no write queue**, so the
+   Firestore offline cache planned above is not used. Instead:
+   - Edits always go to the localStorage auto-save first, so nothing depends on the network.
+   - While `navigator.onLine` is false (or after the `offline` event) no save is attempted and the status reads
+     "Offline: saved on this device". Saves that fail with a network error (`unavailable`, `deadline-exceeded`,
+     a rejected `fetch`) show the same status.
+   - Failed saves retry after 2 s, 5 s, 15 s, then every 60 s. Edits during the wait don't shorten it; the retry
+     sends the latest edit. The `online` event retries at once and restarts the backoff.
+   - A reconnect runs `syncProject`, which compares the open project with the online copy and the sync marker: it
+     uploads offline edits, opens what another device saved, or reports a conflict if both changed.
+   - When the tab is hidden or closed, a pending save (debounced or waiting for its retry) is sent at once. If that
+     request doesn't finish before the page goes away, the edit is still in the local auto-save, and the next visit's
+     startup sync uploads it.
+   - Saves refused for sign-in reasons (`permission-denied`, `unauthenticated`, expired or revoked tokens) show
+     "Sign in again to keep saving online" and are not retried. Clicking that status signs in again and resyncs.
+   - Offline edits only live in this browser until they're uploaded: opening the project on another device before
+     then shows the older online copy (and later a conflict, if both are edited).
+   The logic is in `src/ui/cloud/saver.ts` and tested in `saver.test.ts` with the in-memory remote and fake timers.
 5. **Docs**: README section, HANDOFF goal/architecture update, setup steps.
 
 ## Open questions

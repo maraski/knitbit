@@ -3,8 +3,12 @@
 
 import type { SyncOutcome } from '../../engine/cloudSync';
 
-/** 'not-uploaded': the open project isn't online and the knitter hasn't chosen to upload it (first sign-in). */
-export type CloudStatus = 'signed-out' | 'saving' | 'saved' | 'offline' | 'conflict' | 'error' | 'not-uploaded';
+/**
+ * 'not-uploaded': the open project isn't online and the knitter hasn't chosen to upload it (first sign-in).
+ * 'auth': saves are refused for sign-in reasons (signed out elsewhere, expired session); nothing retries until the
+ * knitter signs in again.
+ */
+export type CloudStatus = 'signed-out' | 'saving' | 'saved' | 'offline' | 'conflict' | 'error' | 'not-uploaded' | 'auth';
 
 export type ConflictOutcome = Extract<SyncOutcome, { kind: 'conflict' }>;
 
@@ -14,7 +18,7 @@ export interface CloudState {
   lastSavedAt: number | null;
   /** Detail for 'error' and 'offline' (shown as a tooltip). */
   message: string | null;
-  /** The conflict to resolve (milestone 4); cloud saving of that project is paused meanwhile. */
+  /** The conflict to resolve (ConflictDialog); cloud saving of that project is paused meanwhile. */
   conflict: ConflictOutcome | null;
 }
 
@@ -37,6 +41,8 @@ export function statusLabel(state: CloudState, now: number): string {
       return 'Not saved online';
     case 'not-uploaded':
       return 'Only on this device';
+    case 'auth':
+      return 'Sign in again to keep saving online';
   }
 }
 

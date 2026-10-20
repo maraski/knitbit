@@ -211,7 +211,7 @@ describe('syncProject', () => {
     const remote = new MemoryRemote();
     remote.offline = true;
     const r = await syncProject(remote, local(fixtureProject()), null);
-    expect(r).toEqual({ kind: 'error', message: "Couldn't reach the online copy: offline" });
+    expect(r).toMatchObject({ kind: 'error', message: "Couldn't reach the online copy: offline" });
   });
 });
 
