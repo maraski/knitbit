@@ -11,15 +11,13 @@ import { lineX } from './lines';
 import { rowCentre, type ComputedPanel, type ComputedSegment, type Edge, type ShapeEvent } from './panel';
 import { defaultSymbol, symbolInfo, type SymbolInfo } from './symbols';
 import { buttonholeCells, buttonPlan } from './buttons';
-import { buildYokeChart } from './yokePanel';
+import { buildYokeChart } from './yokeChart';
+import { HELD, HOLD, PLAIN } from './cells';
 
 /** '' = no stitch (outside the panel), 'k' = plain stitch, 'h' = held (live, not worked), else a symbol id. */
 export type Cell = string;
 
-export const PLAIN = 'k';
-export const HELD = 'h';
-/** Centre neck stitches placed on hold (not a built-in symbol). */
-export const HOLD = 'hold';
+export { HELD, HOLD, PLAIN };
 
 /** Which marker a symbol cell came from, for editing from the chart. */
 export interface CellRef {

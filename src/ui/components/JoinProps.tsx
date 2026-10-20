@@ -242,12 +242,4 @@ function EdgeList({ project, refs, onChange }: { project: Project; refs: EdgeRef
   );
 }
 
-/** Used by panels to show which joins touch them. */
-export function joinSummary(project: Project, join: Join, sizeId: Id, cache: PanelCache): string {
-  const r = joinReport(project, join, sizeId, cache);
-  if (join.tag === 'seam') return r.b ? `Δ ${signed(Math.round(r.diffCm * 10) / 10)} cm` : 'one side';
-  if (join.tag === 'pickup') return `${r.a.pickup} sts`;
-  return `${join.edges.length} edge${join.edges.length === 1 ? '' : 's'}`;
-}
-
 export { cachedPanel, edgeLabel };

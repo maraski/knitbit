@@ -2,7 +2,7 @@
 // Shapes follow the common (Craft Yarn Council style) chart conventions.
 
 import type { CustomSymbol } from '../engine/model';
-import { HELD, HOLD, PLAIN } from '../engine/chart';
+import { HELD, HOLD, PLAIN } from '../engine/cells';
 
 /** Background tint of a cell, by meaning. */
 export function cellFill(id: string, custom: CustomSymbol[] = []): string {

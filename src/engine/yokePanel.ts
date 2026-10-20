@@ -1,9 +1,7 @@
 // A contiguous yoke as a panel: the generator's rows turned into an ordinary ComputedPanel (each row as wide as its
-// stitch count, centred, top-down) so the schematic, layout, overlay and joins work on it, and into a stitch chart
-// with zone colours, marker lines, increase symbols, per-zone counts and a phase column.
+// stitch count, centred, top-down) so the schematic, layout, overlay and joins work on it. Its stitch chart is built
+// in yokeChart.ts (loaded with the chart).
 
-import type { Chart, ChartRow } from './chart';
-import { cellInfo, PLAIN } from './chart';
 import { generateYoke, ZONES, type YokeResult, type Zone } from './contiguous';
 import type { Id, Panel, Project } from './model';
 import type { ComputedPanel, ComputedWaypoint, Issue, Point } from './panel';
@@ -97,75 +95,6 @@ export function zoneStarts(row: { zones: Record<Zone, number>; total: number }, 
   }
   starts.push(x);
   return starts;
-}
-
-export function buildYokeChart(project: Project, panel: Panel, c: ComputedPanel): Chart {
-  const y = c.yoke!;
-  const cols = Math.max(0, ...c.counts);
-  const x0 = -cols / 2;
-  const rows: ChartRow[] = [];
-  const zoneRuns: Chart['zoneRuns'] = {};
-  const markerCols: Chart['markerCols'] = {};
-  const zoneCounts: Chart['zoneCounts'] = {};
-  for (const yr of y.rows) {
-    const cells = new Array<string>(cols).fill('');
-    const starts = zoneStarts(yr, x0);
-    for (let k = starts[0]; k < starts[5]; k++) if (k >= 0 && k < cols) cells[k] = PLAIN;
-    for (const inc of yr.incs) {
-      const k = starts[ZONES.indexOf(inc.zone)] + inc.at;
-      if (k >= 0 && k < cols) cells[k] = inc.symbol;
-    }
-    for (const co of yr.castOns) {
-      const zi = ZONES.indexOf(co.zone);
-      if (co.where === 'centre-front') {
-        // Cast on at the end of the row and joined: drawn at both ends (half each), where the round closes.
-        const half = Math.floor(co.count / 2);
-        for (let j = 0; j < half; j++) cells[starts[0] + j] = 'co';
-        for (let j = 0; j < co.count - half; j++) cells[starts[5] - 1 - j] = 'co';
-      } else if (co.zone === 'rightFront') for (let j = 0; j < co.count; j++) cells[starts[zi + 1] - 1 - j] = 'co';
-      else for (let j = 0; j < co.count; j++) cells[starts[zi] + j] = 'co';
-    }
-    const key = String(yr.row);
-    zoneRuns[key] = ZONES.map((_, zi) => ({ from: starts[zi], to: starts[zi + 1], zone: zi }));
-    markerCols[key] = starts.slice(1, 5);
-    zoneCounts[key] = ZONES.map((z) => yr.zones[z]);
-    rows.push({
-      key,
-      knitRow: yr.row,
-      label: key,
-      shortRow: null,
-      round: yr.round,
-      rs: yr.rs,
-      rtl: yr.rs,
-      cells,
-      refs: {},
-      free: {},
-      worked: yr.total,
-      count: yr.total,
-    });
-  }
-  const phases: NonNullable<Chart['phases']> = y.phases.filter((p) => p.id !== 'B' && p.id !== 'neck').map((p) => ({ label: `${p.id} · ${p.label}`, fromRow: p.from, toRow: p.to }));
-  const used = new Set<string>([PLAIN, 'marker']);
-  for (const r of rows) for (const v of r.cells) if (v) used.add(v);
-  const legend = [...used].map((id) => cellInfo(id, project.symbols));
-  return {
-    panelId: panel.id,
-    sizeId: c.sizeId,
-    cols,
-    x0,
-    rows,
-    topDown: true,
-    castOn: y.castOn,
-    repeats: [],
-    stripes: [],
-    buttonholeRows: {},
-    legend,
-    zoneRuns,
-    markerCols,
-    zoneCounts,
-    zoneNames: ['left front', 'left sleeve', 'back', 'right sleeve', 'right front'],
-    phases,
-  };
 }
 
 export type { YokeResult };
