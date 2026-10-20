@@ -496,3 +496,6 @@ button.cloud-status { padding: 0; border: 0; background: none; text-decoration: 
 .size-values { display: flex; flex-wrap: wrap; gap: 2px 10px; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; margin-top: 2px; }
 .size-values b { font-weight: 600; }
 .size-values .current { color: var(--fg); }
+.schematic .rect-side .hit { cursor: ew-resize; }
+.schematic .rect-side:hover .hit { stroke: var(--accent); stroke-opacity: 0.15; }
+.schematic .wp .hit.drag-y:hover { stroke: var(--accent); stroke-opacity: 0.12; }
