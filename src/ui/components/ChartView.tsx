@@ -137,6 +137,13 @@ interface CanvasProps {
   markers?: MarkerActions;
 }
 
+/** A chart cell under the pointer: its row, chart column and display row index. */
+interface Hit {
+  row: ChartRow;
+  col: number;
+  yi: number;
+}
+
 interface Drag {
   fromWaypoint: Id;
   edge: 'left' | 'right';
@@ -149,6 +156,9 @@ interface Drag {
 
 function ChartCanvas({ chart, c, panel, update, brush, setBrush, custom, cs, setCell, collapse, setCollapse, selection, onSelect, markers }: CanvasProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const svgRef = useRef<SVGSVGElement>(null);
+  // The last cell painted (display row index, chart column): Shift-click draws a line from it.
+  const anchor = useRef<{ yi: number; col: number } | null>(null);
   const stroke = useRef<{ key: string; erase: boolean; seen: Set<string>; last: { x: number; y: number } } | null>(null);
   const panelStart = panel.startFrom ?? 'caston';
   useEffect(() => {
@@ -182,6 +192,7 @@ function ChartCanvas({ chart, c, panel, update, brush, setBrush, custom, cs, set
     if (!el) return;
     el.scrollTop = chart.topDown ? 0 : el.scrollHeight;
     el.scrollLeft = (el.scrollWidth - el.clientWidth) / 2;
+    anchor.current = null;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [firstKey]);
 
@@ -246,25 +257,24 @@ function ChartCanvas({ chart, c, panel, update, brush, setBrush, custom, cs, set
     return s;
   }, [chart]);
 
-  const rowAt = (clientY: number): number => {
-    const el = scrollRef.current!;
-    const r = el.getBoundingClientRect();
-    const y = clientY - r.top + el.scrollTop - TOP;
-    return Math.max(0, Math.min(display.length - 1, Math.floor(y / cs)));
+  // Pointer positions are measured from the chart's own origin: the SVG is centred in the scroll area when it is
+  // narrower than it (after Fit or zooming out), so the scroll area's edge is not the chart's.
+  const gridXY = (clientX: number, clientY: number) => {
+    const r = svgRef.current!.getBoundingClientRect();
+    return { xi: Math.floor((clientX - r.left - GUT) / cs), yi: Math.floor((clientY - r.top - TOP) / cs) };
   };
+  const rowAt = (clientY: number): number => Math.max(0, Math.min(display.length - 1, gridXY(0, clientY).yi));
+  const colAt = (clientX: number): DisplayCol | undefined => dcols[gridXY(clientX, 0).xi];
 
   /** Chart cell under the pointer: the display row and column (null in a folded gap or outside). */
-  const cellAt = (clientX: number, clientY: number): { row: ChartRow; col: number } | null => {
-    const el = scrollRef.current!;
-    const r = el.getBoundingClientRect();
-    const xi = Math.floor((clientX - r.left + el.scrollLeft - GUT) / cs);
-    const yi = Math.floor((clientY - r.top + el.scrollTop - TOP) / cs);
+  const cellAt = (clientX: number, clientY: number): Hit | null => {
+    const { xi, yi } = gridXY(clientX, clientY);
     const d = dcols[xi];
     const row = display[yi];
     if (!d || !('col' in d) || !row) return null;
-    return { row, col: d.col };
+    return { row, col: d.col, yi };
   };
-  const paintAt = (hit: { row: ChartRow; col: number }, toggle: boolean) => {
+  const paintAt = (hit: Hit, toggle: boolean) => {
     const st = stroke.current;
     if (!st || hit.row.shortRow) return;
     const id = `${hit.row.knitRow}:${hit.col}`;
@@ -272,6 +282,7 @@ function ChartCanvas({ chart, c, panel, update, brush, setBrush, custom, cs, set
     st.seen.add(id);
     const v = hit.row.cells[hit.col];
     if (v === '' || v === HELD) return; // outside the fabric
+    anchor.current = { yi: hit.yi, col: hit.col };
     const r = hit.row.knitRow;
     const x = cellX(c, chart.x0, hit.col, r);
     const existing = findFree(panel, c.sizeId, r, x);
@@ -282,14 +293,39 @@ function ChartCanvas({ chart, c, panel, update, brush, setBrush, custom, cs, set
     }
     update((p) => paintStitch(p, panel.id, c.sizeId, r, x, brush.symbol, { mirror: brush.mirror, every: brush.every, times: brush.times }, c.totalRows), st.key);
   };
+  /** Eyedropper: the stitch in a cell becomes the brush (a plain stitch picks the eraser). */
+  const pickAt = (hit: Hit) => {
+    const v = hit.row.cells[hit.col];
+    if (v === PLAIN) setBrush({ symbol: 'erase' });
+    else if ((PAINTABLE as string[]).includes(v) || custom.some((s) => s.id === v)) setBrush({ symbol: v });
+  };
+  /** Shift-click: every cell on the straight line from the last painted cell to this one. */
+  const lineTo = (hit: Hit) => {
+    const a = anchor.current;
+    const x0 = a ? xOfCol.get(a.col) : undefined;
+    const x1 = xOfCol.get(hit.col);
+    if (!a || x0 === undefined || x1 === undefined || !display[a.yi]) return false;
+    const n = Math.max(Math.abs(x1 - x0), Math.abs(hit.yi - a.yi));
+    for (let k = 1; k <= n; k++) {
+      const xi = Math.round(x0 + ((x1 - x0) * k) / n);
+      const yi = Math.round(a.yi + ((hit.yi - a.yi) * k) / n);
+      const d = dcols[xi];
+      if (d && 'col' in d && display[yi]) paintAt({ row: display[yi], col: d.col, yi }, false);
+    }
+    return true;
+  };
   const onPaintDown = (e: React.PointerEvent) => {
     if (!brush.on || (e.button !== 0 && e.button !== 2)) return;
     const hit = cellAt(e.clientX, e.clientY);
     if (!hit) return;
     e.preventDefault();
+    if (e.metaKey || e.ctrlKey) {
+      pickAt(hit);
+      return;
+    }
     (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
     stroke.current = { key: `drag:paint:${Date.now()}`, erase: e.button === 2 || brush.symbol === 'erase', seen: new Set(), last: { x: e.clientX, y: e.clientY } };
-    paintAt(hit, true);
+    if (!(e.shiftKey && lineTo(hit))) paintAt(hit, true);
   };
 
   const onPointerMove = (e: React.PointerEvent) => {
@@ -437,16 +473,12 @@ function ChartCanvas({ chart, c, panel, update, brush, setBrush, custom, cs, set
       <g
         key={row.key}
         onDoubleClick={(e) => {
-          const el = scrollRef.current!;
-          const xi = Math.floor((e.clientX - el.getBoundingClientRect().left + el.scrollLeft - GUT) / cs);
-          const d = dcols[xi];
+          const d = colAt(e.clientX);
           if (d && 'col' in d) onDouble(row, d.col);
         }}
         onPointerMove={(e) => {
           if (drag.current) return;
-          const el = scrollRef.current!;
-          const xi = Math.floor((e.clientX - el.getBoundingClientRect().left + el.scrollLeft - GUT) / cs);
-          const d = dcols[xi];
+          const d = colAt(e.clientX);
           setHover(d && 'col' in d ? { row, col: d.col } : null);
         }}
       >
@@ -624,7 +656,7 @@ function ChartCanvas({ chart, c, panel, update, brush, setBrush, custom, cs, set
         onPointerLeave={() => setHover(null)}
         onContextMenu={(e) => brush.on && e.preventDefault()}
       >
-        <svg width={GUT * 2 + W + 30 + (holeMarks.length ? 110 : 0) + (chart.zoneCounts ? 110 : 0)} height={TOP + H + BOT} className="chart-svg">
+        <svg ref={svgRef} width={GUT * 2 + W + 30 + (holeMarks.length ? 110 : 0) + (chart.zoneCounts ? 110 : 0)} height={TOP + H + BOT} className="chart-svg">
           <defs>
             <pattern id="chart-grid" patternUnits="userSpaceOnUse" x={GUT} y={TOP} width={cs} height={cs}>
               <rect width={cs} height={cs} fill="var(--cell)" />
@@ -651,7 +683,7 @@ function ChartCanvas({ chart, c, panel, update, brush, setBrush, custom, cs, set
       <div className="chart-hint">
         {hoverText ?? `${chart.rows.length} rows · ${chart.cols} sts wide · RS rows read right to left, WS left to right`}
         {brush.on
-          ? ' · Paint: click or drag to paint, click a painted stitch again (or right-click) to remove · each stroke is one undo'
+          ? ' · Paint: click or drag to paint, Shift-click for a line from the last stitch, ⌘/Ctrl-click to pick up a stitch, click a painted stitch again (or right-click) to remove · each stroke is one undo'
           : markers && !hoverText
             ? ' · drag a shaping symbol up or down · double-click a stitch to add a marker'
             : ''}

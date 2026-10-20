@@ -195,7 +195,8 @@ export function rectangle(direction: KnitDirection = 'bottom-up'): Panel {
   const p = newPanel('Rectangle');
   p.template = 'rectangle';
   p.direction = direction;
-  p.waypoints = [newWaypoint('bottom', 0, 20), newWaypoint('top', 30, 20)];
+  // The top follows the bottom; the panel properties set either one fixed, from a measurement or as an expression.
+  p.waypoints = [newWaypoint('bottom', 0, 20), newWaypoint('top', 30, 'bottom.width')];
   p.segments = [newSegment(p.waypoints[0].id, { kind: 'straight' })];
   return p;
 }
