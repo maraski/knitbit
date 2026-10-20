@@ -5,7 +5,7 @@ import { JOIN_TAGS } from '../../engine/joins';
 import { edgePaths } from '../edgePaths';
 import { alignShift, localOutline, toLocal, type AlignRef } from '../../engine/layout';
 import { sizeColor } from '../sizeColors';
-import { SizeGrid, SizeLegend } from './LayoutView';
+import { SizeGrid, SizeLegend } from './SizeGrid';
 import type { SizeMode } from './SizeModeBar';
 import type { Project } from '../../engine/model';
 import type { EdgeKey, Join, KnitDirection } from '../../engine/model';
