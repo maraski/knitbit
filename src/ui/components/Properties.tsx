@@ -36,6 +36,7 @@ const NecklineProps = lazy(() => import('./NecklineProps').then((m) => ({ defaul
 const BustProps = lazy(() => import('./BustProps').then((m) => ({ default: m.BustProps })));
 const LineProps = lazy(() => import('./LineProps').then((m) => ({ default: m.LineProps })));
 const YokeProps = lazy(() => import('./YokeProps').then((m) => ({ default: m.YokeProps })));
+const RectangleSize = lazy(() => import('./RectangleSize').then((m) => ({ default: m.RectangleSize })));
 
 /** Shown in place of a property panel while its code loads. */
 export function PropsLoading() {
@@ -219,6 +220,12 @@ function PanelProps({ ctx }: { ctx: PropsContext }) {
           <input className="num" type="number" min={0} value={panel.pattern.offset} onChange={(e) => set((p) => void (p.pattern.offset = Math.max(0, Math.round(Number(e.target.value)))), `panel.${panel.id}.off`)} />
         </div>
       </div>
+
+      {panel.template === 'rectangle' && panel.waypoints.length === 2 && panel.waypoints.every((w) => w.symmetric) && !panel.half && (
+        <Suspense fallback={<PropsLoading />}>
+          <RectangleSize key={panel.id} ctx={ctx} />
+        </Suspense>
+      )}
 
       <h4>Waypoints</h4>
       <ul className="wp-list">
