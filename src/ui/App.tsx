@@ -11,9 +11,7 @@ import { dragHeight, dragWidth } from '../engine/waypointDrag';
 import { editPanel } from './edit';
 import { loadProject, serializeProject, type LoadResult } from '../engine/schema';
 import { CheckPanel } from './components/CheckPanel';
-import { JoinProps } from './components/JoinProps';
-import { MeasurementProps, SizesProps } from './components/MeasurementProps';
-import { Properties, type PropsContext } from './components/Properties';
+import { Properties, PropsLoading, type PropsContext } from './components/Properties';
 import { Schematic, type SchematicBands } from './components/Schematic';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import type { YokeButtons } from './components/YokeTopView';
@@ -28,7 +26,7 @@ import { buttonPlan } from '../engine/buttons';
 import { bandOnFront, setButtonPosition } from '../engine/bands';
 import { applyEdgeTreatments } from '../engine/edgeTreatments';
 import { PANEL_SELECTION, type Selection } from './selection';
-import { mergeSampleTable, migrationNotice, sampleProject, useProjectStore, type Notice } from './store';
+import { loadSample, migrationNotice, useProjectStore, type Notice, type StartState } from './store';
 
 // Screens other than the schematic load on first use, keeping them out of the initial download.
 const LayoutView = lazy(() => import('./components/LayoutView').then((m) => ({ default: m.LayoutView })));
@@ -38,6 +36,10 @@ const MeasurementsView = lazy(() => import('./components/MeasurementsView').then
 const ImportDialog = lazy(() => import('./components/ImportDialog').then((m) => ({ default: m.ImportDialog })));
 // Signed-in Open…: loaded on first use, with the sync code it needs (kept out of the main chunk).
 const ProjectsDialog = lazy(() => import('./components/ProjectsDialog').then((m) => ({ default: m.ProjectsDialog })));
+// Right-sidebar panels for a join or the measurements screen: loaded the first time one is shown.
+const JoinProps = lazy(() => import('./components/JoinProps').then((m) => ({ default: m.JoinProps })));
+const MeasurementProps = lazy(() => import('./components/MeasurementProps').then((m) => ({ default: m.MeasurementProps })));
+const SizesProps = lazy(() => import('./components/MeasurementProps').then((m) => ({ default: m.SizesProps })));
 
 const VIEW_KEY = 'knitbit.view.v1';
 type CenterView = 'schematic' | 'chart' | 'layout' | 'measurements';
@@ -50,8 +52,8 @@ function readView(): { sizeId?: Id; panelId?: Id; center?: CenterView; mode?: Si
   }
 }
 
-export function App() {
-  const store = useProjectStore();
+export function App({ start }: { start: StartState }) {
+  const store = useProjectStore(start);
   const { project, update } = store;
   const cloud = useCloud(project, store.replace, store.setNotice);
   const [view] = useState(readView);
@@ -181,8 +183,8 @@ export function App() {
   // Signed in, Open… shows the Projects dialog (which also opens files).
   const open = () => (cloud.user && cloud.remote ? cloud.showProjects() : void openFile());
   // Signed in, the new project saves online through the normal cloud save.
-  const startSample = (title: string | null) => {
-    const p = sampleProject();
+  const startSample = async (title: string | null) => {
+    const p = (await loadSample()).sampleProject();
     store.replace(p);
     setSizeId(p.baseSizeId);
     selectPanel(p.panels[0]?.id ?? null);
@@ -190,7 +192,7 @@ export function App() {
   };
   const newProject = () => {
     if (!window.confirm('Start a new project from the sample sizing table? The current project stays in undo history.')) return;
-    startSample(null);
+    void startSample(null);
   };
 
   useEffect(() => {
@@ -284,8 +286,8 @@ export function App() {
         <NoticeBar
           notice={store.notice}
           onClose={() => store.setNotice(null)}
-          onAction={() => {
-            const r = mergeSampleTable(project);
+          onAction={async () => {
+            const r = (await loadSample()).mergeSampleTable(project);
             store.update(() => r.project);
             store.setNotice({ kind: 'info', title: 'Merged the Ysolda sizing table (undo to go back)', lines: r.summary });
           }}
@@ -470,19 +472,21 @@ export function App() {
           />
         </section>
         <aside className="sidebar right">
-          {selection.kind === 'join' && center !== 'measurements' ? (
-            <JoinProps project={project} joinId={selection.id} sizeId={size?.id ?? ''} units={project.units} update={update} onDone={() => setSelection(PANEL_SELECTION)} />
-          ) : center === 'measurements' ? (
-            measSel ? (
-              <MeasurementProps ctx={{ project, update, sizeId: size?.id ?? '', onSelect: setMeasSel, onSize: setSizeId }} name={measSel} />
+          <Suspense fallback={<PropsLoading />}>
+            {selection.kind === 'join' && center !== 'measurements' ? (
+              <JoinProps project={project} joinId={selection.id} sizeId={size?.id ?? ''} units={project.units} update={update} onDone={() => setSelection(PANEL_SELECTION)} />
+            ) : center === 'measurements' ? (
+              measSel ? (
+                <MeasurementProps ctx={{ project, update, sizeId: size?.id ?? '', onSelect: setMeasSel, onSize: setSizeId }} name={measSel} />
+              ) : (
+                <SizesProps ctx={{ project, update, sizeId: size?.id ?? '', onSelect: setMeasSel, onSize: setSizeId }} />
+              )
+            ) : ctx ? (
+              <Properties ctx={ctx} selection={selection} />
             ) : (
-              <SizesProps ctx={{ project, update, sizeId: size?.id ?? '', onSelect: setMeasSel, onSize: setSizeId }} />
-            )
-          ) : ctx ? (
-            <Properties ctx={ctx} selection={selection} />
-          ) : (
-            <p className="muted pad">Nothing selected.</p>
-          )}
+              <p className="muted pad">Nothing selected.</p>
+            )}
+          </Suspense>
         </aside>
       </div>
       </ErrorBoundary>

@@ -2,27 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { readAutosave, writeAutosave } from '../engine/autosave';
-import { parseCsv } from '../engine/csv';
 import { canRedo, canUndo, commit, createHistory, redo, undo, type History } from '../engine/history';
 import type { Project } from '../engine/model';
-import { projectFromTable } from '../engine/seed';
-import { applyImport, describeReport, suggestMapping } from '../engine/sizing';
-import { bodice, sleeve } from '../engine/templates';
 import { syncFrontPairs } from '../engine/cardigan';
-import sampleCsv from '../../samples/sizing_table_ysolda_cm.csv?raw';
-
-export function sampleProject(): Project {
-  const p = projectFromTable(parseCsv(sampleCsv), 'My top').project;
-  p.panels = [bodice('back'), bodice('front'), sleeve('set-in')];
-  return p;
-}
-
-/** Merge the shipped sizing table into a project by size name (exact column names; legacy columns ignored). */
-export function mergeSampleTable(p: Project): { project: Project; summary: string[] } {
-  const table = parseCsv(sampleCsv);
-  const { project, report } = applyImport(p, table, suggestMapping(table, p), { units: 'cm', mode: 'merge' });
-  return { project, summary: describeReport(report) };
-}
 
 export interface Notice {
   kind: 'error' | 'warning' | 'info';
@@ -46,9 +28,21 @@ export function migrationNotice(title: string, from: number, notes: string[], wa
   };
 }
 
-function initial(): { project: Project; notice: Notice | null } {
+/** The sample project's code (see sample.ts), loaded on first use. */
+export const loadSample = () => import('./sample');
+
+export interface StartState {
+  project: Project;
+  notice: Notice | null;
+}
+
+/**
+ * The project to start with: the auto-save, or the sample project on first run (or when the auto-save can't be
+ * restored). Resolved before the first render, so starting from the sample only waits for its code then.
+ */
+export function startState(): StartState | Promise<StartState> {
   const saved = readAutosave(window.localStorage);
-  if (!saved.found) return { project: sampleProject(), notice: null };
+  if (!saved.found) return loadSample().then((m) => ({ project: m.sampleProject(), notice: null }));
   if (saved.ok) {
     if (saved.migratedFrom !== null) return { project: saved.project, notice: migrationNotice('Restored auto-save', saved.migratedFrom, saved.migrationNotes, saved.warnings) };
     const lines = [...saved.warnings];
@@ -57,14 +51,13 @@ function initial(): { project: Project; notice: Notice | null } {
       notice: lines.length ? { kind: 'warning', title: 'Restored auto-save with warnings', lines } : null,
     };
   }
-  return {
-    project: sampleProject(),
+  return loadSample().then((m) => ({
+    project: m.sampleProject(),
     notice: { kind: 'error', title: 'The auto-saved project could not be restored; started from the sample table', lines: saved.errors },
-  };
+  }));
 }
 
-export function useProjectStore() {
-  const [init] = useState(initial);
+export function useProjectStore(init: StartState) {
   const [history, setHistory] = useState<History<Project>>(() => createHistory(init.project));
   const [notice, setNotice] = useState<Notice | null>(init.notice);
   const project = history.present;

@@ -7,13 +7,13 @@ import { conformToGarment } from '../../engine/garment';
 import { yokePanel } from '../../engine/contiguous';
 import { convertGauge, type GaugeBasis } from '../../engine/gauge';
 import { newId, type Id, type Project } from '../../engine/model';
-import { ensureEstimates } from '../../engine/seed';
+import { ensureEstimates } from '../../engine/estimates';
 import { fromTemplate, TEMPLATE_MEASUREMENTS, TEMPLATES, topDownTop, type TemplateId, type TemplateOptions } from '../../engine/templates';
 import { roundTo } from '../../engine/units';
-import { dropPanelFromJoins, JOIN_TAGS, type PanelCache } from '../../engine/joins';
-import type { JoinTag } from '../../engine/model';
+import { dropPanelFromJoins, JOIN_TAGS, joinReport, type PanelCache } from '../../engine/joins';
+import type { Join, JoinTag } from '../../engine/model';
 import { produce } from '../edit';
-import { joinSummary } from './JoinProps';
+import { signed } from '../format';
 
 interface Props {
   project: Project;
@@ -326,4 +326,12 @@ function ProjectSettings({ project, sizeId, update }: Props) {
       </div>
     </div>
   );
+}
+
+/** Used by panels to show which joins touch them. */
+function joinSummary(project: Project, join: Join, sizeId: Id, cache: PanelCache): string {
+  const r = joinReport(project, join, sizeId, cache);
+  if (join.tag === 'seam') return r.b ? `Δ ${signed(Math.round(r.diffCm * 10) / 10)} cm` : 'one side';
+  if (join.tag === 'pickup') return `${r.a.pickup} sts`;
+  return `${join.edges.length} edge${join.edges.length === 1 ? '' : 's'}`;
 }

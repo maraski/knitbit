@@ -7,7 +7,7 @@ import { yokePanel } from './contiguous';
 import { conformToGarment } from './garment';
 import type { EdgeRef, Join, Panel, Project } from './model';
 import { defaultAutoMethod, defaultBust, newId, newPanel, newSegment, newWaypoint } from './model';
-import { ensureEstimates } from './seed';
+import { ensureEstimates } from './estimates';
 
 export type YokeRole = NonNullable<Panel['fromYoke']>;
 export const YOKE_ROLES: YokeRole[] = ['back', 'front', 'leftSleeve', 'rightSleeve'];

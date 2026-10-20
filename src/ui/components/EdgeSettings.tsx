@@ -1,8 +1,12 @@
+import { lazy, Suspense } from 'react';
 import { addStrips, applyEdgeTreatments, EDGE_STITCHES, EDGE_TREATMENTS, edgePattern, edgesOf, missingStrips } from '../../engine/edgeTreatments';
 import { buildScope } from '../../engine/measurements';
 import type { EdgeStitch, EdgeTreatment, EdgeTreatmentId, Id, Project } from '../../engine/model';
 import { ExprField } from './ExprField';
-import { BandSettings } from './BandSettings';
+import { PropsLoading } from './Properties';
+
+// Front-band settings (buttons, attachment) load the first time a cardigan's bands are shown.
+const BandSettings = lazy(() => import('./BandSettings').then((m) => ({ default: m.BandSettings })));
 
 interface Props {
   project: Project;
@@ -76,7 +80,9 @@ export function EdgeSettings({ project, sizeId, update }: Props) {
                   )}
                 </div>
                 {d.id === 'frontBands' ? (
-                  <BandSettings project={project} sizeId={sizeId} update={update} />
+                  <Suspense fallback={<PropsLoading />}>
+                    <BandSettings project={project} sizeId={sizeId} update={update} />
+                  </Suspense>
                 ) : (
                 <div className="field">
                   <label>Worked</label>
