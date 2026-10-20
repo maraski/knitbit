@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { buildScope } from './measurements';
-import { computePanel } from './panel';
-import { clearRectOverrides, convertRule, isRectangle, readRule, rectWaypoints, ruleExpr, setRectDim, type SizeRule } from './rectSize';
+import { computePanel, rowInPanel } from './panel';
+import { clearRectOverrides, convertRule, heightBase, isRectangle, readRule, rectWaypoints, ruleExpr, setRectDim, type SizeRule } from './rectSize';
 import { rectangle } from './templates';
 import { fixtureProject, sizeId } from './testFixtures';
 import type { Project } from './model';
+import { dragHeight, dragWidth } from './waypointDrag';
 
 const NAMES = ['bust', 'waist', 'arm_length'];
 
@@ -117,5 +118,69 @@ describe('convertRule', () => {
     expect(convertRule('fixed', r, 50.3, 'metric', 'bust', 0.5, 'bottom')).toEqual({ mode: 'fixed', value: 50.5 });
     expect(convertRule('fixed', r, 50.3, 'imperial', 'bust', 0.5, 'bottom')).toEqual({ mode: 'fixed', value: 19.75 * 2.54 });
     expect(convertRule('custom', { mode: 'measure', measurement: 'bust', fraction: 0.5, ease: 4 }, 50, 'metric', 'bust', 0.5, 'bottom')).toEqual({ mode: 'custom', expr: 'bust / 2 + 4' });
+  });
+});
+
+describe('rows kept across a resize', () => {
+  it('a row hovered near the top is gone once the rectangle gets shorter', () => {
+    const { project, panelId } = withRect();
+    const m = sizeId(project, 'M');
+    const tall = computePanel(project, project.panels[0], m);
+    const hovered = tall.totalRows - 1;
+    expect(rowInPanel(tall, hovered)).toBe(hovered);
+    const shorter = setRectDim(project, panelId, 'height', { mode: 'fixed', value: 10 }, 'metric');
+    const short = computePanel(shorter, shorter.panels[0], m);
+    expect(short.counts[hovered]).toBeUndefined(); // what the schematic used to pass to sts()
+    expect(rowInPanel(short, hovered)).toBeNull();
+    expect(rowInPanel(short, 0)).toBe(0);
+    expect(rowInPanel(short, null)).toBeNull();
+  });
+});
+
+describe('schematic drags on a rectangle', () => {
+  it('a rectangle made before the size rules (top fixed at 20, no shaping) widens as a whole from either corner', () => {
+    const { project, panelId } = withRect();
+    const m = sizeId(project, 'M');
+    const old = project.panels[0].waypoints[1];
+    old.width = { expr: '20', overrides: {} };
+    for (const wp of project.panels[0].waypoints) {
+      const next = dragWidth(project, panelId, wp.id, m, 'width', 26, 'all');
+      const c = computePanel(next, next.panels[0], m);
+      expect(c.waypoints.map((w) => Math.round(w.widthCm * 100) / 100)).toEqual([26, 26]);
+      expect(c.issues.filter((i) => i.severity !== 'info')).toEqual([]);
+    }
+  });
+
+  it('dragging the top corner of a rectangle whose top follows the bottom widens the whole rectangle', () => {
+    const { project, panelId } = withRect();
+    const m = sizeId(project, 'M');
+    const top = project.panels[0].waypoints[1];
+    const next = dragWidth(project, panelId, top.id, m, 'width', 30, 'all');
+    const c = computePanel(next, next.panels[0], m);
+    expect(c.waypoints[0].widthCm).toBeCloseTo(30);
+    expect(c.waypoints[1].widthCm).toBeCloseTo(30);
+    expect(c.issues.filter((i) => i.severity !== 'info')).toEqual([]);
+    expect(readRule(next.panels[0].waypoints[1].width.expr, NAMES, 'bottom')).toEqual({ mode: 'same' });
+  });
+
+  it('a top with its own width still drags on its own', () => {
+    const { project, panelId } = withRect();
+    const m = sizeId(project, 'M');
+    const tapered = setRectDim(project, panelId, 'top', { mode: 'fixed', value: 15 }, 'metric');
+    const next = dragWidth(tapered, panelId, tapered.panels[0].waypoints[1].id, m, 'width', 18, 'all');
+    const c = computePanel(next, next.panels[0], m);
+    expect(c.waypoints[0].widthCm).toBeCloseTo(20);
+    expect(c.waypoints[1].widthCm).toBeCloseTo(18);
+  });
+
+  it('a dragged height reads back as a plain length', () => {
+    const { project, panelId } = withRect();
+    const m = sizeId(project, 'M');
+    const next = dragHeight(project, panelId, project.panels[0].waypoints[1].id, m, 12, 'all');
+    const panel = next.panels[0];
+    expect(panel.waypoints[1].height.expr).toBe('bottom.height + 12');
+    expect(readRule(panel.waypoints[1].height.expr, NAMES, undefined, heightBase(panel))).toEqual({ mode: 'fixed', value: 12 });
+    expect(readRule('bottom.height + arm_length', NAMES, undefined, 'bottom')).toEqual({ mode: 'measure', measurement: 'arm_length', fraction: 1, ease: 0 });
+    expect(readRule('bottom.height + 12', NAMES)).toEqual({ mode: 'custom', expr: 'bottom.height + 12' });
   });
 });

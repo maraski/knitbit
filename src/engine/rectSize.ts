@@ -38,9 +38,12 @@ const MEASURE_RE = new RegExp(String.raw`^([A-Za-z_][A-Za-z0-9_]*)\s*(?:([*/])\s
 const UNIT_CM: Record<string, number> = { cm: 1, mm: 0.1, in: CM_PER_INCH, '"': CM_PER_INCH };
 
 /** Which rule an expression is. Anything not in one of the simple forms is a custom expression. */
-export function readRule(expr: string, measurements: string[], bottomKey?: string): SizeRule {
-  const src = expr.trim();
+export function readRule(expr: string, measurements: string[], bottomKey?: string, heightFrom?: string): SizeRule {
+  let src = expr.trim();
   if (bottomKey && src.replace(/\s+/g, '') === `${bottomKey}.width`) return { mode: 'same' };
+  // Height dragged on the schematic: `bottom.height + 12` (the bottom sits at 0), read as 12.
+  const from = heightFrom ? new RegExp(String.raw`^${heightFrom}\.height\s*\+\s*`).exec(src) : null;
+  if (from) src = src.slice(from[0].length);
   const parsed = parseExpression(src);
   if (parsed.ok && references(parsed.value).length === 0) {
     const v = evaluate(src, {});
@@ -53,7 +56,13 @@ export function readRule(expr: string, measurements: string[], bottomKey?: strin
     const ease = m[5] ? Number(m[5]) * UNIT_CM[m[6] ?? 'cm'] * (m[4] === '-' ? -1 : 1) : 0;
     return { mode: 'measure', measurement: m[1], fraction, ease };
   }
-  return { mode: 'custom', expr: src };
+  return { mode: 'custom', expr: expr.trim() };
+}
+
+/** The bottom waypoint's key when it sits at height 0, so a height relative to it reads as a plain length. */
+export function heightBase(panel: Panel): string | undefined {
+  const { bottom } = rectWaypoints(panel);
+  return bottom.height.expr.trim() === '0' && !Object.keys(bottom.height.overrides).length ? waypointKey(bottom.name) : undefined;
 }
 
 // ---------- writing ----------

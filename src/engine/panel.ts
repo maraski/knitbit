@@ -190,6 +190,11 @@ export function rowCentre(c: Pick<ComputedPanel, 'leftEdge' | 'rightEdge' | 'hal
   return c.half ? c.half.centre[r] ?? 0 : (c.leftEdge[r] + c.rightEdge[r]) / 2;
 }
 
+/** A row kept from an earlier computation (hover, drag), or null if the panel no longer has it (e.g. it got shorter). */
+export function rowInPanel(c: Pick<ComputedPanel, 'counts'>, row: number | null): number | null {
+  return row !== null && Number.isInteger(row) && row >= 0 && row < c.counts.length ? row : null;
+}
+
 /** Identifier for a waypoint name: "Under arm" → "under_arm". */
 export function waypointKey(name: string): string {
   const k = name

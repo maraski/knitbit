@@ -9,7 +9,7 @@ import { SizeGrid, SizeLegend } from './SizeGrid';
 import type { SizeMode } from './SizeModeBar';
 import type { Project } from '../../engine/model';
 import type { EdgeKey, Join, KnitDirection } from '../../engine/model';
-import { rowCentre, type ComputedPanel, type ComputedSegment, type Edge, type Marker, type ShapeEvent } from '../../engine/panel';
+import { rowCentre, rowInPanel, type ComputedPanel, type ComputedSegment, type Edge, type Marker, type ShapeEvent } from '../../engine/panel';
 import { SYMBOLS, type SymbolId } from '../../engine/symbols';
 import { wedgeBands } from '../../engine/bust';
 import { freeCells } from '../../engine/free';
@@ -469,6 +469,9 @@ export function Schematic({ computed: c, direction, units, selection, onSelect, 
     );
   }
 
+  // Rows kept from before an edit may be past a panel that got shorter (e.g. its top dragged down).
+  const liveHover = rowInPanel(c, hoverRow);
+  const liveDrag = rowInPanel(c, dragRow);
   return (
     <div
       className="canvas"
@@ -1015,25 +1018,25 @@ export function Schematic({ computed: c, direction, units, selection, onSelect, 
         })()}
 
         {/* drag readout */}
-        {dragRow !== null && markerDrag.current && (() => {
+        {liveDrag !== null && markerDrag.current && (() => {
           const md = markerDrag.current;
-          const p = S(shapeX(md.seg, md.edge, dragRow, md.stepLike ? 'bindoff' : 'dec'), md.stepLike ? dragRow - 1 : dragRow);
+          const p = S(shapeX(md.seg, md.edge, liveDrag, md.stepLike ? 'bindoff' : 'dec'), md.stepLike ? liveDrag - 1 : liveDrag);
           return (
             <text x={p.x + (md.edge === 'left' ? -12 : 12)} y={p.y - 8} className="drag-label" textAnchor={md.edge === 'left' ? 'end' : 'start'}>
-              row {dragRow} · {sts(c.counts[dragRow])}
+              row {liveDrag} · {sts(c.counts[liveDrag])}
             </text>
           );
         })()}
 
         {/* hover readout */}
-        {hoverRow !== null && dragRow === null && vertical && (() => {
-          const a = S(c.leftEdge[hoverRow], hoverRow);
-          const b = S(c.rightEdge[hoverRow], hoverRow);
+        {liveHover !== null && dragRow === null && vertical && (() => {
+          const a = S(c.leftEdge[liveHover], liveHover);
+          const b = S(c.rightEdge[liveHover], liveHover);
           return (
             <g className="hover" pointerEvents="none">
               <line x1={a.x - 8} y1={a.y} x2={b.x + 8} y2={b.y} />
               <text x={b.x + 12} y={b.y - 6}>
-                row {hoverRow} · {sts(c.counts[hoverRow])} · {len(hoverRow / rpc, units)}
+                row {liveHover} · {sts(c.counts[liveHover])} · {len(liveHover / rpc, units)}
               </text>
             </g>
           );
