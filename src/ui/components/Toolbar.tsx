@@ -3,6 +3,8 @@ import { RegionPickers } from './RegionPickers';
 import { useState } from 'react';
 import { AboutBox } from './AboutBox';
 import { sizeText } from './EstMark';
+import { CloudStatus } from './CloudStatus';
+import type { Cloud } from '../cloud/useCloud';
 
 interface Props {
   project: Project;
@@ -16,6 +18,7 @@ interface Props {
   onNew: () => void;
   onOpen: () => void;
   onSave: () => void;
+  cloud: Cloud;
 }
 
 export function Toolbar(p: Props) {
@@ -63,6 +66,7 @@ export function Toolbar(p: Props) {
           </button>
         ))}
       </div>
+      <CloudStatus cloud={p.cloud} />
       <button onClick={() => setAbout(true)} title="About Knitbit and the sizing data">About</button>
       {about && <AboutBox onClose={() => setAbout(false)} />}
     </header>
