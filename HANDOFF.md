@@ -33,10 +33,14 @@ M9), `6ee297f` (M10 + bust/princess options), `89c2318` (painted stitches, shapi
 ## 1. Project goal and architecture
 
 ### Goal
-A **local-only** web app (no auth, backend, hosting) for one knitter to **see** the shaping of each knitted panel of a
+A **browser-only** web app for one knitter to **see** the shaping of each knitted panel of a
 women's top: schematics, size grading, increase/decrease/yarn-over placement, bust shaping, joins and (later) stitch
 charts. It does **not** write pattern text and does **not** decide how panels are joined; it records and annotates
 what the knitter decides.
+
+It is a static Vite site hosted on **Vercel**. Projects are auto-saved in the browser; with optional **Google
+sign-in** they're also saved online (Firebase), so they can be opened from any device. There is still no server code
+of our own; without the Firebase env vars the app is fully local, as before.
 
 The original brief is long; the authoritative summary of requirements lives in this file plus `README.md`.
 Key brief points still to deliver are listed in §7.
@@ -50,6 +54,31 @@ src/
   ui/         React 19 views. SVG rendering (no canvas). State = one Project object + undo history.
   main.tsx    Entry point.
 samples/      Sample sizing table (CSV + identical JSON).
+```
+
+**Online saving (optional, browser-only Firebase).** The browser talks straight to Firebase: Google sign-in
+(`firebase/auth`) and Firestore *lite* (`firebase/firestore/lite`, plain HTTPS, no offline cache). Each project is one
+document `projects/{id}` (`owner`, `name`, `data` = `serializeProject` text, `schema`, `rev`, `updatedAt`,
+`createdAt`, `deleted?`); `firestore.rules` limits every user to their own documents. Config comes from four
+`VITE_FIREBASE_*` build-time env vars (`ui/cloud/config.ts`); if any is missing, nothing cloud-related is shown or
+loaded. Firebase, the saver and the sync code are a **lazy chunk** (`firebase-*.js`, ≈200 kB) loaded on Sign in, or at
+startup when the last visit was signed in (`knitbit.cloud.signedIn`); the Projects and Conflict dialogs are lazy too.
+Setup steps: README *Cloud save setup*; design and decisions: `docs/cloud-save-plan.md`.
+
+```
+edit ──► History<Project> ──► localStorage auto-save (400 ms, always first; works offline and signed out)
+              │
+              ▼  signed in: CloudSaver.changed (ui/cloud/saver.ts), debounced 2 s; flushed when the tab is hidden
+        syncProject(remote, local, marker)  (engine/cloudSync.ts, pure; tested with testRemote.ts)
+              ├─ compares the project's fingerprint and the online `rev` with the per-account sync marker
+              │  (`knitbit.syncMarker.v1:<uid>`: what this device last had in sync)
+              ├─ only this side changed → upload: transaction saves only if the stored `rev` is still the one
+              │  last seen (optimistic concurrency), writes a new random `rev`
+              ├─ only online changed → download, opened with store.replace (undoable)
+              └─ both changed → conflict: saving of that project pauses, ConflictDialog → resolveConflict
+                 (keep this device / keep online / save as a copy)
+        offline or network error → status "Offline", retry 2 s / 5 s / 15 s / 60 s and on the `online` event;
+        sign-in errors → "Sign in again", no retries
 ```
 
 **Data flow**
@@ -97,6 +126,7 @@ flagged `topDown`; the renderer flips them so every panel is drawn **upright**.
 | — | **Experimenting tools** (after M10, user request; "A then B before M11") | **A. Painted stitches** (`engine/free.ts`, `Panel.freeStitches` per size: row, x = cell left edge from the row centre, symbol, mirror): paint/erase/toggle, mirror with leaning swap, repeat every N rows × k, **Copy to all sizes** (proportional between waypoints and across the half width, snapped to the stitch grid), clear; Chart ✎ Paint mode (P), strokes interpolated, one undo per stroke; schematic marks. **B. Shaping lines** (`engine/lines.ts`, `Panel.shapingLines`: two anchors as cm expressions, amount in sts, one-way/fisheye, both/one side, RS/any rows, mirror, manual rows per size): `computeLines` spreads events, `lineX` interpolates; `lineFromPoints` turns two schematic clicks into graded expressions; presets; `LineProps` editor, ✎ Line tool, chart symbols either side of the line. Both feed one interior array in `computePanel` that widens the edges about the centre (edge markers shifted to match; darts too). Tests: `free.test.ts`, `lines.test.ts`. Also: `grading.allDims` now includes bust/princess/line expressions (rename + remove size). |
 | — | **Top-down shoulders-first construction** (user's usual method) | `templates.ts`: `construction` (default `shoulders-first` for top-down), `shoulderSlope` (short rows / none), `backNeck` (straight default / shaped); front `startFrom: 'pickup'`; armhole_bo = `underarm.width − 2·round(underarm_co/2/st_w)·st_w` so front and back cast on the same whole number of sts per side (half each); armhole_end at 0.6 (back) / 0.75 (front) of armhole depth so 4X fits; `topDownTop()` returns back + front + 2 joins (front top pick-up; underarm cast-on front sides vs back sides); 'top' template in the sidebar adds the set. Engine: top-down round start = max(underarm join, neck close) with an info note; top-down neck parity now checks row 1 (was the hem: a bug); square neck centre/width rounding; `measureEdge('top')` counts short-row-held cast-on sts. New estimate `underarm_co`. Tests: `construction.test.ts`, template cases. |
 | — | **Drag waypoints + linked panels** (user request) | `engine/waypointDrag.ts`: `placeHeight` (proportional `lo + (hi − lo) × t` between neighbours, skipping ones that would create a cycle; fixed offset for the top/bottom; 'size' = per-size override), `placeWidth`/`scaleExpr` (`(expr) × f`, factors folded), `dragHeight`/`dragWidth` (linked partner by waypoint name: same amount in this size, proportional elsewhere), `matchPartner`, `linkPanels` (`Panel.linkedTo`, symmetric, set manually). Schematic: click a waypoint line to activate it, then drag the line/grip (ns-resize) or the width handles (drawn on top); ↑↓ / ←→ nudge by a row / a stitch each side (Shift ×5, Alt this size) in App's key handler, Alt = this size only, readout, one undo per drag (`drag:wp:`); App keeps the width at drag start. Panel props: Linked panel; waypoint props: Match buttons. Tests: `waypointDrag.test.ts`. |
+| — | **Cloud save** (2026-10, branches `claude/cloud-sync-m1…m5-*`; plan M1–M5 in `docs/cloud-save-plan.md`) | `engine/cloudSync.ts` (`ProjectRemote`, sync marker + fingerprint, `decideSync`/`syncProject`, `resolveConflict`) and `cloudProjects.ts` (sort, rename, duplicate, delete, first-sign-in upload rule), tested with `testRemote.ts`. `ui/cloud/`: `config.ts` (env vars), `status.ts` (labels), `firebase.ts` (lazy: Google sign-in popup → redirect fallback, Firestore lite `ProjectRemote` with a `rev` token per save, soft delete), `saver.ts` (debounce, one sync at a time, offline + backoff, auth errors; `saver.test.ts` with fake timers), `useCloud.ts`. `CloudStatus.tsx` (sign-in button, status, avatar menu), `ProjectsDialog.tsx` (Open… when signed in), `ConflictDialog.tsx`. `firestore.rules`, `firebase.json`, `.env.example`. Commits: M1 `37a7414`, M2 `2e9b75a` + `6e4d370`, M3 `c580261`, M4 `6bcd1f0`, M5 docs `ed79296`. |
 | 10 | **Stitch chart + symbols & legend** | `engine/chart.ts` (`buildChart`: per knit row a cell array, `''` outside / `'k'` plain / `'h'` held / symbol id; bind-offs and cast-ons drawn in their row; shaping at `shapingInset`; neck split + mirrored neck shaping; vertical-dart symbols at the dart lines; **bust short rows inserted after `afterRow`** as SR1…SRn with turns and held stitches; RS/WS/round reading direction; worked + live counts; repeats from sections; legend of used symbols; `collapseColumns`). `ui/glyphs.tsx` (CYC-style SVG glyphs in a unit square, cell tints, low-zoom band colours, legend swatch). **Chart** tab (`ChartView.tsx`): upright like the schematic, row-virtualised, plain stitches drawn as runs over an SVG grid pattern, ⌘-scroll zoom, Fit, collapse plain middle, row/stitch numbers, count column, hover readout; select/drag/double-click-add/Delete markers via `markerActions`; One size / Grid (shared scale). **Custom symbols** (`project.symbols`: label, abbr, colour, stitch change) editable in the legend, offered in the marker Stitch menu, `markerDelta` honours them. |
 
 ---
@@ -177,6 +207,9 @@ All confirmed with the user unless marked _(my call)_.
 ├── index.html, package.json, tsconfig.json, vite.config.ts, vitest.config.ts
 ├── .claude/launch.json            dev server config for the Claude desktop preview (npm run dev, port 5173)
 ├── samples/sizing_table_cm.csv    10 sizes (3XS–4X), cm; .json is the same data
+├── firestore.rules, firebase.json Firebase security rules (projects/{id}, owner only) and CLI config
+├── .env.example                   the four VITE_FIREBASE_* vars; copy to .env.local (git-ignored)
+├── docs/cloud-save-plan.md        online saving: options, data model, sync behaviour, milestones
 └── src/
     ├── main.tsx
     ├── engine/                    (≈4.4k lines incl. tests)
@@ -200,6 +233,9 @@ All confirmed with the user unless marked _(my call)_.
     │   ├── lines.ts               shaping lines: computeLines, lineX, lineFromPoints
     │   ├── chart.ts               buildChart (cells per row, SR rows, refs to markers, repeats, legend), collapseColumns
     │   ├── checks.ts              projectChecks, groupChecks
+    │   ├── cloudSync.ts           ProjectRemote, sync marker/fingerprint, decideSync, syncProject, resolveConflict
+    │   ├── cloudProjects.ts       Projects dialog operations, first-sign-in upload rule
+    │   ├── testRemote.ts          in-memory ProjectRemote for tests (failWith for errors)
     │   ├── testFixtures.ts        fixtureProject() from the sample CSV, sizeId()
     │   └── *.test.ts              207 tests (incl. armhole, layout, chart, shapingOptions, free, lines, construction, waypointDrag)
     └── ui/
@@ -212,6 +248,8 @@ All confirmed with the user unless marked _(my call)_.
         ├── glyphs.tsx             chart symbol glyphs (unit square), cell tints, band colours, legend Swatch
         ├── selection.ts           Selection union
         ├── format.ts, fileio.ts, app.css
+        ├── cloud/                 online saving: config.ts (env), status.ts (labels), firebase.ts (lazy SDK +
+        │                          Firestore remote), saver.ts (+test: debounce, retries, offline), useCloud.ts (hook)
         └── components/
             ├── Schematic.tsx      ★ SVG renderer, zoom/pan, labels, markers, handles, bust, joins, overlay/grid modes
             ├── LineProps.tsx      shaping line editor + presets
@@ -223,6 +261,9 @@ All confirmed with the user unless marked _(my call)_.
             ├── MeasurementsView.tsx (grid), ImportDialog.tsx, CheckPanel.tsx
             ├── ExprField.tsx      expression input + evaluated value + per-size fixed value
             ├── Sidebar.tsx        Panels / Joins / Project tabs, add-panel form
+            ├── CloudStatus.tsx    Sign in with Google / save status / avatar menu; opens ConflictDialog (lazy)
+            ├── ProjectsDialog.tsx online projects list (lazy), first-sign-in upload choice
+            ├── ConflictDialog.tsx the three conflict choices + Decide later (lazy)
             └── Toolbar.tsx
 ```
 
@@ -276,6 +317,12 @@ All confirmed with the user unless marked _(my call)_.
 - **`cap_height`** (estimate `armhole_depth × 0.65`) is still seeded but no longer used by the set-in template.
 - **Drop-shoulder sleeve** top width (`armhole_depth × 2`) does not follow the body; only the set-in cap does.
 - **Joins don't auto-suggest** anything (by design); there is no "common joins" helper.
+- **Online saving is untested against real Firebase**: the sync code is unit-tested with the in-memory remote, but no
+  Firebase project existed yet, so Google sign-in, the rules and the Firestore transaction haven't run for real. After
+  the README *Cloud save setup*, try sign-in, two devices, a conflict, offline and Delete. Also not built: version
+  history (only the latest copy online; Save downloads a backup), sharing projects with others, email sign-in,
+  undelete or automatic purging of soft-deleted projects (`deleted` stays in Firestore), and a Firestore rules test
+  with the emulator. The About box still says "local-only … Nothing leaves this browser".
 
 ---
 

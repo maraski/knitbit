@@ -1,0 +1,17 @@
+/* Projects dialog; loads with the lazy ProjectsDialog chunk. */
+.modal.projects { width: min(620px, calc(100vw - 32px)); }
+.projects-ask { display: flex; align-items: center; gap: 12px; padding: 10px 12px; margin-bottom: 12px; border-radius: 6px; background: var(--accent-soft); }
+.projects-ask p { margin: 0; flex: 1; }
+.projects-list { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line); }
+.projects-list li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 4px; border-bottom: 1px solid var(--line); }
+.projects-list li.open { background: var(--accent-soft); }
+.projects-list li[aria-busy='true'] { opacity: 0.6; }
+.projects-name { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; min-width: 0; }
+.projects-name strong { overflow-wrap: anywhere; }
+.projects-name .muted { font-size: 12px; }
+.projects-tag { font-size: 11px; padding: 0 5px; border-radius: 3px; background: var(--accent); color: #fff; }
+.projects-actions, .projects-rename { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.projects-rename { flex: 1; }
+.projects-rename input { flex: 1; min-width: 160px; }
+.projects .modal-foot { align-items: center; }
+.projects .modal-foot .spacer { flex: 1; }
