@@ -2,7 +2,11 @@
 
 Goal: sign in on any device and see your projects. No file downloading or uploading. Saving happens on its own.
 
-## How saving works today
+**Status: done (M1–M5).** Built as below, with the differences noted under each milestone. User-facing behaviour and
+the owner's setup steps are in the README (*Saving online*, *Cloud save setup*); architecture in HANDOFF.md §1. Not
+yet tested against a real Firebase project.
+
+## How saving worked before this plan
 
 - **Auto-save** ([autosave.ts](../src/engine/autosave.ts), [store.ts](../src/ui/store.ts)) writes the current project to
   `localStorage` 400 ms after each edit. It keeps only that one project, in that one browser.
@@ -11,7 +15,7 @@ Goal: sign in on any device and see your projects. No file downloading or upload
   including upgrades from older schema versions. A project is about 50 kB of JSON.
 - Each `Project` already has an `id`, `name` and `updatedAt`, which is everything needed to keep a list of projects and
   spot conflicts.
-- HANDOFF.md calls the app "local-only (no auth, backend, hosting)". That line changes with this work.
+- HANDOFF.md called the app "local-only (no auth, backend, hosting)". It now describes the optional Firebase layer.
 
 ## Recommendation: Firebase (Firestore + Google sign-in)
 
@@ -41,6 +45,10 @@ createdAt  : timestamp
 deleted?   : timestamp // soft delete, kept 30 days
 ```
 
+As built (M2): a `rev` field (a random token written by every save) is what the conditional save compares, because a
+server timestamp isn't known inside the transaction; `updatedAt` is only shown ("last edited"). Soft-deleted documents
+are kept but nothing purges them after 30 days yet.
+
 Security rules: you can read, create or update a project only if you are signed in and `owner == your user id`. A
 new project's `owner` must be your user id, and `data` must be under 900 kB (Firestore's per-document limit is 1 MiB).
 
@@ -63,7 +71,7 @@ new project's `owner` must be your user id, and `data` must be under 900 kB (Fir
   "Conflict".
 - **Open…** becomes a **Projects** dialog that lists online projects (name, last edited) with Open, Rename,
   Duplicate and Delete. "Open from file…" stays there for `.knitbit.json` files.
-- **Save** stays as **Download a copy** (`.knitbit.json`), useful as a backup.
+- **Save** stays as **Download a copy** (`.knitbit.json`), useful as a backup. (As built, the button is still labelled **Save**, ⌘S.)
 - The first time you sign in, the current local project is offered for upload.
 
 ## Code layout
@@ -81,6 +89,9 @@ new project's `owner` must be your user id, and `data` must be under 900 kB (Fir
 
 ## Setup (done once, by you)
 
+Superseded by the step-by-step guide in the README (*Cloud save setup*), which also covers Vercel environments,
+redeploying and how to check it works. Summary:
+
 1. Create a Firebase project. Enable **Authentication → Google** and **Firestore** (production mode).
 2. Add the Vercel domain (and `localhost`) to the authorised domains under Authentication.
 3. Add the web-app config to Vercel → Project → Settings → Environment Variables as `VITE_FIREBASE_API_KEY`,
@@ -91,16 +102,18 @@ new project's `owner` must be your user id, and `data` must be under 900 kB (Fir
 ## Milestones
 
 1. **Sync logic + tests**: `cloudSync.ts` and the in-memory fake. Covers conflict and offline cases. No UI yet.
+   Done in `2d65e95`.
 2. **Sign-in + cloud save of the current project**: Firebase module (lazy), Google sign-in, debounced save, status
-   label, security rules.
+   label, security rules. Done in `3f4df4b`; `59e23cd` switched to Firestore lite and leaner auth and moved the saver
+   and sync code into the lazy chunk.
 3. **Projects dialog**: list, open, rename, duplicate, delete. First-sign-in upload of the local project.
-   Done: `ProjectsDialog.tsx` (lazy) with the operations in `src/engine/cloudProjects.ts`. At sign-in, a project this
+   Done in `ae782e6`: `ProjectsDialog.tsx` (lazy) with the operations in `src/engine/cloudProjects.ts`. At sign-in, a project this
    device never synced is uploaded straight away only when nothing else is online; otherwise the dialog asks
    (Upload this project, or open an online one; "Not now" keeps it on this device, status "Only on this device").
    Deleting the open project opens the most recently edited remaining one, or a fresh sample when none is left
    (a sample every time would add a new "My top" online after each delete).
 4. **Conflicts + offline**: conflict dialog with its three choices, offline handling, save when the tab is hidden.
-   Done: `ConflictDialog.tsx` (lazy, opened from `CloudStatus.tsx`) shows both versions' name and last-edited time
+   Done in `49dc89d`: `ConflictDialog.tsx` (lazy, opened from `CloudStatus.tsx`) shows both versions' name and last-edited time
    and calls `CloudSaver.resolve` (M1's `resolveConflict`). Edits made while it's open count as this device's
    version; if another device saves again meanwhile, the dialog shows the newer conflict. "Keep the online version"
    and "Save as a copy" open the result with the store's `replace`, so undo goes back. "Decide later" leaves saving
@@ -125,9 +138,13 @@ new project's `owner` must be your user id, and `data` must be under 900 kB (Fir
    - Offline edits only live in this browser until they're uploaded: opening the project on another device before
      then shows the older online copy (and later a conflict, if both are edited).
    The logic is in `src/ui/cloud/saver.ts` and tested in `saver.test.ts` with the in-memory remote and fake timers.
-5. **Docs**: README section, HANDOFF goal/architecture update, setup steps.
+5. **Docs**: README section, HANDOFF goal/architecture update, setup steps. Done in the M5 commit: README *Saving
+   online* (for the knitter) and *Cloud save setup* (numbered owner guide with checks), HANDOFF §1/§2/§4, this status.
 
 ## Open questions
+
+Decided for now: only you (no sharing), Google sign-in only, latest copy only (plus the downloaded `.knitbit.json` from Save). Still
+open for later:
 
 - Only you, or other people too (sharing a project read-only by link)? Sharing adds a `viewers` list or a public flag
   to the rules. It's easy to add later if the data model stays as above.

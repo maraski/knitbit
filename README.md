@@ -1,8 +1,9 @@
 # Knitbit
 
-A local-only visualizer for knitted panel shaping in women's tops: schematics, size grading,
+A browser-based visualizer for knitted panel shaping in women's tops: schematics, size grading,
 shaping placement, bust shaping and stitch charts. It does not write pattern text and does not decide
 how panels are joined.
+Projects are auto-saved in the browser and, optionally, online with Google sign-in (see *Saving online*).
 
 **Sizing**: an 11-size table of body measurements (4XS–4X, cm) with bust by cup (A/B to G/H), hips straight or curvy,
 and bust dart data; a measurement dictionary with tooltips; project-wide fit choices (cup, hem level, broad back);
@@ -37,23 +38,124 @@ npm test           # unit tests (Vitest)
 npm run typecheck
 ```
 
+## Saving online
+
+Optional, and only shown when the site has been set up for it (see *Cloud save setup* below). Without that setup
+there's no sign-in button and the app works entirely in this browser.
+
+**Sign in.** Click **Sign in with Google** in the toolbar (a popup; where popups are blocked, the page goes to Google
+and comes back). Once signed in, the toolbar shows a save status and your avatar; the avatar menu has **Sign out**.
+You stay signed in on that browser until you sign out. Your projects are visible only to you.
+
+**Saving.** While signed in, the open project is saved online about 2 s after you stop editing, and straight away
+when you hide or close the tab. There is no Save step. The status next to the avatar says where things stand:
+
+| Status | Meaning |
+|---|---|
+| **Saved online · just now** (or *· 5 min ago*, *· 14:32*) | The online copy matches this one. |
+| **Saving…** | A save is on its way. |
+| **Offline: saved on this device** | No connection. Edits are kept in this browser and sent when you're back online. |
+| **Not saved online** | Hover for the reason. A failed save is retried on its own. If the project was deleted online (from another device) or its online copy can't be read, a notice says so and online saving of it pauses; it stays saved on this device. |
+| **Conflict** | Changed here and on another device. Click it to choose what to keep (below). |
+| **Only on this device** | First sign-in: this project hasn't been uploaded (you chose *Not now*). |
+| **Sign in again to keep saving online** | The sign-in expired or was revoked. Click it to sign in again; saving resumes. |
+
+**Projects dialog.** Signed in, **Open…** (⌘O) shows your online projects, most recently edited first, with
+**Open**, **Rename**, **Duplicate** and **Delete**, plus **Open from file…** for `.knitbit.json` files. A file you open
+is saved online from then on. Deleting the open project opens the most recently edited remaining one, or a fresh
+sample if none is left. Deleted projects disappear from the list; there's no undelete in the app.
+
+**First sign-in.** If the open project has never been online: with nothing else online it's uploaded straight away;
+otherwise the Projects dialog asks you to **Upload this project** or open one of your online projects. **Not now**
+keeps it on this device only.
+
+**Opening the app.** Signed in, the app checks the open project against its online copy: edits made here while
+offline are uploaded; if another device saved a newer version, that version opens (undo goes back to this one, with a
+notice saying so); if both changed, you get the conflict dialog.
+
+**Offline.** Edits always go to this browser's auto-save first, so nothing is lost without a connection. While
+offline nothing is sent; failed saves retry after 2 s, 5 s, 15 s, then every minute, and at once when the connection
+returns. Until then, offline edits exist only in this browser: another device shows the older online copy.
+
+**Conflicts.** If the project changed on this device *and* online (another device saved it) since this device last
+synced, nothing is overwritten. The **Changed in two places** dialog shows both versions' name and last-edited time:
+
+- **Keep this device's version**: replaces the online version.
+- **Keep the online version**: opens it here. Undo brings this device's version back.
+- **Save this device's version as a copy**: saves it online as "*name* (copy)" and opens it; the online version stays.
+
+**Decide later** closes the dialog; the project keeps saving on this device but not online until you click
+**Conflict** in the toolbar and choose.
+
+**Still there when signed in or out:** the on-device auto-save (below) and **Save** (⌘S), which downloads a
+`.knitbit.json` copy, useful as a backup. Signed out, the app behaves as if online saving didn't exist.
+
 ## Cloud save setup
 
-Optional. Without it the app works as before (auto-save in this browser, Save / Open… files) and shows no sign-in.
-With it, a **Sign in with Google** button appears and the open project is saved online about 2 s after each edit
-and when the tab is hidden. See `docs/cloud-save-plan.md`.
+For the site owner, done once. Online saving uses Firebase (Google sign-in + Firestore) directly from the browser;
+there is no server code. Until steps 1–7 are done the app simply shows no sign-in. Plan and reasoning:
+`docs/cloud-save-plan.md`.
 
-1. Create a Firebase project. Enable **Authentication → Sign-in method → Google** and **Firestore** (production mode).
-2. Under Authentication → Settings → Authorised domains, add the Vercel domain (`localhost` is there by default).
-3. Add a web app (Project settings → Your apps) and copy its config into Vercel → Project → Settings → Environment
-   Variables as `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID` and
-   `VITE_FIREBASE_APP_ID`, then redeploy. For local dev, copy `.env.example` to `.env.local` (git-ignored) and fill
-   it in. These values are public by design; the security rules protect the data.
-4. Deploy `firestore.rules`: paste it into Firestore → Rules in the console, or run
-   `firebase deploy --only firestore:rules` (uses `firebase.json`).
+1. **Create the Firebase project.** At [console.firebase.google.com](https://console.firebase.google.com), *Create a
+   project* (Google Analytics isn't needed). The free **Spark** plan is enough.
+2. **Enable Google sign-in.** Build → **Authentication** → *Get started* → **Sign-in method** → **Google** → Enable,
+   pick a support email, Save.
+3. **Create the Firestore database.** Build → **Firestore Database** → *Create database*, choose a location (it can't
+   be changed later; pick one near you, e.g. `europe-west`), and start in **production mode** (everything denied until
+   step 6 publishes the rules).
+4. **Authorise the domains.** Authentication → **Settings** → **Authorised domains** → *Add domain*: the Vercel
+   domain (e.g. `knitbit.vercel.app`) and any custom domain. `localhost` is listed by default; keep it for local dev.
+   Sign-in fails with `auth/unauthorized-domain` on any domain not listed, including Vercel preview URLs.
+5. **Register a web app and copy its config.** Project settings (⚙) → General → **Your apps** → Web (`</>`), any
+   nickname, no Firebase Hosting. From the `firebaseConfig` it shows, four values are used:
 
-Firebase is loaded only after you click Sign in, or at startup when you were signed in last time
-(`knitbit.cloud.signedIn` in localStorage), so it stays out of the main bundle.
+   | Variable | From `firebaseConfig` |
+   |---|---|
+   | `VITE_FIREBASE_API_KEY` | `apiKey` |
+   | `VITE_FIREBASE_AUTH_DOMAIN` | `authDomain` (`<project-id>.firebaseapp.com`) |
+   | `VITE_FIREBASE_PROJECT_ID` | `projectId` |
+   | `VITE_FIREBASE_APP_ID` | `appId` |
+
+   - **Vercel:** Project → Settings → **Environment Variables**, add all four for **Production** (and **Preview** if
+     you want sign-in on preview deployments; their domains must then be authorised too, step 4).
+   - **Local dev:** `cp .env.example .env.local` and fill in the same four (`.env.local` is git-ignored). Restart
+     `npm run dev` after changing it.
+
+   These values end up in the public JavaScript by design; they identify the project, they don't grant access. The
+   security rules (next step) protect the data. If any of the four is missing, cloud features stay hidden.
+6. **Publish the security rules** from `firestore.rules` (each user can read and write only their own projects; a
+   project's text must be under 900 kB). Either:
+   - Console: Firestore Database → **Rules**, replace the contents with `firestore.rules`, **Publish**; or
+   - CLI: `npm install -g firebase-tools`, `firebase login`, then
+     `firebase deploy --only firestore:rules --project <project-id>` (uses `firebase.json`).
+
+   Re-publish whenever `firestore.rules` changes. No indexes are needed.
+7. **Redeploy on Vercel.** The variables are read at build time, so an existing deployment doesn't see them:
+   Deployments → latest → ⋯ → **Redeploy** (or push a commit).
+
+**Check that it works**
+
+1. Locally (`npm run dev`) or on the deployed site, **Sign in with Google** appears in the toolbar. If it doesn't, a
+   variable is missing or the deployment predates it.
+2. Sign in. The status turns to **Saved online · just now** within a few seconds of an edit.
+3. In the Firebase console, Firestore Database → Data shows a `projects` document with your `owner` (your user id,
+   also under Authentication → Users), `name`, `data`, `rev` and `updatedAt`.
+4. Open the site in another browser or device, sign in, **Open…**: the project is listed. Edit it in both to see the
+   conflict dialog.
+5. Errors to look for: `auth/unauthorized-domain` (step 4), `auth/configuration-not-found` or
+   `auth/operation-not-allowed` (step 2), **Not saved online** with *Missing or insufficient permissions* (rules not
+   published, step 6).
+
+**Limits and cost.** The Spark plan is free. Its quotas are roughly 50k document reads, 20k writes and 20k deletes a
+day and 1 GiB stored (a project is about 50 kB, saved at most once per pause in editing), far more than one knitter
+uses. These figures are approximate and change; check
+[firebase.google.com/pricing](https://firebase.google.com/pricing) before relying on them. Over quota, saves fail
+until the daily reset (status **Not saved online**); the on-device copy is unaffected.
+
+**How it's loaded.** The Firebase SDK (`firebase/firestore/lite`, about 200 kB) is a separate chunk, loaded only when
+you click Sign in or at startup when you were signed in last time (`knitbit.cloud.signedIn` in localStorage). The
+per-account sync marker is `knitbit.syncMarker.v1:<uid>`. Deleted projects are marked `deleted` in Firestore, not
+removed; delete them in the console if you want the space back.
 
 ## Project layout
 
@@ -91,7 +193,12 @@ Firebase is loaded only after you click Sign in, or at startup when you were sig
   - `contiguous.ts`: the contiguous yoke generator (phases A–F, neck, row-by-row zones and increases) and `yoke.*` names.
   - `yokePanel.ts`, `yokeTop.ts`: the yoke as a panel and chart; its top-view geometry.
   - `contiguousGarment.ts`: body and sleeves from the yoke's held stitches. `contiguousChecks.ts`: their checks.
-- `src/ui/`: React views. `src/ui/cloud/`: online saving (`config.ts` env check, `firebase.ts` loaded lazily, `saver.ts` debounce and status, `useCloud.ts` hook).
+  - `cloudSync.ts`: online sync decisions (upload, download, conflict) against a `ProjectRemote` interface, the sync
+    marker, conflict resolution. `cloudProjects.ts`: Projects dialog operations. `testRemote.ts`: in-memory remote for tests.
+- `src/ui/`: React views. `src/ui/cloud/`: online saving (`config.ts` env check, `status.ts` status labels,
+  `firebase.ts` Firebase + `ProjectRemote`, loaded lazily, `saver.ts` debounce, retries and status, `useCloud.ts` hook);
+  `components/CloudStatus.tsx`, `ProjectsDialog.tsx`, `ConflictDialog.tsx` (the last two lazy).
+- `firestore.rules`, `firebase.json`, `.env.example`: Firebase security rules and config (see *Cloud save setup*).
 - `samples/`: the sample sizing table (`sizing_table_ysolda_cm.csv`, and `.json` with the same data).
 - `src/engine/fixtures/`: test data: the old sample table, and schema-1 and schema-2 project files.
 
@@ -926,7 +1033,7 @@ schema-1 fixture, which goes through both migrations.
 
 Every change is saved to `localStorage` (`knitbit.autosave.v1`) after a short pause, and restored on start. If the
 auto-save can't be read, the app starts from the sample table and says why. Save to a file for anything you want
-to keep. Auto-save is only a safety net.
+to keep, or sign in to save online (*Saving online*). Auto-save is only a safety net.
 
 ## Undo
 
