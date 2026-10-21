@@ -6,12 +6,13 @@ import { generateBodyAndSleeves } from './contiguousGarment';
 import { addStrips, bandEdges, defaultEdges } from './edgeTreatments';
 import { setConstruction, setOpening } from './garment';
 import { measureEdge } from './joins';
-import type { CardiganOptions, NecklineShape, Project } from './model';
+import type { CardiganOptions, NecklineShape, Project, YokeStart } from './model';
 import { fixtureProject, sizeId } from './testFixtures';
 
-function contiguous(opening: 'closed' | 'cardigan', card: Partial<CardiganOptions> = {}): Project {
+function contiguous(opening: 'closed' | 'cardigan', card: Partial<CardiganOptions> = {}, start: YokeStart = 'neck'): Project {
   let p = setOpening(setConstruction({ ...fixtureProject(), panels: [] }, 'contiguous'), opening);
   p = generateBodyAndSleeves({ ...p, edges: defaultEdges(), cardigan: { ...defaultCardigan(), ...card } });
+  if (start === 'back') p = { ...p, panels: p.panels.map((x) => (x.yoke ? { ...x, yoke: defaultYoke('round', 'back') } : x)) };
   return addStrips(p);
 }
 const yokeOf = (p: Project) => p.panels.find((x) => x.yoke)!;
@@ -19,7 +20,7 @@ const name = (p: Project, id: string) => p.panels.find((x) => x.id === id)!.name
 
 describe('the yoke neck and front edges', () => {
   it('pullover: the neck is the cast-on, two neck slopes and the centre cast-on; no front edges', () => {
-    const p = contiguous('closed');
+    const p = contiguous('closed', {}, 'back');
     const M = sizeId(p, 'M');
     const yk = yokeOf(p);
     const y = generateYoke(p, yk.yoke!, M);
@@ -32,7 +33,7 @@ describe('the yoke neck and front edges', () => {
   });
 
   it('cardigan: front edges from the front-edge cast-on down to the split', () => {
-    const p = contiguous('cardigan');
+    const p = contiguous('cardigan', {}, 'back');
     const M = sizeId(p, 'M');
     const yk = yokeOf(p);
     const y = generateYoke(p, yk.yoke!, M);
@@ -43,6 +44,21 @@ describe('the yoke neck and front edges', () => {
     expect(left.rows).toBe(y.rows.length - R - 1);
     const neck = measureEdge(p, { panelId: yk.id, edge: { kind: 'neck' } }, M, p.settings.pickUp);
     expect(neck.stitches).toBe(y.castOn + 2 * y.neck.frontEdgeCo);
+  });
+
+  it('whole-neck start: the neck is the cast-on; a cardigan front edge runs from the short rows to the split', () => {
+    const pull = contiguous('closed');
+    const M = sizeId(pull, 'M');
+    const yp = generateYoke(pull, yokeOf(pull).yoke!, M);
+    const neck = measureEdge(pull, { panelId: yokeOf(pull).id, edge: { kind: 'neck' } }, M, pull.settings.pickUp);
+    expect(neck.stitches).toBe(yp.castOn);
+    expect(neck.pickup).toBe(yp.castOn);
+    const card = contiguous('cardigan');
+    const Mc = sizeId(card, 'M');
+    const yc = generateYoke(card, yokeOf(card).yoke!, Mc);
+    const right = measureEdge(card, { panelId: yokeOf(card).id, edge: { kind: 'front', side: 'right' } }, Mc, card.settings.pickUp);
+    // Each front edge: once in the short rows, then every row after them.
+    expect(right.rows).toBe(yc.rows.length - yc.shortRows!.endRow + 1);
   });
 });
 
@@ -84,7 +100,7 @@ describe('neck shapes on a contiguous yoke', () => {
   const p = fixtureProject();
   const M = sizeId(p, 'M');
   const bn = Math.round(15 * 2.2);
-  const neck = (shape: NecklineShape) => generateYoke(p, { ...defaultYoke(shape) }, M).neck;
+  const neck = (shape: NecklineShape) => generateYoke(p, { ...defaultYoke(shape, 'back') }, M).neck;
 
   it('round: half the increases every row next to the centre, cast on the centre', () => {
     const n = neck('round');
@@ -110,14 +126,14 @@ describe('neck shapes on a contiguous yoke', () => {
   it('a boat neck is cast on wider than the back neck; older yokes without a width keep the back neck', () => {
     const p = fixtureProject();
     const M = sizeId(p, 'M');
-    const round = generateYoke(p, defaultYoke('round'), M);
-    const boat = generateYoke(p, defaultYoke('boat'), M);
+    const round = generateYoke(p, defaultYoke('round', 'back'), M);
+    const boat = generateYoke(p, defaultYoke('boat', 'back'), M);
     const spc = boat.stitchesPerCm;
     expect(boat.castOnZones.back).toBe(Math.round((round.params.neckWidth.value + 6) * spc));
     expect(boat.castOnZones.back - round.castOnZones.back).toBeGreaterThanOrEqual(Math.round(6 * spc) - 1);
     // Shorter shoulders: the back still reaches the same width after them.
     expect(boat.counts.A).toBeLessThan(round.counts.A);
-    const legacy = defaultYoke('boat');
+    const legacy = defaultYoke('boat', 'back');
     delete legacy.neck.width;
     expect(generateYoke(p, legacy, M).castOnZones.back).toBe(round.castOnZones.back);
   });

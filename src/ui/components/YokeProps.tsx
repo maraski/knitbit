@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import { backNeckPositions, defaultYoke, type YokeParam } from '../../engine/contiguous';
+import { backNeckPositions, defaultShortRows, defaultYoke, type YokeParam } from '../../engine/contiguous';
 import { generateBodyAndSleeves, missingYokePanels } from '../../engine/contiguousGarment';
 import { FRONT_NECKS } from '../../engine/templates';
-import { dim, type DimExpr, type NecklineShape, type YokeSpec } from '../../engine/model';
+import { dim, type DimExpr, type NecklineShape, type YokeSpec, type YokeStart } from '../../engine/model';
 import { computePanel } from '../../engine/panel';
 import { SYMBOLS } from '../../engine/symbols';
 import { editPanel } from '../edit';
@@ -33,7 +33,7 @@ export function YokeProps({ ctx }: { ctx: PropsContext }) {
         <input value={panel.name} onChange={(e) => update((p) => editPanel(p, panel.id, (pp) => void (pp.name = e.target.value)), `panel.${panel.id}.name`)} />
       </div>
       <p className="hint">
-        Worked top-down in one piece from the back neck: the contiguous method by Susie Myers (SusieM on Ravelry). Rows come from these phases, not from
+        Worked top-down in one piece from the neck: the contiguous method by Susie Myers (SusieM on Ravelry). Rows come from these phases, not from
         waypoints. Row 1 is a RS row that places the markers.
       </p>
       <IssueList issues={c.issues} ctx={ctx} />
@@ -98,6 +98,35 @@ export function YokeProps({ ctx }: { ctx: PropsContext }) {
       </div>
       {num('Seam stitches (more = rounder cap)', 'seamSts', (s) => s.seamSts, (s, d) => (s.seamSts = d))}
 
+      <h4>Start</h4>
+      <div className="field">
+        <label>Cast on</label>
+        <select
+          value={spec.start ?? 'back'}
+          onChange={(e) => {
+            const start = e.target.value as YokeStart;
+            // Each start brings its back neck default: increases for the method's start, none with short rows.
+            setYoke((s) => {
+              s.start = start;
+              s.shortRows ??= defaultShortRows();
+              s.backNeck.perRow = dim(start === 'neck' ? 0 : 2);
+            });
+          }}
+        >
+          <option value="neck">the whole neck, short rows raise the back</option>
+          <option value="back">the back neck only (as the method's PDF)</option>
+        </select>
+      </div>
+      {spec.start === 'neck' && (
+        <>
+          {num('Front cast-on, both fronts (cm)', 'frontCo', (s) => (s.shortRows ?? defaultShortRows()).frontCo, (s, d) => ((s.shortRows ??= defaultShortRows()).frontCo = d))}
+          {num('Short-row pairs', 'srPairs', (s) => (s.shortRows ?? defaultShortRows()).pairs, (s, d) => ((s.shortRows ??= defaultShortRows()).pairs = d))}
+          {num('First turn, sts past the shoulder marker', 'srFirst', (s) => (s.shortRows ?? defaultShortRows()).first, (s, d) => ((s.shortRows ??= defaultShortRows()).first = d))}
+          {num('Sts between turns', 'srStep', (s) => (s.shortRows ?? defaultShortRows()).step, (s, d) => ((s.shortRows ??= defaultShortRows()).step = d))}
+          {y?.shortRows && <ShortRowsWorked y={y} cardigan={project.garment.opening === 'cardigan'} />}
+        </>
+      )}
+
       <h4>A · Shoulders</h4>
       <div className="field">
         <label>Until</label>
@@ -129,7 +158,14 @@ export function YokeProps({ ctx }: { ctx: PropsContext }) {
           onChange={(e) => {
             const shape = e.target.value as NecklineShape;
             const d = defaultYoke(shape).neck;
-            setYoke((s) => void (s.neck = d));
+            setYoke((s) => {
+              s.neck = d;
+              // Short rows can't make a V's depth: a V neck takes the method's start with its neck increases.
+              if (shape === 'v' && s.start === 'neck') {
+                s.start = 'back';
+                s.backNeck.perRow = dim(2);
+              }
+            });
           }}
         >
           {(Object.keys(FRONT_NECKS) as NecklineShape[]).map((k) => <option key={k} value={k}>{k}</option>)}
@@ -138,7 +174,7 @@ export function YokeProps({ ctx }: { ctx: PropsContext }) {
       {cm('Neck width, cast on across the back (cm)', (s) => s.neck.width ?? dim('back_neck_width'), (s, d) => (s.neck.width = d), 'neckWidth')}
       {cm('Depth below the neck point (cm)', (s) => s.neck.depth, (s, d) => (s.neck.depth = d), 'neckDepth')}
       {spec.neck.shape !== 'v' && spec.neck.shape !== 'square' && cm('Centre (cm)', (s) => s.neck.centre, (s, d) => (s.neck.centre = d), 'neckCentre')}
-      {y && <NeckWorked y={y} cardigan={project.garment.opening === 'cardigan'} rpc={y.rowsPerCm} />}
+      {y && !y.shortRows && <NeckWorked y={y} cardigan={project.garment.opening === 'cardigan'} rpc={y.rowsPerCm} />}
 
       <h4>C, D · Sleeve cap</h4>
       {num('Cap top stitches (markers move to)', 'capTopSts', (s) => s.cap.topSts, (s, d) => (s.cap.topSts = d))}
@@ -198,6 +234,34 @@ export function YokeProps({ ctx }: { ctx: PropsContext }) {
 
       <h4>All sizes</h4>
       <AllSizes ctx={ctx} />
+    </div>
+  );
+}
+
+/** How the whole-neck start is worked in this size: the cast-on, the short rows and where the rounds begin. */
+function ShortRowsWorked({ y, cardigan }: { y: NonNullable<PropsContext['computed']['yoke']>; cardigan: boolean }) {
+  const sr = y.shortRows!;
+  const z = y.castOnZones;
+  return (
+    <div className="formula">
+      <div>
+        Cast on <b>{y.castOn}</b>: left front {z.leftFront} · seam {z.leftSleeve} · back {z.back} · seam {z.rightSleeve} · right front {z.rightFront}
+        {cardigan ? ', worked flat.' : ', join in the round; the round starts at the left back shoulder marker (between the back and the left seam).'}
+      </div>
+      {sr.pairs > 0 ? (
+        <div>
+          {cardigan
+            ? `Row 1 (RS): from the right front edge to ${sr.turns[0]} sts before the left front edge, turn. `
+            : `Row 1 (RS): from the marker to ${sr.turns[0]} sts before centre front, turn (no increases). `}
+          Then German short rows, each turn {sr.step} st{sr.step === 1 ? '' : 's'} nearer centre front: turns at {sr.turns.join(', ')} sts from
+          {cardigan ? ' each front edge' : ' centre front'} ({sr.pairs} pairs, rows 1–{sr.endRow - 1}).{' '}
+          {cardigan
+            ? `Row ${sr.endRow} (RS): to the left front edge; then every row across.`
+            : `Row ${sr.endRow} (RS): from the last turn back to the marker (no increases); then rounds.`}
+        </div>
+      ) : (
+        <div>No short rows: the back isn't raised.</div>
+      )}
     </div>
   );
 }

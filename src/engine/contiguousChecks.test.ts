@@ -11,11 +11,16 @@ function garment(edit: (y: YokeSpec) => void = () => {}): Project {
   const p = generateBodyAndSleeves(setConstruction({ ...fixtureProject(), panels: [] }, 'contiguous'));
   return { ...p, panels: p.panels.map((x) => (x.yoke ? { ...x, yoke: (() => { const y = structuredClone(x.yoke!); edit(y); return y; })() } : x)) };
 }
+// The method's start (back neck only), which these numbers were worked out for.
+const back = (y: YokeSpec) => {
+  y.start = 'back';
+  y.backNeck.perRow = dim(2);
+};
 const msgs = (p: Project, size: string) => contiguousChecks(p, sizeId(p, size), new Map()).map((c) => `${c.issue.severity}: ${c.issue.message}`);
 
 describe('contiguous checks', () => {
   it('compares the back and fronts at the end of the shoulders with cross back and cross front, as info', () => {
-    const m = msgs(garment(), 'M');
+    const m = msgs(garment(back), 'M');
     expect(m).toContain('info: End of the shoulders (row 27): the back is 43.2 cm, 3.2 cm wider than the cross back (40.0 cm).');
     expect(m.some((x) => /^info: End of the shoulders: the fronts \(with the neck between them\) are 40\.5 cm, 2\.7 cm wider than the cross front \(37\.8 cm\)\.$/.test(x))).toBe(true);
   });
@@ -45,7 +50,7 @@ describe('contiguous checks', () => {
   });
 
   it('warns when an edited body or sleeve no longer starts with the held stitches plus the cast-on', () => {
-    const p = garment();
+    const p = garment(back);
     const edited = { ...p, panels: p.panels.map((x) => (x.fromYoke === 'leftSleeve' ? { ...x, waypoints: x.waypoints.map((w) => (w.name === 'underarm' ? { ...w, width: dim('yoke.sleeve_w + 2') } : w)) } : x)) };
     expect(msgs(edited, 'M').some((x) => /^warning: Left sleeve starts with \d+ sts, but the yoke holds 86 \+ 12 cast on = 98\.$/.test(x))).toBe(true);
     expect(msgs(p, 'M').some((x) => /starts with/.test(x))).toBe(false);
@@ -55,13 +60,24 @@ describe('contiguous checks', () => {
 
   it('reports the generator problems (rows that do not fit, counts) through the yoke panel', () => {
     const p = garment((y) => {
+      back(y);
       y.neck = { ...y.neck, shape: 'v', depth: dim(40) };
     });
     const all = projectChecks(p).filter((c) => c.sizeName === 'M').map((c) => c.issue.message);
     expect(all.some((x) => /front neck closes on row \d+, below the underarm split/.test(x))).toBe(true);
   });
 
-  it('has no warnings for the defaults in M', () => {
+  it('has no warnings for the defaults in M (both starts)', () => {
     expect(msgs(garment(), 'M').filter((x) => x.startsWith('warning'))).toEqual([]);
+    expect(msgs(garment(back), 'M').filter((x) => x.startsWith('warning'))).toEqual([]);
+  });
+
+  it('whole-neck start: short rows that end below the split are an error', () => {
+    const p = garment((y) => {
+      y.shortRows!.pairs = dim(60);
+      y.shortRows!.step = dim(0);
+    });
+    const all = projectChecks(p).filter((c) => c.sizeName === 'M').map((c) => c.issue.message);
+    expect(all.some((x) => /short rows end on row \d+, below the underarm split/.test(x))).toBe(true);
   });
 });

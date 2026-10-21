@@ -630,7 +630,8 @@ per phase, back length, underarm cast-on, held stitches). Removing a size clears
 - **Seen from above.** Both the Schematic and the Chart show the yoke from above: the neck in the middle, each row a
   ring around it (spaced by the row height), each stitch an angle by its share of the ring. Back at the top, fronts at
   the bottom, the wearer's left sleeve on the right. Before a pullover's neck is joined (and on a cardigan, all the
-  way) the ring is open at centre front. Where the fronts cast on at the neck, the edge follows that row round to
+  way) the ring is open at centre front. On a whole-neck start each short-row pair is drawn between its turns, so
+  the neck steps down to centre front (turns marked DS). Where the fronts cast on at the neck, the edge follows that row round to
   centre front (the bottom of the neck), not a straight line across it. The cast-on is round the back neck (back neck,
   both shoulders' seam stitches and one front stitch each side); zoomed in, the view labels it, marks where row 1
   starts (a RS row starts at the right front edge, going clockwise seen from above) and names the row that closes the
@@ -664,7 +665,23 @@ Joins record it: *Body continues from the yoke* and *Left/Right sleeve continues
 the yoke's held edges: a new edge kind `{ "kind": "held", "part": "leftSleeve" | "body" | "rightSleeve" }`), and
 *Underarm cast-on*. Change the yoke and the body and sleeves follow in every size.
 
-**Front neck.** The yoke's neck uses the neckline shapes (round, V, square, boat) worked top-down: increases at each
+**Start.** A yoke starts one of two ways (properties → *Start*):
+
+- **The whole neck, short rows raise the back** (the default for new yokes, except a V neck): cast on left front,
+  seam, back neck, seam, right front. The fronts are cast on as wide as the neck (*Front cast-on*, `neck_w` = the
+  neck width; per size). German short rows raise the back above the front: *pairs* = (front neck depth −
+  `back_neck_drop`) ÷ row height ÷ 2, the first turn *first* sts past each front shoulder marker, each next turn
+  *step* sts nearer centre front (by default spread from the first turn to the neck's centre part). No back neck
+  increases and no front neck increases. A pullover is joined at the cast-on with the round starting at the left back
+  shoulder marker: row 1 (RS) runs from there to the first turn, rows 2 to 2 × pairs go turn to turn, and the next
+  row runs from the last turn back to the marker; those two half rows make no increases (the shoulders get one more
+  row instead). Rounds follow. A cardigan is flat throughout: row 1 starts at the right front edge, the last
+  short-row row ends at the left front edge. The neck edge is the cast-on; a cardigan's front edges run from the
+  short rows to the split. Without back neck increases the shoulder seam is a few rows longer to reach the cross
+  back.
+- **The back neck only** (as the method's PDF, and every yoke saved before the choice existed): below.
+
+**Front neck (back neck start).** The yoke's neck uses the neckline shapes (round, V, square, boat) worked top-down: increases at each
 front edge (inside the edge stitch), then a cast-on. The neck opening at the top is cast on across the back (the
 fronts begin at the neck points), so its *width* is the back neck: `back_neck_width`, or `back_neck_width + 6` for a
 boat neck (wider, so the shoulder seams are shorter). *Width*, *depth* and *centre* are expressions with per-size

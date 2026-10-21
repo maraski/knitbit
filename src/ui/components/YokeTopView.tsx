@@ -4,7 +4,7 @@ import { ZONES, zoneName, type YokeResult } from '../../engine/contiguous';
 import type { CustomSymbol, Id, Panel, Project } from '../../engine/model';
 import type { ComputedPanel } from '../../engine/panel';
 import type { Units } from '../../engine/units';
-import { boundaryAngle, boundaryPoints, hitStitch, polar, stitchAngle, topGeometry, zoneOffsets, type TopGeometry, type TopRing } from '../../engine/yokeTop';
+import { boundaryAngle, boundaryPoints, clampToRing, hitStitch, polar, stitchAngle, topGeometry, zoneOffsets, type TopGeometry, type TopRing } from '../../engine/yokeTop';
 import { zoneStarts } from '../../engine/yokePanel';
 import { len } from '../format';
 import { cellFill, Glyph, Swatch } from '../glyphs';
@@ -78,7 +78,7 @@ function zoneShape(g: TopGeometry, zi: number, P: (x: number, y: number) => { x:
   for (let j = 1; j < steps; j++) pts.push(polar(last.r1, boundaryAngle(last, lo[zi] + ((lo[zi + 1] - lo[zi]) * j) / steps)));
   pts.push(...boundaryPoints(g, zi + 1).reverse());
   const first = g.rings[0];
-  const fo = zoneOffsets(first.zones);
+  const fo = zoneOffsets(first.zones).map((o) => clampToRing(first, o));
   const fsteps = Math.max(2, Math.ceil(fo[zi + 1] - fo[zi]));
   for (let j = fsteps - 1; j > 0; j--) pts.push(polar(first.r0, boundaryAngle(first, fo[zi] + ((fo[zi + 1] - fo[zi]) * j) / fsteps)));
   return pts.map((p, i) => {
@@ -88,14 +88,14 @@ function zoneShape(g: TopGeometry, zi: number, P: (x: number, y: number) => { x:
 }
 
 function ringArc(ring: TopRing, r: number, P: (x: number, y: number) => { x: number; y: number }): string {
-  const a0 = boundaryAngle(ring, 0);
-  const a1 = boundaryAngle(ring, ring.total);
+  const a0 = boundaryAngle(ring, ring.lo);
+  const a1 = boundaryAngle(ring, ring.hi);
   const p0 = polar(r, a0);
   const p1 = polar(r, a1);
   const q0 = P(p0.x, p0.y);
   const q1 = P(p1.x, p1.y);
   const R = P(r, 0).x - P(0, 0).x;
-  if (ring.gap === 0) {
+  if (ring.gap === 0 && ring.lo === 0 && ring.hi === ring.total) {
     const c = P(0, 0);
     return `M${(c.x - R).toFixed(1)},${c.y.toFixed(1)}a${R.toFixed(1)},${R.toFixed(1)} 0 1 0 ${(2 * R).toFixed(1)},0a${R.toFixed(1)},${R.toFixed(1)} 0 1 0 ${(-2 * R).toFixed(1)},0`;
   }
@@ -299,7 +299,7 @@ export function YokeTopView({ project, panel, computed: c, view, mode, compare, 
       {mode === 'single' && (
         <div className="yoke-key">
           <div>
-            Cast on <b>{y.castOn}</b> round the back neck: front {y.castOnZones.leftFront} · seam {y.seamSts} · back neck {y.castOnZones.back} ({len(y.castOnZones.back / y.stitchesPerCm, units)}) · seam {y.seamSts} · front {y.castOnZones.rightFront}
+            Cast on <b>{y.castOn}</b> round the {y.shortRows ? 'whole' : 'back'} neck: front {y.castOnZones.leftFront} · seam {y.seamSts} · back neck {y.castOnZones.back} ({len(y.castOnZones.back / y.stitchesPerCm, units)}) · seam {y.seamSts} · front {y.castOnZones.rightFront}
           </div>
           <div>
             Shoulder seam <b>{y.counts.A}</b> rows · {len(y.derived.seamCm, units)}
@@ -319,7 +319,9 @@ export function YokeTopView({ project, panel, computed: c, view, mode, compare, 
             ))}
           {y.counts.neckRow !== null && y.counts.neckRow <= y.counts.total && (
             <div>
-              {y.counts.joinRow ? 'neck joined in the round' : 'neck cast on at the front edges'} · row {y.counts.neckRow}
+              {y.shortRows
+                ? `short rows: rows 1–${y.counts.neckRow}${y.counts.joinRow !== null ? ', then rounds (start at the left back marker)' : ''}`
+                : `${y.counts.joinRow ? 'neck joined in the round' : 'neck cast on at the front edges'} · row ${y.counts.neckRow}`}
             </div>
           )}
           <div>
@@ -416,9 +418,11 @@ function NeckNotes({ y, g, P, scale }: { y: YokeResult; g: TopGeometry; P: (x: n
   }
   const ring1 = g.rings[1];
   if (ring1) {
-    // Row 1 starts at the right front edge and runs clockwise (seen from above) round to the left front.
+    // Row 1 starts at the right front edge (a whole-neck pullover: at the round's start, the left back shoulder
+    // marker) and runs clockwise seen from above.
     const rm = (ring1.r0 + ring1.r1) / 2;
-    const a0 = boundaryAngle(ring1, ring1.total);
+    const bor = y.shortRows && y.counts.joinRow !== null;
+    const a0 = boundaryAngle(ring1, bor ? zoneOffsets(ring1.zones)[2] : ring1.total);
     const span = Math.min(0.6, 36 / Math.max(1, rm * scale));
     const s0 = at(rm, a0 + span * 0.1);
     const e = at(rm, a0 + span);
@@ -432,11 +436,21 @@ function NeckNotes({ y, g, P, scale }: { y: YokeResult; g: TopGeometry; P: (x: n
       </g>,
     );
     const lq = at(rm, a0);
-    if (words) parts.push(<text key="r1t" x={lq.x + 8} y={lq.y + 4} className="yoke-note">row 1 ({y.rows[0]?.rs === false ? 'WS' : 'RS'}) starts here</text>);
+    // Into the neck opening: right of the right front edge, left of the round's start.
+    if (words) parts.push(<text key="r1t" x={bor ? lq.x - 8 : lq.x + 8} y={lq.y + 4} textAnchor={bor ? 'end' : 'start'} className="yoke-note">row 1 ({y.rows[0]?.rs === false ? 'WS' : 'RS'}) starts here{bor ? ' (round start)' : ''}</text>);
   }
   const { neckRow, joinRow } = y.counts;
   const ringR = neckRow ? g.rings[neckRow] : undefined;
-  if (words && ringR && neckRow! <= y.counts.total) {
+  const sr = y.shortRows;
+  if (words && sr && sr.pairs && sr.endRow < y.counts.total) {
+    // Halfway down the short rows, where the opening is still wide enough for the words.
+    const ring = g.rings[Math.ceil(sr.endRow / 2)];
+    const q = at(ring.r0, Math.PI);
+    const lines = [`rows 1–${sr.endRow}: short rows`, ...(joinRow !== null ? [`rounds from row ${sr.endRow + 1}`] : [])];
+    lines.forEach((line, i) =>
+      parts.push(<text key={`sr${i}`} x={q.x} y={q.y - 8 - 12 * (lines.length - 1 - i)} textAnchor="middle" className="yoke-note">{line}</text>),
+    );
+  } else if (words && !sr && ringR && neckRow! <= y.counts.total) {
     const n = y.neck;
     // Two short lines just above the closing row, so they stay inside the opening where it curves up.
     const lines = joinRow
@@ -481,7 +495,7 @@ function TopChart({
     const cellPx = ((2 * Math.PI * ring.r1) / ring.slots) * scale;
     if (cellPx >= 7 && rowPx >= 6) {
       let d = '';
-      for (let i = 0; i <= ring.total; i++) {
+      for (let i = ring.lo; i <= ring.hi; i++) {
         const a = boundaryAngle(ring, i);
         const p0 = polar(ring.r0, a);
         const q0 = P(p0.x, p0.y);
@@ -493,22 +507,34 @@ function TopChart({
       if (d) parts.push(<path key={`sl${ring.row}`} d={d} className="yoke-st-line" />);
     }
   }
-  // The cast-on (the start): a band of cast-on cells just inside the neck, one per stitch.
-  const ring0 = g.rings[0];
-  const ri = Math.max(ring0.r0 * 0.5, ring0.r0 - 1 / y.rowsPerCm);
-  const coCell = Math.min(rowPx, ((2 * Math.PI * ri) / ring0.slots) * scale);
-  for (let i = 0; i < ring0.total; i++) {
-    const am = stitchAngle(ring0, i);
-    const cp = polar((ri + ring0.r0) / 2, am);
-    const cq = P(cp.x, cp.y);
-    if (!visible(cq)) continue;
-    parts.push(<path key={`co${i}`} d={sector(ri, ring0.r0, boundaryAngle(ring0, i), boundaryAngle(ring0, i + 1), P)} fill={cellFill('co', custom)} className="yoke-cell" />);
-    if (coCell >= 7)
-      parts.push(
-        <g key={`cog${i}`} transform={`translate(${cq.x},${cq.y}) rotate(${(am * 180) / Math.PI}) scale(${coCell}) translate(-0.5,-0.5)`} className="yoke-glyph">
-          <Glyph id="co" custom={custom} />
-        </g>,
-      );
+  // The cast-on (the start): a band of cast-on cells just inside the neck edge, one per stitch. On a whole-neck start
+  // the fronts' cast-on stitches between the turns are first worked further out: their cells follow the steps.
+  const rowH = 1 / y.rowsPerCm;
+  const coCells = (ring: TopRing, r0: number, from: number, to: number, key: string) => {
+    const ri = Math.max(r0 * 0.5, r0 - rowH);
+    const cell = Math.min(rowPx, ((2 * Math.PI * ri) / ring.slots) * scale);
+    for (let i = from; i < to; i++) {
+      const am = stitchAngle(ring, i);
+      const cp = polar((ri + r0) / 2, am);
+      const cq = P(cp.x, cp.y);
+      if (!visible(cq)) continue;
+      parts.push(<path key={`${key}${i}`} d={sector(ri, r0, boundaryAngle(ring, i), boundaryAngle(ring, i + 1), P)} fill={cellFill('co', custom)} className="yoke-cell" />);
+      if (cell >= 7)
+        parts.push(
+          <g key={`${key}g${i}`} transform={`translate(${cq.x},${cq.y}) rotate(${(am * 180) / Math.PI}) scale(${cell}) translate(-0.5,-0.5)`} className="yoke-glyph">
+            <Glyph id="co" custom={custom} />
+          </g>,
+        );
+    }
+  };
+  coCells(g.rings[0], g.rings[0].r0, g.rings[0].lo, g.rings[0].hi, 'co');
+  for (let k = 1; k < g.rings.length; k++) {
+    const ring = g.rings[k];
+    const prev = g.rings[k - 1];
+    const uR = ring.total - ring.hi;
+    const uRprev = prev.total - prev.hi;
+    if (ring.lo < prev.lo) coCells(ring, ring.r0, ring.lo, prev.lo, `col${k}-`);
+    if (uR < uRprev) coCells(ring, ring.r0, ring.total - uRprev, ring.total - uR, `cor${k}-`);
   }
   // Symbols: every cell that isn't a plain stitch.
   if (chart) {

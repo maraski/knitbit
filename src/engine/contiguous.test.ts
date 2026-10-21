@@ -9,7 +9,7 @@ const p = fixtureProject();
 const M = sizeId(p, 'M');
 const spc = 2.2;
 const rpc = 3;
-const gen = (spec: Partial<YokeSpec> = {}, project: Project = p, size = M) => generateYoke(project, { ...defaultYoke(), ...spec }, size);
+const gen = (spec: Partial<YokeSpec> = {}, project: Project = p, size = M) => generateYoke(project, { ...defaultYoke('round', 'back'), ...spec }, size);
 const kinds = (y: YokeResult, r: number, kind: string) => y.rows[r - 1].incs.filter((i) => i.kind === kind).length;
 
 describe('cast-on and row layout', () => {
@@ -108,16 +108,16 @@ describe('phases, row by row', () => {
     expect(total).toBeGreaterThanOrEqual(base);
     expect(y.rows.length).toBe(total);
     expect(C).toBeLessThanOrEqual((total - A) / 2);
-    const flat = gen({ depth: { ...defaultYoke().depth, deepen: false } });
+    const flat = gen({ depth: { ...defaultYoke('round', 'back').depth, deepen: false } });
     expect(flat.counts.total).toBe(base);
     // One row less would need more than half the armhole rapid (or leave the sleeve short).
-    const less = gen({ depth: { ...defaultYoke().depth, deepen: false, extra: dim((total - base - 1) / rpc) } });
+    const less = gen({ depth: { ...defaultYoke('round', 'back').depth, deepen: false, extra: dim((total - base - 1) / rpc) } });
     expect(less.counts.C > (less.counts.total - less.counts.A) / 2 || less.issues.some((i) => /short of its width/.test(i.message))).toBe(true);
     expect(y.issues.some((i) => /^Yoke deepened by \d+ rows \(\d+\.\d cm\)/.test(i.message))).toBe(total > base);
   });
 
   it('adds extra depth on top', () => {
-    const y2 = gen({ depth: { ...defaultYoke().depth, deepen: false, extra: dim(2) } });
+    const y2 = gen({ depth: { ...defaultYoke('round', 'back').depth, deepen: false, extra: dim(2) } });
     expect(y2.counts.total).toBe(Math.round((4.5 + 20.75 - 2.75) * rpc) + 6);
   });
 });
@@ -142,7 +142,7 @@ describe('phase targets', () => {
 
   it('the sleeve reaches bicep + ease with the underarm cast-on (armhole depth mode, every size)', () => {
     for (const s of p.sizes) {
-      const y = gen({ depth: { ...defaultYoke().depth, mode: 'armhole' } }, p, s.id);
+      const y = gen({ depth: { ...defaultYoke('round', 'back').depth, mode: 'armhole' } }, p, s.id);
       const scope = buildScope(p, s.id);
       const target = Math.round((scope.bicep + scope['ease.bicep']) * spc);
       expect(y.held.leftSleeve + y.underarmCo).toBeGreaterThanOrEqual(target);
@@ -160,7 +160,7 @@ describe('phase targets', () => {
   });
 
   it('says when the sleeve cannot reach its width', () => {
-    const y = gen({ depth: { ...defaultYoke().depth, deepen: false } }, p, sizeId(p, '4X'));
+    const y = gen({ depth: { ...defaultYoke('round', 'back').depth, deepen: false } }, p, sizeId(p, '4X'));
     expect(y.issues.some((i) => /The sleeve reaches \d+ sts .* short of its width/.test(i.message))).toBe(true);
   });
 
@@ -198,7 +198,7 @@ describe('graded sizes', () => {
   it('computes every size without errors, growing with the size', () => {
     let prev: YokeResult | null = null;
     for (const s of p.sizes) {
-      const y = gen({ depth: { ...defaultYoke().depth, mode: 'armhole' } }, p, s.id);
+      const y = gen({ depth: { ...defaultYoke('round', 'back').depth, mode: 'armhole' } }, p, s.id);
       expect(y.issues.filter((i) => i.severity === 'error')).toEqual([]);
       if (prev) {
         expect(y.castOn).toBeGreaterThanOrEqual(prev.castOn);
@@ -298,8 +298,95 @@ describe('saving', () => {
   it('round-trips a panel with a yoke', async () => {
     const { loadProject, serializeProject } = await import('./schema');
     const { newPanel } = await import('./model');
-    const panel = { ...newPanel('Yoke'), yoke: defaultYoke() };
+    const panel = { ...newPanel('Yoke'), yoke: defaultYoke('round', 'back') };
     const r = loadProject(serializeProject({ ...p, panels: [panel] }));
-    expect(r.ok && r.project.panels[0].yoke).toEqual(defaultYoke());
+    expect(r.ok && r.project.panels[0].yoke).toEqual(defaultYoke('round', 'back'));
+  });
+});
+
+describe('whole-neck start: short rows raise the back', () => {
+  const neck = (spec: Partial<YokeSpec> = {}, project: Project = p) => generateYoke(project, { ...defaultYoke('round'), ...spec }, M);
+
+  it('is the default for new yokes, except a V neck; older yokes without a start keep the back start', () => {
+    expect(defaultYoke().start).toBe('neck');
+    expect(defaultYoke('boat').start).toBe('neck');
+    expect(defaultYoke('v').start).toBe('back');
+    const legacy = defaultYoke('round', 'back');
+    delete legacy.start;
+    delete legacy.shortRows;
+    expect(generateYoke(p, legacy, M).start).toBe('back');
+    expect(generateYoke(p, legacy, M).castOnZones.leftFront).toBe(1);
+  });
+
+  it('casts on the whole neck: the fronts as wide as the back neck, the seams and the back; no back neck increases', () => {
+    const y = neck();
+    const bn = Math.round(15 * spc);
+    expect(y.castOnZones).toEqual({ leftFront: Math.floor(bn / 2), leftSleeve: 2, back: bn, rightSleeve: 2, rightFront: bn - Math.floor(bn / 2) });
+    expect(y.rows.some((r) => r.backNeck)).toBe(false);
+    expect(y.rows.some((r) => r.neck || r.castOns.length)).toBe(false);
+  });
+
+  it('pairs from the raise (front neck depth − back neck drop), turns stepped towards centre front', () => {
+    const y = neck();
+    const s = buildScope(p, M);
+    const sr = y.shortRows!;
+    expect(sr.pairs).toBe(Math.round(Math.max(0, y.params.neckDepth.value - s.back_neck_drop) * rpc / 2));
+    expect(sr.endRow).toBe(2 * sr.pairs + 1);
+    const side = y.castOnZones.leftFront;
+    expect(sr.turns[0]).toBe(side - sr.first);
+    for (let i = 1; i < sr.pairs; i++) expect(sr.turns[i - 1] - sr.turns[i]).toBe(sr.step);
+  });
+
+  it('pullover: row 1 from the left back marker to the first turn and the last row back to it, both without increases; rounds after', () => {
+    const y = neck();
+    const sr = y.shortRows!;
+    const n = sr.pairs;
+    const r1 = y.rows[0];
+    expect(r1).toMatchObject({ rs: true, plain: true, incs: [], turn: { side: 'left', at: sr.turns[0] } });
+    expect(r1.span).toEqual([sr.turns[0], r1.zones.leftFront + r1.zones.leftSleeve]);
+    for (let r = 2; r <= 2 * n; r++) {
+      const row = y.rows[r - 1];
+      const u = sr.turns[Math.ceil(r / 2) - 1];
+      expect(row.rs).toBe(r % 2 === 1);
+      expect(row.plain).toBeUndefined();
+      expect(row.turn).toEqual(r % 2 === 0 ? { side: 'right', at: row.total - u - 1 } : { side: 'left', at: u });
+      if (row.phase === 'A') expect(kinds(y, r, 'seam')).toBe(4);
+    }
+    // Even rows turn the same number of stitches from centre front on each side: symmetric.
+    const r2 = y.rows[1];
+    expect(r2.span).toEqual([sr.turns[0], r2.total - sr.turns[0]]);
+    const last = y.rows[sr.endRow - 1];
+    expect(last).toMatchObject({ rs: true, plain: true, incs: [] });
+    expect(last.span).toEqual([last.zones.leftFront + last.zones.leftSleeve, last.total - sr.turns[n - 1]]);
+    expect(y.counts.joinRow).toBe(sr.endRow);
+    expect(y.rows[sr.endRow].round).toBe(true);
+    expect(y.rows[sr.endRow].span).toBeUndefined();
+  });
+
+  it('the shoulders still reach the cross back: as many increase rows as without the half rows', () => {
+    const y = neck();
+    const incRows = y.rows.filter((r) => r.phase === 'A' && !r.plain).length;
+    const k = (y.capTopSts - y.seamSts) / 2;
+    const target = Math.round(y.params.backWidth.value * spc);
+    expect(Math.abs(y.castOnZones.back + 2 * incRows - 2 * k - target)).toBeLessThanOrEqual(1);
+    expect(y.endOfA.back - y.castOnZones.back).toBe(2 * incRows);
+  });
+
+  it('cardigan: flat throughout; row 1 from the right front edge, the last row to the left front edge; every row increases', () => {
+    const c = setOpening(p, 'cardigan');
+    const y = neck({}, c);
+    const sr = y.shortRows!;
+    expect(y.counts.joinRow).toBeNull();
+    expect(y.rows.every((r) => !r.round && !r.plain)).toBe(true);
+    expect(y.rows[0].span).toEqual([sr.turns[0], y.rows[0].total]);
+    expect(y.rows[sr.endRow - 1].span).toEqual([0, y.rows[sr.endRow - 1].total - sr.turns[sr.pairs - 1]]);
+    const closing = Math.round((buildScope(c, M).closing_r ?? 0) * spc);
+    expect(y.castOnZones.leftFront).toBe(Math.round((Math.round(15 * spc) - closing) / 2));
+  });
+
+  it('errors when the turns run past centre front, or the short rows end below the split', () => {
+    expect(neck({ shortRows: { ...defaultYoke().shortRows!, pairs: dim(30), step: dim(2) } }).issues.some((i) => i.severity === 'error' && /past centre front/.test(i.message))).toBe(true);
+    const deep = neck({ shortRows: { ...defaultYoke().shortRows!, pairs: dim(50), step: dim(0), first: dim(1) } });
+    expect(deep.issues.some((i) => /short rows end on row \d+, below the underarm split/.test(i.message))).toBe(true);
   });
 });

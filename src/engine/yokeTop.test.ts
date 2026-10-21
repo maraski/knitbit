@@ -6,7 +6,7 @@ import { fixtureProject, sizeId } from './testFixtures';
 
 const p = fixtureProject();
 const M = sizeId(p, 'M');
-const y = generateYoke(p, defaultYoke(), M);
+const y = generateYoke(p, defaultYoke('round', 'back'), M);
 const g = topGeometry(y);
 
 describe('yoke seen from above', () => {
@@ -28,7 +28,7 @@ describe('yoke seen from above', () => {
 
   it('keeps the band space open on a cardigan', () => {
     const c = setOpening(p, 'cardigan');
-    const gc = topGeometry(generateYoke(c, defaultYoke(), M));
+    const gc = topGeometry(generateYoke(c, defaultYoke('round', 'back'), M));
     expect(gc.rings[gc.rings.length - 1].gap).toBeGreaterThanOrEqual(0);
     expect(gc.rings.every((r) => r.gap >= 0)).toBe(true);
   });
@@ -61,7 +61,7 @@ describe('yoke seen from above', () => {
   });
 
   it('follows the centre-front cast-on along its row instead of cutting a V across it', () => {
-    const boat = generateYoke(p, defaultYoke('boat'), M);
+    const boat = generateYoke(p, defaultYoke('boat', 'back'), M);
     const gb = topGeometry(boat);
     const R = boat.counts.neckRow!;
     expect(boat.neck.centre).toBeGreaterThan(10);
@@ -85,7 +85,7 @@ describe('yoke seen from above', () => {
 
   it('cardigan: each front edge follows its own cast-on row', () => {
     const c = setOpening(p, 'cardigan');
-    const yc = generateYoke(c, defaultYoke('round'), M);
+    const yc = generateYoke(c, defaultYoke('round', 'back'), M);
     const gc = topGeometry(yc);
     const R = yc.counts.neckRow!;
     expect(gc.rings[R].edgeCo).toEqual([0, yc.neck.frontEdgeCo]);
@@ -96,4 +96,30 @@ describe('yoke seen from above', () => {
     expect(Math.abs(gc.rings[R + 1].lead - Math.max(0, gc.rings[R].lead - yc.neck.frontEdgeCo))).toBeLessThanOrEqual(0.5);
     expect(gc.rings[R + 1].gap - gc.rings[R + 1].lead).toBe(gc.rings[R].gap - gc.rings[R].lead);
   });
+
+  it('whole-neck start: each short-row pair is drawn between its turns; the front edge steps out to centre front', () => {
+    const yn = generateYoke(p, defaultYoke('round', 'neck'), M);
+    const gn = topGeometry(yn);
+    const sr = yn.shortRows!;
+    expect(gn.rings[0]).toMatchObject({ lo: sr.turns[0], hi: yn.castOn - sr.turns[0] });
+    for (let r = 1; r <= sr.endRow; r++) {
+      const u = sr.turns[Math.min(sr.pairs, Math.ceil(r / 2)) - 1];
+      expect(gn.rings[r]).toMatchObject({ lo: u, hi: gn.rings[r].total - u });
+    }
+    const after = gn.rings[sr.endRow + 1];
+    expect([after.lo, after.hi]).toEqual([0, after.total]);
+    // Outside the span there is no stitch to hover.
+    const ring = gn.rings[2];
+    const pt = polar((ring.r0 + ring.r1) / 2, stitchAngle(ring, 0));
+    expect(hitStitch(gn, pt.x, pt.y)).toBeNull();
+    // The left front edge starts at the first turn on the neck and reaches centre front once the short rows end.
+    const pts = boundaryPoints(gn, 0);
+    const first = polar(gn.rings[0].r0, boundaryAngle(gn.rings[0], sr.turns[0]));
+    expect(pts[0].x).toBeCloseTo(first.x);
+    expect(pts[0].y).toBeCloseTo(first.y);
+    const end = pts[pts.length - 1];
+    expect(Math.abs(end.x)).toBeLessThan(1e-6);
+    expect(end.y).toBeCloseTo(gn.outerR);
+  });
 });
+
