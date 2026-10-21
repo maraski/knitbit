@@ -1,7 +1,7 @@
 // Stitch chart view: the computed panel as a grid of cells, drawn upright (row 1 at the bottom for bottom-up
 // panels, at the top for top-down ones). Rows are virtualised; plain stitches are drawn as runs.
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { buildChart, collapseColumns, HELD, PLAIN, type Chart, type ChartRow, type DisplayCol } from '../../engine/chart';
 import type { CustomSymbol, Id, Panel, Project } from '../../engine/model';
 import { newId } from '../../engine/model';
@@ -13,6 +13,7 @@ import { signed } from '../format';
 import { cellX, clearFree, copyFreeToAllSizes, eraseStitch, findFree, freeFor, paintStitch, withOnlySize } from '../../engine/free';
 import { computePanel } from '../../engine/panel';
 import { SYMBOLS, type SymbolId } from '../../engine/symbols';
+import { cancelDrag, handledDoubleTap, isDoubleTap, slop, usePinch, useTouchUi } from '../touch';
 
 interface Props {
   project: Project;
@@ -160,6 +161,8 @@ function ChartCanvas({ chart, c, panel, update, brush, setBrush, custom, cs, set
   // The last cell painted (display row index, chart column): Shift-click draws a line from it.
   const anchor = useRef<{ yi: number; col: number } | null>(null);
   const stroke = useRef<{ key: string; erase: boolean; seen: Set<string>; last: { x: number; y: number } } | null>(null);
+  /** One finger scrolling the chart (a mouse uses the scroll bars and wheel). */
+  const pan = useRef<{ x: number; y: number; sl: number; st: number; moved: boolean } | null>(null);
   const panelStart = panel.startFrom ?? 'caston';
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -222,24 +225,43 @@ function ChartCanvas({ chart, c, panel, update, brush, setBrush, custom, cs, set
   // steps, each of which would round back to the same half-pixel cell size.
   const zoomTo = useRef<number | null>(null);
   const gestureFrom = useRef(0);
+  // Scroll position for the zoomed chart: set once the new cell size has rendered (or on the next frame, if the
+  // rounded size didn't change), so it isn't clamped to the old size. Several zoom steps can arrive before that.
+  const pendingScroll = useRef<{ x: number; y: number } | null>(null);
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    const to = pendingScroll.current;
+    if (!el || !to) return;
+    el.scrollLeft = to.x;
+    el.scrollTop = to.y;
+    pendingScroll.current = null;
+  }, [cs]);
+  const zoomAtRef = useRef<(next: number, clientX: number, clientY: number, toX?: number, toY?: number) => void>(() => {});
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
     if (zoomTo.current !== null && Math.abs(zoomTo.current - cs) > 0.5) zoomTo.current = null; // changed elsewhere
-    const zoomAt = (next: number, clientX: number, clientY: number) => {
+    // The chart point under (clientX, clientY) ends up under (toX, toY): the same place for the wheel, the fingers' midpoint for a pinch.
+    const zoomAt = (next: number, clientX: number, clientY: number, toX = clientX, toY = clientY) => {
       const from = zoomTo.current ?? cs;
       next = Math.max(MIN_CELL, Math.min(MAX_CELL, next));
       zoomTo.current = next;
       const r = el.getBoundingClientRect();
-      const px = clientX - r.left + el.scrollLeft;
-      const py = clientY - r.top + el.scrollTop;
+      const base = pendingScroll.current ?? { x: el.scrollLeft, y: el.scrollTop };
+      const px = clientX - r.left + base.x;
+      const py = clientY - r.top + base.y;
       const k = next / from;
       setCell(next);
+      const to = { x: px * k - (toX - r.left), y: py * k - (toY - r.top) };
+      pendingScroll.current = to;
       requestAnimationFrame(() => {
-        el.scrollLeft = px * k - (clientX - r.left);
-        el.scrollTop = py * k - (clientY - r.top);
+        if (pendingScroll.current !== to) return; // already set, or a later step will
+        el.scrollLeft = to.x;
+        el.scrollTop = to.y;
+        pendingScroll.current = null;
       });
     };
+    zoomAtRef.current = zoomAt;
     const onWheel = (e: WheelEvent) => {
       if (!e.ctrlKey && !e.metaKey) return;
       e.preventDefault();
@@ -249,10 +271,12 @@ function ChartCanvas({ chart, c, panel, update, brush, setBrush, custom, cs, set
     type Gesture = Event & { scale: number; clientX: number; clientY: number };
     const onGestureStart = (e: Event) => {
       e.preventDefault();
+      if (touching()) return; // a touch pinch: handled from its pointer events
       gestureFrom.current = zoomTo.current ?? cs;
     };
     const onGestureChange = (e: Event) => {
       e.preventDefault();
+      if (touching()) return;
       const g = e as Gesture;
       zoomAt(gestureFrom.current * g.scale, g.clientX, g.clientY);
     };
@@ -265,6 +289,23 @@ function ChartCanvas({ chart, c, panel, update, brush, setBrush, custom, cs, set
       el.removeEventListener('gesturechange', onGestureChange);
     };
   }, [cs, setCell]);
+
+  // Two fingers zoom and scroll; a second finger landing takes back the stroke or marker move the first one started.
+  const touchUi = useTouchUi();
+  const touching = usePinch(scrollRef, {
+    start: () => {
+      if (stroke.current) cancelDrag(stroke.current.key);
+      if (drag.current) cancelDrag(drag.current.key);
+      stroke.current = null;
+      drag.current = null;
+      pan.current = null;
+      setHover(null);
+    },
+    move: (s) => {
+      const r = scrollRef.current!.getBoundingClientRect();
+      zoomAtRef.current((zoomTo.current ?? cs) * s.k, s.from.x + r.left, s.from.y + r.top, s.to.x + r.left, s.to.y + r.top);
+    },
+  });
 
   // Visible rows only (plus a margin).
   const first = Math.max(0, Math.floor((view.top - TOP) / cs) - 10);
@@ -341,18 +382,26 @@ function ChartCanvas({ chart, c, panel, update, brush, setBrush, custom, cs, set
     }
     return true;
   };
-  const onPaintDown = (e: React.PointerEvent) => {
-    if (!brush.on || (e.button !== 0 && e.button !== 2)) return;
+  /** Starts a paint stroke (or picks a stitch); false when the press isn't painting. */
+  const startPaint = (e: React.PointerEvent) => {
+    if (!brush.on || (e.button !== 0 && e.button !== 2)) return false;
     const hit = cellAt(e.clientX, e.clientY);
-    if (!hit) return;
+    if (!hit) return false;
     e.preventDefault();
     if (e.metaKey || e.ctrlKey) {
       pickAt(hit);
-      return;
+      return true;
     }
     (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
     stroke.current = { key: `drag:paint:${Date.now()}`, erase: e.button === 2 || brush.symbol === 'erase', seen: new Set(), last: { x: e.clientX, y: e.clientY } };
     if (!(e.shiftKey && lineTo(hit))) paintAt(hit, true);
+    return true;
+  };
+  const onPaintDown = (e: React.PointerEvent) => {
+    if (startPaint(e) || e.pointerType !== 'touch') return;
+    const el = scrollRef.current!;
+    (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
+    pan.current = { x: e.clientX, y: e.clientY, sl: el.scrollLeft, st: el.scrollTop, moved: false };
   };
 
   const onPointerMove = (e: React.PointerEvent) => {
@@ -365,6 +414,20 @@ function ChartCanvas({ chart, c, panel, update, brush, setBrush, custom, cs, set
         if (hit) paintAt(hit, false);
       }
       stroke.current.last = { x: e.clientX, y: e.clientY };
+      return;
+    }
+    const pn = pan.current;
+    if (pn) {
+      const dx = e.clientX - pn.x;
+      const dy = e.clientY - pn.y;
+      if (!pn.moved && Math.hypot(dx, dy) > slop(e)) {
+        pn.moved = true;
+        setHover(null);
+      }
+      if (pn.moved) {
+        scrollRef.current!.scrollLeft = pn.sl - dx;
+        scrollRef.current!.scrollTop = pn.st - dy;
+      }
       return;
     }
     const d = drag.current;
@@ -382,11 +445,20 @@ function ChartCanvas({ chart, c, panel, update, brush, setBrush, custom, cs, set
       d.moved = true;
     }
   };
-  const onPointerUp = () => {
+  const onPointerUp = (e: React.PointerEvent) => {
+    const painting = !!stroke.current;
     stroke.current = null;
+    const p = pan.current;
+    pan.current = null;
     const d = drag.current;
     drag.current = null;
     if (d) onSelect({ kind: 'segment', fromWaypoint: d.fromWaypoint, edge: d.edge, marker: d.index });
+    // A finger tap shows that stitch's readout (tapping outside the chart hides it); two taps add a marker.
+    if (e.pointerType === 'touch' && !painting && (p ? !p.moved : d && !d.moved)) {
+      const hit = cellAt(e.clientX, e.clientY);
+      setHover(hit ? { row: hit.row, col: hit.col } : null);
+      if (hit && isDoubleTap(e)) onDouble(hit.row, hit.col);
+    }
   };
 
   const onCellDown = (e: React.PointerEvent, row: ChartRow, k: number) => {
@@ -458,6 +530,7 @@ function ChartCanvas({ chart, c, panel, update, brush, setBrush, custom, cs, set
           className={`sym${ref ? ' editable' : ''}${selected ? ' selected' : ''}`}
           onPointerDown={(e) => onCellDown(e, row, d.col)}
         >
+          {ref && touchUi && !brush.on && cs < 28 && <rect x={x + cs / 2 - 14} y={y + cs / 2 - 14} width={28} height={28} className="touch-hit" />}
           {fine ? (
             <>
               <rect x={x} y={y} width={cs} height={cs} fill={cellFill(v, custom)} className="cell-border" />
@@ -500,11 +573,12 @@ function ChartCanvas({ chart, c, panel, update, brush, setBrush, custom, cs, set
       <g
         key={row.key}
         onDoubleClick={(e) => {
+          if (handledDoubleTap()) return;
           const d = colAt(e.clientX);
           if (d && 'col' in d) onDouble(row, d.col);
         }}
         onPointerMove={(e) => {
-          if (drag.current) return;
+          if (drag.current || e.pointerType === 'touch') return;
           const d = colAt(e.clientX);
           setHover(d && 'col' in d ? { row, col: d.col } : null);
         }}
@@ -680,7 +754,7 @@ function ChartCanvas({ chart, c, panel, update, brush, setBrush, custom, cs, set
         onPointerDown={onPaintDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
-        onPointerLeave={() => setHover(null)}
+        onPointerLeave={(e) => e.pointerType !== 'touch' && setHover(null)}
         onContextMenu={(e) => brush.on && e.preventDefault()}
       >
         <svg ref={svgRef} width={GUT * 2 + W + 30 + (holeMarks.length ? 110 : 0) + (chart.zoneCounts ? 110 : 0)} height={TOP + H + BOT} className="chart-svg">
@@ -712,7 +786,7 @@ function ChartCanvas({ chart, c, panel, update, brush, setBrush, custom, cs, set
         {brush.on
           ? ' · Paint: click or drag to paint, Shift-click for a line from the last stitch, ⌘/Ctrl-click to pick up a stitch, click a painted stitch again (or right-click) to remove · each stroke is one undo'
           : markers && !hoverText
-            ? ' · drag a shaping symbol up or down · double-click a stitch to add a marker'
+            ? ` · drag a shaping symbol up or down · ${touchUi ? 'double-tap' : 'double-click'} a stitch to add a marker`
             : ''}
       </div>
     </div>

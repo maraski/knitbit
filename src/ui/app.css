@@ -167,6 +167,12 @@ table.events td { padding: 1px 12px 1px 0; border-top: 1px solid var(--line); }
 .canvas-title { display: flex; flex-wrap: wrap; row-gap: 4px; align-items: center; gap: 8px; padding: 6px 12px; border-bottom: 1px solid var(--line); background: var(--panel); }
 .canvas { flex: 1; position: relative; background: var(--canvas); overflow: hidden; cursor: grab; min-height: 0; }
 .canvas:active { cursor: grabbing; }
+/* Fingers on a canvas pinch, pan and drag it (ui/touch.ts) instead of scrolling or zooming the page; sidebars still scroll. */
+.canvas:not(.yoke-grid), .chart-scroll { touch-action: none; -webkit-touch-callout: none; }
+@media (pointer: coarse) { .canvas, .chart-scroll { -webkit-user-select: none; user-select: none; } }
+/* Bigger invisible hit areas for fingers. */
+.touch-hit { fill: transparent !important; stroke: none !important; }
+.schematic.touch .hit { stroke-width: 26; }
 .canvas-empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--muted); }
 .canvas-hint { position: absolute; left: 10px; bottom: 8px; font-size: 11px; color: var(--muted); pointer-events: none; }
 .legend { display: inline-flex; gap: 10px; font-size: 11.5px; color: var(--muted); margin-right: 8px; }

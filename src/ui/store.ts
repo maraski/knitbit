@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { readAutosave, writeAutosave } from '../engine/autosave';
-import { canRedo, canUndo, commit, createHistory, redo, undo, type History } from '../engine/history';
+import { canRedo, canUndo, commit, createHistory, redo, revert, undo, type History } from '../engine/history';
 import type { Project } from '../engine/model';
 import { syncFrontPairs } from '../engine/cardigan';
 
@@ -73,6 +73,16 @@ export function useProjectStore(init: StartState) {
 
   /** Replace the whole project (open / new); undoable. */
   const replace = useCallback((p: Project) => setHistory((h) => commit(h, p)), []);
+
+  // A canvas drag cut short by a two-finger pinch takes its edit back (see ui/touch.ts).
+  useEffect(() => {
+    const onCancel = (e: Event) => {
+      const key = (e as CustomEvent<string>).detail;
+      setHistory((h) => revert(h, key));
+    };
+    window.addEventListener('knitbit:cancel-drag', onCancel);
+    return () => window.removeEventListener('knitbit:cancel-drag', onCancel);
+  }, []);
 
   const actions = useMemo(
     () => ({
