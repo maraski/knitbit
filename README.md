@@ -13,7 +13,10 @@ optional region sizing (upper body, lower body and sleeves from different sizes)
 **Sizing data credit:** Body measurements adapted from Ysolda Teague's designer size chart, ysolda.com/designer-size-chart.
 The adapted table (`samples/sizing_table_ysolda_cm.csv`) is for personal use and should not be redistributed as a chart.
 
-**Garment options** (Project → Garment), combined freely: **Construction** *Panels* (the panels you draw) or
+**Starting a garment**: **New…** opens the *New garment* dialog (also on first run): how it's built, front,
+neckline, sleeves, fit, edges, sizes and gauge in one screen. See *Starting a garment*.
+
+**Garment options** (Garment tab), combined freely: **Construction** *Panels* (the panels you draw) or
 *Contiguous, top-down* (a generator that makes a contiguous yoke and the body and sleeves that continue from it, all
 ordinary editable panels), and **Front opening** *Closed / pullover* or *Cardigan* (mirrored left/right fronts,
 bands, buttons). Edge treatments (hem, cuff, neckband, front bands) are set once for the project. See *Garment
@@ -21,8 +24,8 @@ options*, *Cardigan fronts*, *Edge treatments*, *Cardigan bands and buttons* and
 
 **Contiguous method credit:** The contiguous construction follows the contiguous sleeve method developed by Susie
 Myers, SusieM on Ravelry (http://www.ravelry.com/people/SusieM). It is a method, not a pattern; Knitbit only models
-its phases. Projects that use it get the tag *contiguous*, and exports carry this line in their footer (Project →
-Garment → *Credit the construction method in export footers*, on by default): *"This garment is worked seamlessly
+its phases. Projects that use it get the tag *contiguous*, and exports carry this line in their footer (Garment
+tab → *Credit the construction method in export footers*, on by default): *"This garment is worked seamlessly
 from the top-down using the contiguous sleeve method developed by Susie Myers, SusieM on Ravelry
 (http://www.ravelry.com/people/SusieM)"*. (PDF/PNG export itself is not built yet; `exportFooter()` in
 `src/engine/garment.ts` gives it the footer lines.)
@@ -300,9 +303,44 @@ waypoint **with the same name** on the linked panel **by the same amount** (the 
 proportionally in the others; widths by the same proportion), so differences you built in are kept. To line them up
 instead, a linked waypoint's properties have *Make Front's armhole_end match this one: height / width / both*.
 
+## Starting a garment
+
+**New…** (toolbar) opens the **New garment** dialog; on first run (nothing saved in the browser) it opens over an
+empty project. One screen, one undoable step (undo goes back to the project you had):
+
+- **How it's built**: *Seamed panels, bottom-up* (back, front, sleeve; side and shoulder seams tagged),
+  *Top-down, shoulders first* (back cast on at the shoulders, front picked up from it, underarms cast on half each,
+  in the round below; sleeves top-down), *Contiguous yoke, top-down* (yoke, then body and sleeves continuing from
+  it), or *Start from blank* (no pieces).
+- **Front**: pullover or cardigan (fronts split into a mirrored pair, bands and buttons).
+- **Neckline** (round, V, square, boat) and **sleeves** (set-in cap, drop shoulder, straight or none; contiguous
+  yokes have their own set-in-look sleeves).
+- **Fit (ease)**: close (0 cm), standard (5), relaxed (10) or oversized (20) total ease, with bicep and wrist ease.
+- **Edges**: hem, cuff, neckband and (cardigans) front bands on or off and their stitch; the neckband and band strips
+  are made with the garment. Depths and the rest are in the Garment tab afterwards.
+- **Sizes and gauge**: keep this project's sizing table, use the sample table, or import your own next.
+
+*Open the sample project instead* opens the shipped sample (bottom-up back, front and set-in sleeve).
+
+The left sidebar has three tabs:
+
+- **Garment**: the same choices, editable later. Changing **how it's built** shows what it will replace, add and keep,
+  and rebuilds the bodices, sleeves and yoke when you confirm (other pieces, sizes, gauge, ease and edges stay; one
+  undo step). Changing the **sleeves** replaces the sleeve panels the same way; the **neckline** resets the front neck
+  (and a yoke's neck) to that shape's defaults in place. Also the edge treatments, tags and export credit.
+- **Pieces**: the piece list, *Add a piece* (single pieces that fit the method: sleeve, back, front, rectangle,
+  neckband strip; a contiguous garment offers rectangles and strips), and the **Joins** section.
+- **Settings**: gauge, fit choices, region sizing, checks, ease (with the presets) and join settings (seam
+  tolerance, pick-up ratio).
+
+Nothing new is saved for this: the method, neckline and sleeves are read from the pieces (`garmentChoice` in
+`src/engine/garmentSetup.ts`), so older projects show theirs without a migration: a contiguous construction reads as
+contiguous, top-down bodices as top-down, other bodices as seamed, and a project without bodices as *Custom*. The
+method is shown by the project name, e.g. *Contiguous · cardigan*.
+
 ## Templates
 
-Templates are starting points: everything they generate is an ordinary, editable panel. Add them from the Panels tab;
+Templates are starting points: everything they generate is an ordinary, editable panel. Add single pieces from the Pieces tab (it offers the pieces that fit the garment's method);
 duplicate (⧉) or delete (×) any panel there. Options: knitting direction, neckline, sleeve type, and for bodices
 "in the round below the underarm"; top-down bodices also have construction, shoulders and back neck.
 
@@ -324,7 +362,7 @@ cap top height solves `both cap edges ≈ armhole_len + cap_ease` (`cap_ease`, d
 `cap_bo.height + sqrt(((armhole_len + cap_ease)/2 × 0.966 − bind-off run)² − horizontal run²)`; 0.966 allows for the
 bell's curve. In the sample sizes the cap comes out 0.3–2.6 cm longer than the armhole; the seam check shows the exact figure.
 
-**Fit choices** (Project tab → *Fit*) pick sizing-table columns for names the templates use. They behave like
+**Fit choices** (Settings tab → *Fit*) pick sizing-table columns for names the templates use. They behave like
 measurements with an expression rule (shown in the Measurements grid with a *fit* tag); a measurement of the same name
 wins over them.
 
@@ -382,7 +420,7 @@ counts differ and notes when their side shaping falls on different rounds.
 Front panels carry an optional bust shaping setup (Panel → *Bust shaping*). The amounts are **starting estimates**
 from editable formulas, shown with your numbers plugged in, and each can be fixed for any size:
 
-- **Cup** (project-wide; also under Project → Fit): A/B, C/D, E/F, G/H, or a custom bust circumference
+- **Cup** (project-wide; also under Settings → Fit): A/B, C/D, E/F, G/H, or a custom bust circumference
   (`bust_custom`, added on request, starting as the C/D column; type your values per size in the grid). `bust` follows
   the cup's column.
 - **D** = `bust − upper_chest`.
@@ -480,7 +518,7 @@ rows by hand in the line's table (Reset to auto goes back). Presets: fisheye dar
 
 ## Garment options
 
-Project → **Garment** sets two options that combine freely (schema 3; older projects load as Panels + Closed, and
+The **Garment** tab sets two options that combine freely (schema 3; older projects load as Panels + Closed, and
 the upgrade says so):
 
 | | Panels | Contiguous, top-down |
@@ -506,7 +544,7 @@ switch back) and the export credit (above).
 
 ## Cardigan fronts
 
-Project → Garment → **Front opening: Cardigan** splits every front (template *front*) into a **Left front** and a
+Garment tab → **Front: Cardigan** splits every front (template *front*) into a **Left front** and a
 **Right front**, and works the body flat (a back that was joined in the round becomes flat; sleeves keep their own
 choice). Switching back to *Closed* merges each pair into one front again. The app lists what it changed.
 
@@ -530,7 +568,7 @@ choice). Switching back to *Closed* merges each pair into one front again. The a
 
 ## Edge treatments
 
-Project → **Edges** sets the hem ribbing, cuff ribbing, neckband and (cardigans) front bands for the whole project.
+The Garment tab's **Edges** section sets the hem ribbing, cuff ribbing, neckband and (cardigans) front bands for the whole project.
 Each can be switched off and has a height (band width for neck and front bands, an expression with per-size values),
 a stitch (1×1 rib = 2n, 2×2 rib = 4n + 2, garter, seed = 2n + 1, or a custom multiple + offset) and how it is worked:
 
@@ -543,7 +581,7 @@ a stitch (1×1 rib = 2n, 2×2 rib = 4n + 2, garter, seed = 2n + 1, or a custom m
 
 Changing any setting applies them to the panels you have; things made by a treatment are marked (`edge`) and
 replaced the next time, so nothing is duplicated. **Settings never add or remove panels.** Strips (the neckband,
-front band strips) are made only with **Add strips** in Project → Edges, which lists what the settings call for
+front band strips) are made only with **Add strips** in the Garment tab's Edges, which lists what the settings call for
 that doesn't exist yet. Once made, a strip follows the settings (same panel, updated in place). A strip the settings
 no longer call for (neckband switched off, a band that became integrated or continuous, a cardigan turned pullover)
 is kept, with a note in the Checks bar so you can delete it. Sections you add by hand are left alone, except the templates' *Hem rib* / *Cuff rib*, which
@@ -552,7 +590,7 @@ rib 5 cm with the sleeve, neckband 1×1 rib 2.5 cm added later, front bands 1×1
 
 ## Cardigan bands and buttons
 
-With a cardigan and **Front bands** switched on (Project → Edges), the front bands are made from these settings:
+With a cardigan and **Front bands** switched on (Garment tab → Edges), the front bands are made from these settings:
 
 - **Bands:** separate button and buttonhole bands, or **one continuous band** up the right front, around the back
   neck and down the left front (the back neck counts only when the back has a neckline; a neckband switched on at the
@@ -622,7 +660,7 @@ between the back length (body fit) and `armhole_depth` below the seam end (sleev
 7.3 / 6.3 / 5.3 cm in 4X. Switch deepening off to split exactly at the back length (a sleeve that falls short is
 then a warning).
 
-**The yoke panel.** *Add panel → Contiguous yoke* makes a panel that holds the phases (`Panel.yoke`) instead of
+**The yoke panel.** *Contiguous yoke, top-down* (New garment, or the Garment tab's method) makes a panel that holds the phases (`Panel.yoke`) instead of
 waypoints; its properties edit every phase (expressions with per-size values, numbers plugged in) and show the phase
 table for this size (rows, stitches before → after, increases per row) and every size side by side (cast-on, rows
 per phase, back length, underarm cast-on, held stitches). Removing a size clears its hand-placed back neck positions.
@@ -640,7 +678,7 @@ per phase, back length, underarm cast-on, held stitches). Removing a size clears
   stitches, symbols pointing away from the neck (the knitting direction); markers as bold red lines; row numbers down
   centre front; the symbol legend (incl. *place marker on row 1, slip after*) at the bottom right.
 
-**Body and sleeves.** *Add body and sleeves* (Project → Garment with the contiguous construction, or the yoke's
+**Body and sleeves.** *Add body and sleeves* (Pieces tab when a contiguous garment lacks them, or the yoke's
 properties) adds the yoke if there is none and the panels it lacks, all top-down; it never runs on its own and adds
 nothing a second time:
 
@@ -725,7 +763,7 @@ underarm → shoulder for an armhole), the **lower edge**, the **upper edge** (o
 
 **Seam check.** A seam has two sides, *this side* and *sewn to*, and each side can be several edges: e.g. a sleeve cap
 (both cap edges) sewn to the front and back armholes. For each size it shows rows and length along the edge (slopes
-measured as drawn, bind-off steps as horizontal runs), and the difference. Differences above the tolerance (Joins tab,
+measured as drawn, bind-off steps as horizontal runs), and the difference. Differences above the tolerance (Settings tab,
 default 1 cm) are flagged. A suggestion explains how to reconcile them without changing anything: for row-for-row seams
 (row counts within 10 %) it suggests where to add rows (the longest unshaped stretch of the shorter side); otherwise it
 gives the extra length and the % of ease.
@@ -789,7 +827,7 @@ Waypoints inside a section round to that multiple (e.g. 2x2 rib: multiple of 4 +
 
 ## Region sizing (upper body, lower body, sleeves)
 
-Off by default. Turn it on under Project → *Region sizing*; the toolbar then shows **Upper body / Lower body /
+Off by default. Turn it on under Settings → *Region sizing*; the toolbar then shows **Upper body / Lower body /
 Sleeves** pickers for the current size. Each region of each size follows the size itself until you pick another one
 (e.g. size M with the lower body from L). Turning region sizing off keeps the choices for later.
 
@@ -817,7 +855,7 @@ of the zigzag check, count as their row when comparing sizes, and can use region
 
 ## Checks from the sizing data
 
-Shown in the check panel with everything else (`src/engine/fitChecks.ts`). Settings are under Project → *Checks*.
+Shown in the check panel with everything else (`src/engine/fitChecks.ts`). Settings are under Settings → *Checks*.
 
 | Check | When | Severity |
 |---|---|---|

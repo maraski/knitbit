@@ -5,6 +5,7 @@ import { AboutBox } from './AboutBox';
 import { sizeText } from './EstMark';
 import { CloudStatus } from './CloudStatus';
 import type { Cloud } from '../cloud/useCloud';
+import { garmentLabel } from '../../engine/garmentSetup';
 
 interface Props {
   project: Project;
@@ -38,11 +39,12 @@ export function Toolbar(p: Props) {
         onChange={(e) => p.update((x) => ({ ...x, name: e.target.value }), 'project.name')}
         aria-label="Project name"
       />
+      <span className="garment-label" title="How it’s built · front (Garment tab)">{garmentLabel(project)}</span>
       <span className="sep" />
       <button onClick={p.undo} disabled={!p.canUndo} title="Undo (⌘Z)">↶</button>
       <button onClick={p.redo} disabled={!p.canRedo} title="Redo (⇧⌘Z)">↷</button>
       <span className="sep" />
-      <button onClick={p.onNew} title="New project from the sample sizing table">New</button>
+      <button onClick={p.onNew} title="Start a new garment">New…</button>
       <button onClick={p.onOpen} title="Open (⌘O)">Open…</button>
       <button onClick={p.onSave} title="Save (⌘S)">Save</button>
       <span className="spacer" />

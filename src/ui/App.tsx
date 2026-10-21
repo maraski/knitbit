@@ -35,6 +35,7 @@ const ChartView = lazy(() => import('./components/ChartView').then((m) => ({ def
 const YokeTopView = lazy(() => import('./components/YokeTopView').then((m) => ({ default: m.YokeTopView })));
 const MeasurementsView = lazy(() => import('./components/MeasurementsView').then((m) => ({ default: m.MeasurementsView })));
 const ImportDialog = lazy(() => import('./components/ImportDialog').then((m) => ({ default: m.ImportDialog })));
+const NewGarmentDialog = lazy(() => import('./components/NewGarmentDialog').then((m) => ({ default: m.NewGarmentDialog })));
 // Signed-in Open…: loaded on first use, with the sync code it needs (kept out of the main chunk).
 const ProjectsDialog = lazy(() => import('./components/ProjectsDialog').then((m) => ({ default: m.ProjectsDialog })));
 // Right-sidebar panels for a join or the measurements screen: loaded the first time one is shown.
@@ -73,6 +74,8 @@ export function App({ start }: { start: StartState }) {
   const side = useSidePanels(view.panels);
   const [measSel, setMeasSel] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
+  // New garment dialog; 'first' = first run (nothing saved yet).
+  const [newGarment, setNewGarment] = useState<'closed' | 'open' | 'first'>(start.firstRun ? 'first' : 'closed');
 
   // Keep view state pointing at things that exist (after undo, open, delete…).
   const size = project.sizes.find((s) => s.id === sizeId) ?? project.sizes.find((s) => s.id === project.baseSizeId) ?? project.sizes[0];
@@ -192,9 +195,15 @@ export function App({ start }: { start: StartState }) {
     selectPanel(p.panels[0]?.id ?? null);
     store.setNotice(title ? { kind: 'info', title, lines: [] } : null);
   };
-  const newProject = () => {
-    if (!window.confirm('Start a new project from the sample sizing table? The current project stays in undo history.')) return;
-    void startSample(null);
+  const newProject = () => setNewGarment('open');
+  // The new garment replaces the open project in one undoable step.
+  const createGarment = (p: typeof project, importTable: boolean) => {
+    store.replace(p);
+    setSizeId(p.baseSizeId);
+    selectPanel(p.panels[0]?.id ?? null);
+    setNewGarment('closed');
+    store.setNotice(null);
+    if (importTable) setImporting(true);
   };
 
   useEffect(() => {
@@ -471,7 +480,12 @@ export function App({ start }: { start: StartState }) {
               />
             ) : (
               <div className="canvas-empty">
-                <p>No panel selected. Add one from the Panels tab.</p>
+                <p>{project.panels.length ? 'No piece selected.' : 'No pieces yet.'}</p>
+                {!project.panels.length && (
+                  <p>
+                    <button className="primary" onClick={newProject}>New garment…</button> or add pieces from the Pieces tab.
+                  </p>
+                )}
               </div>
             )}
           </Suspense>
@@ -517,6 +531,20 @@ export function App({ start }: { start: StartState }) {
             onOpenFile={() => void openFile()}
             onSample={startSample}
             onRenameOpen={(name) => update((p) => ({ ...p, name }))}
+          />
+        </Suspense>
+      )}
+      {newGarment !== 'closed' && (
+        <Suspense fallback={null}>
+          <NewGarmentDialog
+            project={project}
+            firstRun={newGarment === 'first'}
+            onCancel={() => setNewGarment('closed')}
+            onCreate={createGarment}
+            onSample={() => {
+              setNewGarment('closed');
+              void startSample(null);
+            }}
           />
         </Suspense>
       )}
