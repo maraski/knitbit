@@ -19,6 +19,8 @@ export interface Cloud {
   user: CloudUser | null | undefined;
   state: CloudState;
   signIn: () => void;
+  /** Starts loading Firebase (e.g. on hover), so a click on Sign in can open the popup straight away. */
+  prepare: () => void;
   signOut: () => void;
   /** The signed-in user's online projects (null while signed out or loading). */
   remote: ProjectRemote | null;
@@ -47,6 +49,8 @@ export function useCloud(project: Project, open: (p: Project) => void, notify: (
   const [remote, setRemote] = useState<ProjectRemote | null>(null);
   const [dialog, setDialog] = useState<Cloud['dialog']>('closed');
   const mod = useRef<Promise<FirebaseModule> | null>(null);
+  // The loaded module, so Sign in can open the popup within the click (browsers block popups opened later).
+  const loaded = useRef<FirebaseModule | null>(null);
   const saver = useRef<CloudSaver | null>(null);
   const latest = useRef({ project, open, notify });
   latest.current = { project, open, notify };
@@ -54,6 +58,7 @@ export function useCloud(project: Project, open: (p: Project) => void, notify: (
   const load = useCallback((): Promise<FirebaseModule> => {
     mod.current ??= import('./firebase').then((m) => {
       m.onUser(setUser, (message) => latest.current.notify({ kind: 'error', title: 'Google sign-in failed', lines: [message] }));
+      loaded.current = m;
       return m;
     });
     return mod.current;
@@ -125,8 +130,9 @@ export function useCloud(project: Project, open: (p: Project) => void, notify: (
   const signIn = useCallback(() => {
     // Set before a possible redirect, so the page that comes back restores the session.
     rememberSignIn(true);
-    load()
-      .then((m) => m.signIn())
+    // Already loaded: call signIn in this click, so the popup isn't blocked and replaced by a redirect.
+    const started = loaded.current ? loaded.current.signIn() : load().then((m) => m.signIn());
+    started
       .then((how) => {
         // Signing in again as the same account doesn't change `user`, so restart saving that stopped on sign-in.
         if (how === 'popup' && saver.current?.current.status === 'auth') void saver.current.start(latest.current.project);
@@ -137,6 +143,10 @@ export function useCloud(project: Project, open: (p: Project) => void, notify: (
         latest.current.notify({ kind: 'error', title: 'Google sign-in failed', lines: [e.message] });
       });
   }, [load]);
+
+  const prepare = useCallback(() => {
+    if (available) load().catch(() => {}); // a real failure is reported by signIn
+  }, [available, load]);
 
   const signOut = useCallback(() => {
     // Save a pending edit first, while still signed in.
@@ -166,7 +176,7 @@ export function useCloud(project: Project, open: (p: Project) => void, notify: (
     return o?.kind === 'error' ? o.message : null;
   }, []);
 
-  return { available, user, state, signIn, signOut, remote, dialog, showProjects, closeProjects, flush, uploadNow, opened, forget, project, resolveConflict };
+  return { available, user, state, signIn, prepare, signOut, remote, dialog, showProjects, closeProjects, flush, uploadNow, opened, forget, project, resolveConflict };
 }
 
 function handleOutcome(o: SyncOutcome, open: (p: Project) => void, notify: (n: Notice) => void): void {
