@@ -76,10 +76,21 @@ function yokeEdge(c: ComputedPanel, e: EdgeKey, perRow: number): Omit<EdgeMeasur
   if (e.kind === 'front') {
     if (y.counts.joinRow !== null) return { error: 'A pullover yoke is joined at the front; it has no front edges.' };
     if (!e.side) return { error: 'Choose the left or right front edge of the yoke.' };
+    if (y.shortRows) {
+      // Whole-neck start: each front edge is worked once in the short rows (the right on row 1, the left on the last
+      // row), then on every row after them.
+      const end = y.shortRows.pairs ? y.shortRows.endRow : 0;
+      const rows = Math.max(0, Y - end + (end ? 1 : 0));
+      return { rows, stitches: 0, lengthCm: rows / rpc, pickup: Math.round(rows * perRow), parts: [`${rows} rows to the split`] };
+    }
     // The right front's edge stitches are cast on at row R (RS), the left front's at row R + 1 (WS).
     const from = Math.min(Y, e.side === 'right' ? R : R + 1);
     const rows = Math.max(0, Y - from);
     return { rows, stitches: 0, lengthCm: rows / rpc, pickup: Math.round(rows * perRow), parts: [`${rows} rows, row ${from + 1} to the split`] };
+  }
+  if (y.shortRows) {
+    // Whole-neck start: the neck is the cast-on (the short rows turn inside the fabric, not at its edge).
+    return { rows: 0, stitches: y.castOn, lengthCm: y.castOn / spc, pickup: y.castOn, parts: [`cast-on ${y.castOn} sts (the whole neck)`] };
   }
   const slopeRows = Math.max(0, Math.min(R, Y) - 1);
   const perSide = y.rows.filter((r) => r.neck).length;
