@@ -6,7 +6,7 @@ import { CONTIGUOUS_TAG, setOpening } from './garment';
 import { buildGarment, changeMethod, easePresetOf, garmentChoice, garmentLabel, setNeckline, setSleeve, type GarmentSpec } from './garmentSetup';
 import { projectChecks } from './checks';
 import { joinReport } from './joins';
-import type { FrontOpening, Project } from './model';
+import { dim, type FrontOpening, type Project } from './model';
 import { computePanel } from './panel';
 import { loadProject } from './schema';
 import { bodice, sleeve } from './templates';
@@ -143,6 +143,12 @@ describe('Garment tab: changing the method', () => {
     const y = setNeckline(buildGarment(base(), spec({ method: 'contiguous' })), 'v');
     expect(y.panels[0].yoke!.neck.shape).toBe('v');
     expectComputes(y);
+    // A yoke setting you changed is kept; the neck follows the shape.
+    const custom = buildGarment(base(), spec({ method: 'contiguous' }));
+    custom.panels[0].yoke!.seamSts = dim(3);
+    const sq = setNeckline(custom, 'square').panels[0].yoke!;
+    expect(sq.seamSts.expr).toBe('3');
+    expect(sq.neck).toMatchObject({ shape: 'square', depth: dim('front_neck_drop + 2') });
   });
 
   it('opening changes still go through setOpening', () => {
