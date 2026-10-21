@@ -66,11 +66,22 @@ code { font-family: ui-monospace, Menlo, monospace; font-size: 12px; }
 
 /* layout */
 .app { display: flex; flex-direction: column; height: 100%; }
-.main { flex: 1; display: grid; grid-template-columns: 250px 1fr 320px; min-height: 0; }
-.sidebar { background: var(--panel); overflow-y: auto; min-height: 0; }
-.sidebar.left { border-right: 1px solid var(--line); display: flex; flex-direction: column; }
-.sidebar.right { border-left: 1px solid var(--line); }
-.center { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.main { flex: 1; display: flex; min-height: 0; }
+.sidebar { background: var(--panel); overflow-y: auto; min-height: 0; flex: none; }
+.sidebar.left { width: var(--left-w, 250px); display: flex; flex-direction: column; }
+.sidebar.right { width: var(--right-w, 320px); }
+.main.no-left .sidebar.left, .main.no-right .sidebar.right { display: none; }
+.center { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+/* panel borders double as resize handles (a wider invisible grab area around the 1px line) */
+.panel-divider { flex: none; width: 1px; background: var(--line); position: relative; z-index: 5; cursor: col-resize; touch-action: none; }
+.panel-divider::before { content: ''; position: absolute; inset: 0 -3px; }
+.panel-divider:hover, body.resizing-panel .panel-divider { background: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+body.resizing-panel { cursor: col-resize; user-select: none; }
+body.resizing-panel .center { pointer-events: none; }
+.canvas-bar { display: flex; align-items: flex-start; border-bottom: 1px solid var(--line); background: var(--panel); }
+.canvas-bar .canvas-title { flex: 1; min-width: 0; border-bottom: none; padding-left: 4px; padding-right: 4px; }
+.panel-toggle { flex: none; margin: 7px 6px 0; border-color: transparent; background: none; padding: 3px 5px; color: var(--muted); display: inline-flex; align-items: center; }
+.panel-toggle:hover { color: var(--fg); border-color: var(--line-strong); }
 
 /* toolbar */
 .toolbar { display: flex; align-items: center; gap: 6px; padding: 6px 10px; background: var(--panel); border-bottom: 1px solid var(--line); }

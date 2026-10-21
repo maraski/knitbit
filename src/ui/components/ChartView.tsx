@@ -217,26 +217,53 @@ function ChartCanvas({ chart, c, panel, update, brush, setBrush, custom, cs, set
     };
   }, [dcols.length, display.length, setCell]);
 
-  // Ctrl/⌘ + wheel zooms around the pointer.
+  // Ctrl/⌘ + wheel (and a trackpad pinch, which arrives as Ctrl + wheel, or as gesture events in Safari)
+  // zooms around the pointer. The unrounded size carries over between events: a pinch sends many tiny
+  // steps, each of which would round back to the same half-pixel cell size.
+  const zoomTo = useRef<number | null>(null);
+  const gestureFrom = useRef(0);
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
+    if (zoomTo.current !== null && Math.abs(zoomTo.current - cs) > 0.5) zoomTo.current = null; // changed elsewhere
+    const zoomAt = (next: number, clientX: number, clientY: number) => {
+      const from = zoomTo.current ?? cs;
+      next = Math.max(MIN_CELL, Math.min(MAX_CELL, next));
+      zoomTo.current = next;
+      const r = el.getBoundingClientRect();
+      const px = clientX - r.left + el.scrollLeft;
+      const py = clientY - r.top + el.scrollTop;
+      const k = next / from;
+      setCell(next);
+      requestAnimationFrame(() => {
+        el.scrollLeft = px * k - (clientX - r.left);
+        el.scrollTop = py * k - (clientY - r.top);
+      });
+    };
     const onWheel = (e: WheelEvent) => {
       if (!e.ctrlKey && !e.metaKey) return;
       e.preventDefault();
-      const r = el.getBoundingClientRect();
-      const px = e.clientX - r.left + el.scrollLeft;
-      const py = e.clientY - r.top + el.scrollTop;
-      const next = Math.max(MIN_CELL, Math.min(MAX_CELL, cs * Math.exp(-e.deltaY * 0.004)));
-      const k = next / cs;
-      setCell(next);
-      requestAnimationFrame(() => {
-        el.scrollLeft = px * k - (e.clientX - r.left);
-        el.scrollTop = py * k - (e.clientY - r.top);
-      });
+      zoomAt((zoomTo.current ?? cs) * Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.004)), e.clientX, e.clientY);
+    };
+    // Safari: pinch gestures (scale is relative to the gesture's start).
+    type Gesture = Event & { scale: number; clientX: number; clientY: number };
+    const onGestureStart = (e: Event) => {
+      e.preventDefault();
+      gestureFrom.current = zoomTo.current ?? cs;
+    };
+    const onGestureChange = (e: Event) => {
+      e.preventDefault();
+      const g = e as Gesture;
+      zoomAt(gestureFrom.current * g.scale, g.clientX, g.clientY);
     };
     el.addEventListener('wheel', onWheel, { passive: false });
-    return () => el.removeEventListener('wheel', onWheel);
+    el.addEventListener('gesturestart', onGestureStart);
+    el.addEventListener('gesturechange', onGestureChange);
+    return () => {
+      el.removeEventListener('wheel', onWheel);
+      el.removeEventListener('gesturestart', onGestureStart);
+      el.removeEventListener('gesturechange', onGestureChange);
+    };
   }, [cs, setCell]);
 
   // Visible rows only (plus a margin).
