@@ -3,15 +3,22 @@
 // Pure: a YokeSpec + measurements in, every row's zone counts, increases and cast-ons out.
 //
 // Row layout, as seen from the RS (left = wearer's left): [left front | left seam/sleeve | back | right seam/sleeve |
-// right front]. Row 1 is a RS row: it places the markers and makes the first increases. Flat rows alternate RS/WS;
-// a pullover is joined in the round when the front neck is cast on, and every row after that is a round.
+// right front]. Row 1 is a RS row: it places the markers and makes the first increases. Flat rows alternate RS/WS.
+//
+// Two ways to start (`spec.start`):
+// - 'back' (as the method's PDF): cast on the back neck, both seams and one front stitch each side; the fronts grow
+//   from the neck points with neck increases, then a centre cast-on closes the neck (a pullover joins in the round).
+// - 'neck' (whole neck): cast on the fronts too; German short rows raise the back above the front, turning in the
+//   fronts a step nearer centre front each time. A pullover is joined at the cast-on with the round starting at the
+//   left back shoulder marker: row 1 runs from there to the first turn, the short rows go turn to turn, and the last
+//   flat row runs from the last turn back to the marker (neither of those two half rows increases). Rounds follow.
 
 import { plugIn } from './bust';
 import { distributeAcross, distributeAuto } from './distribute';
 import { evaluate, scopeFrom } from './expr';
 import { rowsPerCm, stitchesPerCm } from './gauge';
 import { buildScope } from './measurements';
-import type { DimExpr, Id, NecklineShape, Project, YokeSpec } from './model';
+import type { DimExpr, Id, NecklineShape, Project, YokeSpec, YokeStart } from './model';
 import { dim, newPanel, type Panel } from './model';
 import { FRONT_NECKS } from './templates';
 
@@ -37,6 +44,12 @@ export interface YokeCastOn {
 
 export interface YokeRow {
   row: number;
+  /** Short-row section (whole-neck start): the stitches this row works, [from, to) in row order (after the row);
+   * absent = every stitch. `turn` = the stitch it turns after (German short row). */
+  span?: [number, number];
+  turn?: { side: 'left' | 'right'; at: number };
+  /** A half row with no increases (a pullover's first and last short-row-section rows). */
+  plain?: boolean;
   phase: YokePhase;
   /** Phase B (back neck increases) is worked on this row too. */
   backNeck: boolean;
@@ -86,6 +99,10 @@ export interface YokeResult {
   phases: PhaseSummary[];
   params: Record<string, YokeParam>;
   counts: { A: number; B: number; C: number; D: number; E: number; total: number; neckRow: number | null; joinRow: number | null; rapidBase: number };
+  start: YokeStart;
+  /** Whole-neck start: the short rows. `turns[i]` = stitches left unworked at each front's centre-front end by pair
+   * i + 1; `endRow` = the last flat row of the section (the round starts after it on a pullover). */
+  shortRows: { pairs: number; first: number; step: number; turns: number[]; endRow: number; frontSts: number } | null;
   seamSts: number;
   capTopSts: number;
   /** Stitches left at the split: each sleeve on hold, the body continues. */
@@ -115,19 +132,34 @@ export interface YokeResult {
 
 export const SLOPED_SHOULDER = 'sqrt(((back_shoulder_width - back_neck_width) / 2) ^ 2 + shoulder_drop ^ 2)';
 
-export function defaultYoke(shape: NecklineShape = 'round'): YokeSpec {
+/** Short-row defaults: the fronts cast on as wide as the neck; pairs from the height the back is raised (front neck
+ * depth − back neck drop); turns from `first` sts past the shoulder marker, stepped evenly to the centre part. */
+export function defaultShortRows(): NonNullable<YokeSpec['shortRows']> {
+  return {
+    frontCo: dim('neck_w'),
+    pairs: dim('round(max(0, neck_depth - back_neck_drop) / row_h / 2)'),
+    first: dim(3),
+    step: dim('max(1, floor((front_side - centre_side - first_turn) / max(1, pairs - 1)))'),
+  };
+}
+
+/** New yokes start with the whole neck, except a V neck: its depth needs the neck increases of the method's start. */
+export function defaultYoke(shape: NecklineShape = 'round', start: YokeStart = shape === 'v' ? 'back' : 'neck'): YokeSpec {
   const n = FRONT_NECKS[shape];
   return {
+    start,
+    shortRows: defaultShortRows(),
     increase: { type: 'm1', symbol: 'kfb' },
     seamSts: dim(2),
     shoulder: { mode: 'cross-back', backWidth: dim('cross_back_w + 1'), length: dim(SLOPED_SHOULDER), shorten: dim(0), extraRows: dim(0) },
-    backNeck: { perRow: dim(2), rows: dim(8), manual: {} },
+    // The method's back neck increases; the whole-neck start raises the back with short rows instead.
+    backNeck: { perRow: dim(start === 'neck' ? 0 : 2), rows: dim(8), manual: {} },
     cap: { topSts: dim(6), rapidRows: dim('armhole_depth / 6 / row_h'), solve: true },
     sleeveWidth: dim('bicep + ease.bicep'),
     depth: { mode: 'back-length', backLength: dim('shoulder_drop + armhole_depth - back_neck_drop'), extra: dim(0), deepen: true, maxRapid: dim(0.5) },
     body: { width: dim('upper_chest + ease'), increases: true, zone: dim(0.6) },
     underarm: { castOn: dim('underarm_co') },
-    neck: { shape, depth: dim(n.depth), centre: dim(n.centre) },
+    neck: { shape, depth: dim(n.depth), centre: dim(n.centre), width: dim(n.width) },
   };
 }
 
@@ -169,16 +201,61 @@ export function generateYoke(project: Project, spec: YokeSpec, sizeId: Id): Yoke
 
   // ---- cast-on ----
   const seam = Math.max(1, Math.round(val('seamSts', 'Seam stitches', spec.seamSts, 'sts')));
-  const bn = sts(scope.back_neck_width ?? 0);
-  if (!(bn > 0)) issues.push({ severity: 'error', message: 'back_neck_width gives no back neck stitches.' });
-  const castOnZones: ZoneCounts = { leftFront: 1, leftSleeve: seam, back: bn, rightSleeve: seam, rightFront: 1 };
+  // The neck opening is cast on across the back; a boat neck widens it (older files have no width: the back neck).
+  const neckCm = spec.neck.width ? val('neckWidth', 'Neck width (cast on across the back)', spec.neck.width, 'cm') : scope.back_neck_width ?? 0;
+  const bn = sts(neckCm);
+  if (!(bn > 0)) issues.push({ severity: 'error', message: 'The neck width gives no back neck stitches.' });
+  const wholeNeck = spec.start === 'neck';
+  const closingSts = cardigan ? sts(scope.closing_r ?? 0) : 0;
+  // Whole neck: the fronts are cast on too (a cardigan less the closing width, half each side).
+  let FL = 1;
+  let FR = 1;
+  const sr = wholeNeck ? spec.shortRows ?? defaultShortRows() : null;
+  if (sr) {
+    const fc = Math.max(0, sts(val('frontCo', 'Front cast-on, both fronts', sr.frontCo, 'cm', { neck_w: neckCm })));
+    if (cardigan) FL = FR = Math.max(1, Math.round((fc - closingSts) / 2));
+    else {
+      FL = Math.floor(fc / 2);
+      FR = fc - FL;
+    }
+  }
+  const castOnZones: ZoneCounts = { leftFront: FL, leftSleeve: seam, back: bn, rightSleeve: seam, rightFront: FR };
   const castOn = sum(castOnZones);
+
+  // ---- front neck depth and centre (both starts) ----
+  const depthCm = val('neckDepth', 'Front neck depth', spec.neck.depth, 'cm');
+  const centreCm = val('neckCentre', 'Front neck centre', spec.neck.centre, 'cm');
+
+  // ---- whole neck: short rows ----
+  const plain = new Set<number>();
+  let shortRows: YokeResult['shortRows'] = null;
+  if (sr) {
+    const side = Math.min(FL, FR);
+    // The centre part (lowest, never turned in): half each side, from the front edge.
+    const centreAll = spec.neck.shape === 'square' ? FL + FR : spec.neck.shape === 'v' ? 0 : Math.min(FL + FR, sts(centreCm));
+    const cSide = Math.max(0, Math.floor(centreAll / 2) - (cardigan ? Math.round(closingSts / 2) : 0));
+    const pairs = Math.max(0, Math.round(val('srPairs', 'Short-row pairs', sr.pairs, '', { neck_depth: depthCm })));
+    const first = Math.max(1, Math.round(val('srFirst', 'First turn, sts past the shoulder marker', sr.first, 'sts')));
+    const step = Math.max(1, Math.round(val('srStep', 'Sts between turns', sr.step, 'sts', { front_side: side, centre_side: cSide, first_turn: first, pairs })));
+    const turns: number[] = [];
+    for (let i = 0; i < pairs; i++) turns.push(side - first - i * step);
+    const lastTurn = turns[turns.length - 1] ?? side;
+    if (pairs && lastTurn < 1) issues.push({ severity: 'error', message: `Short rows: ${pairs} pairs ${step} sts apart don't fit in a front of ${side} sts (the last turn is past centre front). Fewer pairs, a smaller step or a wider front.` });
+    else if (pairs && lastTurn < cSide) issues.push({ severity: 'info', message: `Short rows: the last turns reach into the centre part (${cSide} sts each side of centre front).` });
+    if (pairs > 1 && step < 2) issues.push({ severity: 'info', message: `Short rows: turns 1 st apart. Fewer pairs or a wider front cast-on spread them more.` });
+    const endRow = pairs > 0 ? 2 * pairs + 1 : 0;
+    if (!cardigan && pairs > 0) {
+      plain.add(1);
+      plain.add(endRow);
+    }
+    shortRows = { pairs, first, step, turns: turns.map((u) => Math.max(1, u)), endRow, frontSts: FL + FR };
+  }
 
   // ---- phase B: back neck increases on RS rows over the first `rows` rows ----
   const bPer = Math.max(0, Math.round(val('backNeckPerRow', 'Back neck increases per row', spec.backNeck.perRow, 'sts')));
   const bRows = Math.max(0, Math.round(val('backNeckRows', 'Back neck rows', spec.backNeck.rows, 'rows')));
   const bIncRows: number[] = [];
-  for (let r = 1; r <= bRows; r += 2) bIncRows.push(r);
+  for (let r = 1; r <= bRows; r += 2) if (!plain.has(r)) bIncRows.push(r);
   const bTotal = bPer * bIncRows.length;
   if (bPer && (bPer < 2 || bPer > 4)) issues.push({ severity: 'info', message: `Back neck: ${bPer} increases per row (the method suggests 2 to 4).` });
 
@@ -207,6 +284,17 @@ export function generateYoke(project: Project, spec: YokeSpec, sizeId: Id): Yoke
     issues.push({ severity: 'error', message: `The shoulder phase has ${A} rows: the back is already as wide as the target. Narrow the back neck or widen the target.` });
     A = Math.max(1, A);
   }
+  // The shoulders need A increase rows; the half rows of a pullover's short rows make none.
+  const incRowsTo = (r: number) => {
+    let n = 0;
+    for (let i = 1; i <= r; i++) if (!plain.has(i)) n++;
+    return n;
+  };
+  if (plain.size && spec.shoulder.mode !== 'length') {
+    const need = A;
+    while (incRowsTo(A) < need) A++;
+  }
+  const AincRows = incRowsTo(A);
   if (bRows > A) issues.push({ severity: 'info', message: `Back neck increases (rows 1–${bRows}) run past the shoulder phase (${A} rows).` });
 
   // ---- yoke depth (the split row); may deepen further below so the cap isn't mostly rapid ----
@@ -219,16 +307,16 @@ export function generateYoke(project: Project, spec: YokeSpec, sizeId: Id): Yoke
   }
   Y0 += rowsOf(val('extraDepth', 'Extra yoke depth', spec.depth.extra, 'cm'));
 
-  // ---- front neck ----
-  const depthCm = val('neckDepth', 'Front neck depth', spec.neck.depth, 'cm');
-  const centreCm = val('neckCentre', 'Front neck centre', spec.neck.centre, 'cm');
+  // ---- front neck (back start) ----
   // The fronts start at the neck points: the neck opening is the back neck. V: no centre; square: all centre.
+  // A whole-neck start has none of this: no neck increases and no cast-on; the short rows end on row R.
   const centreRaw = spec.neck.shape === 'square' ? bn : spec.neck.shape === 'v' ? 0 : Math.min(bn, sts(centreCm));
-  const perSide = Math.max(0, Math.floor((bn - centreRaw) / 2));
+  const perSide = wholeNeck ? 0 : Math.max(0, Math.floor((bn - centreRaw) / 2));
   const centre = bn - 2 * perSide; // pullover cast-on at centre front
   const depthRows = Math.max(1, rowsOf(depthCm));
   let R = depthRows;
   if (R % 2 === 0) R += 1; // the centre is cast on at the end of a RS row
+  if (shortRows) R = shortRows.endRow;
   const neckRows: number[] = [];
   if (perSide > 0) {
     if (spec.neck.shape === 'v') {
@@ -250,15 +338,14 @@ export function generateYoke(project: Project, spec: YokeSpec, sizeId: Id): Yoke
   }
   const neckSet = new Set(neckRows);
   // Cardigan: each front casts on its share of the centre at its front edge, less half the closing width (bands).
-  const closingSts = cardigan ? sts(scope.closing_r ?? 0) : 0;
-  const frontEdgeCo = cardigan ? Math.max(0, Math.round((centre - closingSts) / 2)) : 0;
+  const frontEdgeCo = cardigan && !wholeNeck ? Math.max(0, Math.round((centre - closingSts) / 2)) : 0;
   if (cardigan && project.edges?.frontBands.enabled && project.cardigan?.attach && Object.values(project.cardigan.attach).includes('integrated')) {
     issues.push({ severity: 'warning', message: 'Integrated front bands are not worked into a contiguous yoke yet; the yoke has none.' });
   }
 
   // ---- body at the split (before body increases) and the underarm cast-on ----
-  const backAtSplit = bn + 2 * A + bTotal - 2 * k;
-  const frontsAtSplit = 2 * (1 + A + perSide - k) + (cardigan ? 2 * frontEdgeCo : centre);
+  const backAtSplit = bn + 2 * AincRows + bTotal - 2 * k;
+  const frontsAtSplit = wholeNeck ? FL + FR + 2 * (AincRows - k) : 2 * (1 + A + perSide - k) + (cardigan ? 2 * frontEdgeCo : centre);
   const bodyYoke = backAtSplit + frontsAtSplit;
   const bodyCm = val('bodyWidth', 'Body at the underarm', spec.body.width, 'cm');
   const bodyTarget = sts(bodyCm - (cardigan ? scope.closing_r ?? 0 : 0));
@@ -295,7 +382,8 @@ export function generateYoke(project: Project, spec: YokeSpec, sizeId: Id): Yoke
     N = Math.max(0, N);
     const bodyRows: number[] = [];
     if (perEdge > 0) {
-      const s = distributeAuto(perEdge, { from: Y - zoneRows + 1, to: Y }, { side: 'any', align: 'end', order: 'longFirst' });
+      // Never in the short rows (their half rows don't reach every edge).
+      const s = distributeAuto(perEdge, { from: Math.max(Y - zoneRows + 1, (shortRows?.endRow ?? 0) + 1), to: Y }, { side: 'any', align: 'end', order: 'longFirst' });
       for (const w of s.warnings) notes.push({ severity: 'warning', message: `Body increases: ${w}` });
       bodyRows.push(...s.rows);
     }
@@ -305,14 +393,15 @@ export function generateYoke(project: Project, spec: YokeSpec, sizeId: Id): Yoke
       const out: number[] = [];
       let r = A + C + 1;
       while (r <= Y && !isRS(r)) r++;
-      for (; r <= Y; r += 2) out.push(r);
+      for (; r <= Y; r += 2) if (!plain.has(r)) out.push(r);
       return out;
     };
-    const sleeveMax = (C: number) => capTopSts + 2 * C + 2 * slowRows(C).length;
+    const rapid = (C: number) => incRowsTo(A + C) - incRowsTo(A);
+    const sleeveMax = (C: number) => capTopSts + 2 * rapid(C) + 2 * slowRows(C).length;
     let C = Math.min(rapidBase, Math.max(0, X));
     if (spec.cap.solve) while (C < X && sleeveMax(C) < sleeveTarget) C++;
     const reached = sleeveMax(C) >= sleeveTarget;
-    const dNeed = Math.max(0, Math.ceil((sleeveTarget - (capTopSts + 2 * C)) / 2));
+    const dNeed = Math.max(0, Math.ceil((sleeveTarget - (capTopSts + 2 * rapid(C))) / 2));
     const dRows = slowRows(C).slice(0, dNeed);
     const D = dRows.length ? dRows[dRows.length - 1] - (A + C) : 0;
     return { Y, X, zoneRows, perEdge, N, bodyRows, sleeveTarget, C, D, dRows, reached, sleeveMax: sleeveMax(C), notes };
@@ -334,7 +423,7 @@ export function generateYoke(project: Project, spec: YokeSpec, sizeId: Id): Yoke
     const have = plan.sleeveMax + N;
     issues.push({ severity: 'warning', message: `The sleeve reaches ${have} sts (${(have / spc).toFixed(1)} cm) at the underarm, ${sleeveTarget + N - have} sts short of its width: ${spec.cap.solve ? 'even with every armhole row rapid. Deepen the yoke or cast on more at the underarm' : 'lengthen the rapid phase (or let it solve)'}.` });
   }
-  if (R > Y) issues.push({ severity: 'error', message: `The front neck closes on row ${R}, below the underarm split (row ${Y}). Make the neck shallower or the yoke deeper.` });
+  if (R > Y) issues.push({ severity: 'error', message: shortRows ? `The short rows end on row ${R}, below the underarm split (row ${Y}). Fewer pairs or a deeper yoke.` : `The front neck closes on row ${R}, below the underarm split (row ${Y}). Make the neck shallower or the yoke deeper.` });
   const E = Math.max(0, Y - A - C - D);
   const bodySet = new Set(bodyRows);
   const dSet = new Set(dRows);
@@ -360,8 +449,9 @@ export function generateYoke(project: Project, spec: YokeSpec, sizeId: Id): Yoke
     }
     // What this row increases: the body side of the seams (phase A every row, then the body increases), the
     // sleeves (every row in C, every second row in D), the back neck (phase B) and the front neck edges.
-    const seamLike = phase === 'A' || bodySet.has(r);
-    const sleeveInc = phase === 'C' || dSet.has(r);
+    const isPlain = plain.has(r);
+    const seamLike = (phase === 'A' || bodySet.has(r)) && !isPlain;
+    const sleeveInc = (phase === 'C' || dSet.has(r)) && !isPlain;
     const bIndex = bPer > 0 ? bIncRows.indexOf(r) : -1;
     const neck = neckSet.has(r) && r < R;
     const b0 = z.back;
@@ -399,7 +489,7 @@ export function generateYoke(project: Project, spec: YokeSpec, sizeId: Id): Yoke
       }
     }
     // Front neck closes: pullover casts on the centre and joins; a cardigan casts on at each front edge.
-    if (r === R) {
+    if (r === R && !wholeNeck) {
       if (!cardigan) {
         const half = Math.floor(centre / 2);
         z.leftFront += half;
@@ -410,11 +500,13 @@ export function generateYoke(project: Project, spec: YokeSpec, sizeId: Id): Yoke
         castOns.push({ zone: 'rightFront', count: frontEdgeCo, where: 'front-edge' });
       }
     }
-    if (cardigan && r === R + 1 && frontEdgeCo > 0 && r <= Y) {
+    if (cardigan && !wholeNeck && r === R + 1 && frontEdgeCo > 0 && r <= Y) {
       z.leftFront += frontEdgeCo;
       castOns.push({ zone: 'leftFront', count: frontEdgeCo, where: 'front-edge' });
     }
-    rows.push({ row: r, phase, backNeck: bIndex >= 0, neck, round: isRound(r), rs: isRS(r), markersMoved, zones: { ...z }, total: sum(z), incs, castOns });
+    const row: YokeRow = { row: r, phase, backNeck: bIndex >= 0, neck, round: isRound(r), rs: isRS(r), markersMoved, zones: { ...z }, total: sum(z), incs, castOns };
+    if (shortRows && r <= shortRows.endRow) Object.assign(row, shortRowSpan(shortRows, r, row, cardigan), isPlain ? { plain: true } : {});
+    rows.push(row);
     if (r === A) endOfA = { ...z };
   }
   if (cardigan && R === Y && frontEdgeCo > 0) issues.push({ severity: 'warning', message: 'The left front edge cast-on falls after the split.' });
@@ -443,13 +535,15 @@ export function generateYoke(project: Project, spec: YokeSpec, sizeId: Id): Yoke
   };
   add('A', 'Shoulders', 1, A, '4 every row');
   if (bIncRows.length && bPer) add('B', 'Back neck', 1, Math.min(bIncRows[bIncRows.length - 1], Y), `${bPer} every 2nd row (with A)`);
-  if (perSide > 0 || R <= Y) add('neck', cardigan ? 'Front neck (open)' : 'Front neck, joined', 1, Math.min(R, Y), `${perSide} per side${cardigan ? '' : `, cast on ${centre}`}`);
+  if (shortRows) {
+    if (shortRows.pairs) add('neck', 'Short rows (neck)', 1, Math.min(R, Y), `${shortRows.pairs} pairs, German short rows${cardigan ? '' : ', then in the round'}`);
+  } else if (perSide > 0 || R <= Y) add('neck', cardigan ? 'Front neck (open)' : 'Front neck, joined', 1, Math.min(R, Y), `${perSide} per side${cardigan ? '' : `, cast on ${centre}`}`);
   add('C', 'Cap, rapid', A + 1, A + C, '4 every row');
   add('D', 'Cap, slow', A + C + 1, A + C + D, '4 every 2nd row');
   add('E', 'Armhole, straight', A + C + D + 1, Y, perEdge ? `body: ${perEdge} per edge` : 'none');
 
   const seamCm = A / rpc;
-  const gapAtA = cardigan ? 0 : R <= A ? 0 : Math.max(0, bn - 2 * neckRows.filter((r) => r <= A).length);
+  const gapAtA = cardigan || wholeNeck ? 0 : R <= A ? 0 : Math.max(0, bn - 2 * neckRows.filter((r) => r <= A).length);
   const across = perEdge / spc;
   const lowRows = zoneRows / rpc;
   const edgeLen = X / rpc - lowRows + Math.hypot(lowRows, across);
@@ -462,7 +556,9 @@ export function generateYoke(project: Project, spec: YokeSpec, sizeId: Id): Yoke
     rows,
     phases,
     params,
-    counts: { A, B: bRows, C, D, E, total: Y, neckRow: R, joinRow, rapidBase },
+    counts: { A, B: bRows, C, D, E, total: Y, neckRow: shortRows && !shortRows.pairs ? null : R, joinRow, rapidBase },
+    start: wholeNeck ? 'neck' : 'back',
+    shortRows,
     seamSts: seam,
     capTopSts,
     held,
@@ -482,6 +578,27 @@ export function generateYoke(project: Project, spec: YokeSpec, sizeId: Id): Yoke
     stitchesPerCm: spc,
     rowsPerCm: rpc,
   };
+}
+
+/**
+ * The stitches a short-row-section row works ([from, to) in row order) and where it turns. Turns are counted from each
+ * front's centre-front end, which the seam increases (at the other end) don't move. RS rows run from high to low
+ * indices: they turn in the left front, WS rows in the right front. A pullover's row 1 runs from the round's start
+ * (the left back shoulder marker) to the first turn and the last row from the last turn back to it; a cardigan's
+ * row 1 starts at the right front edge and its last row ends at the left front edge.
+ */
+function shortRowSpan(sr: NonNullable<YokeResult['shortRows']>, r: number, row: YokeRow, cardigan: boolean): Pick<YokeRow, 'span' | 'turn'> {
+  const u = sr.turns;
+  const n = sr.pairs;
+  const T = row.total;
+  const bor = row.zones.leftFront + row.zones.leftSleeve;
+  if (r === 2 * n + 1) return { span: cardigan ? [0, T - u[n - 1]] : [bor, T - u[n - 1]] };
+  const i = Math.ceil(r / 2) - 1; // pair index
+  if (r % 2 === 1) {
+    const from = r === 1 ? (cardigan ? T : bor) : T - u[i - 1];
+    return { span: [u[i], from], turn: { side: 'left', at: u[i] } };
+  }
+  return { span: [u[i], T - u[i]], turn: { side: 'right', at: T - u[i] - 1 } };
 }
 
 /**
@@ -509,7 +626,7 @@ export function yokePanel(shape: NecklineShape = 'round'): Panel {
   p.template = 'yoke';
   p.direction = 'top-down';
   p.yoke = defaultYoke(shape);
-  p.notes = 'Contiguous method by Susie Myers (SusieM on Ravelry): worked top-down in one piece from the back neck.';
+  p.notes = 'Contiguous method by Susie Myers (SusieM on Ravelry): worked top-down in one piece from the neck.';
   return p;
 }
 

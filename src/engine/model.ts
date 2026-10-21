@@ -228,6 +228,8 @@ export type YokeIncrease = 'kfb' | 'm1' | 'other';
  * The phases of a contiguous yoke. Lengths are cm, counts are stitches or rows as named; every value is an
  * expression with per-size overrides. Row 1 is a RS row that places the markers and makes the first increases.
  */
+export type YokeStart = 'back' | 'neck';
+
 export interface YokeSpec {
   increase: { type: YokeIncrease; symbol: string };
   /** Stitches in each shoulder seam group (2; more makes a rounder cap). */
@@ -253,8 +255,15 @@ export interface YokeSpec {
   body: { width: DimExpr; increases: boolean; zone: DimExpr };
   /** Phase F: stitches cast on at each underarm (cm), shared by body and sleeve. */
   underarm: { castOn: DimExpr };
-  /** Front neck, worked as increases at the front edges, then (pullover) a centre cast-on that joins the round. */
-  neck: { shape: NecklineShape; depth: DimExpr; centre: DimExpr };
+  /** How the yoke starts: 'back' (absent in older files) = the back neck, shoulders and one front stitch each side,
+   * as the method's PDF; 'neck' = the whole neck with short rows raising the back. */
+  start?: YokeStart;
+  /** Whole-neck start: front cast-on (cm, both fronts), short-row pairs, first turn (sts past the shoulder marker)
+   * and the sts between turns. */
+  shortRows?: { frontCo: DimExpr; pairs: DimExpr; first: DimExpr; step: DimExpr };
+  /** Front neck, worked as increases at the front edges, then (pullover) a centre cast-on that joins the round.
+   * `width` is the neck opening, cast on across the back (absent in older files: back_neck_width). */
+  neck: { shape: NecklineShape; depth: DimExpr; centre: DimExpr; width?: DimExpr };
 }
 
 export type BustMethod = 'shortrows' | 'horizontal-dart' | 'vertical-dart' | 'none';

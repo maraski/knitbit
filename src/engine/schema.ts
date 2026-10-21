@@ -210,6 +210,8 @@ const panel = obj({
   yoke: optional(
     nullable(
       obj({
+        start: optional(oneOf('back', 'neck')),
+        shortRows: optional(obj({ frontCo: dimExpr, pairs: dimExpr, first: dimExpr, step: dimExpr })),
         increase: obj({ type: oneOf('kfb', 'm1', 'other'), symbol: str }),
         seamSts: dimExpr,
         shoulder: obj({ mode: oneOf('cross-back', 'length'), backWidth: dimExpr, length: dimExpr, shorten: dimExpr, extraRows: dimExpr }),
@@ -219,7 +221,7 @@ const panel = obj({
         depth: obj({ mode: oneOf('back-length', 'armhole'), backLength: dimExpr, extra: dimExpr, deepen: bool, maxRapid: dimExpr }),
         body: obj({ width: dimExpr, increases: bool, zone: dimExpr }),
         underarm: obj({ castOn: dimExpr }),
-        neck: obj({ shape: oneOf('round', 'v', 'square', 'boat'), depth: dimExpr, centre: dimExpr }),
+        neck: obj({ shape: oneOf('round', 'v', 'square', 'boat'), depth: dimExpr, centre: dimExpr, width: optional(dimExpr) }),
       }),
     ),
   ),

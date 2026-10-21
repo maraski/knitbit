@@ -478,6 +478,9 @@ table.events.editable select { font-size: 11.5px; max-width: 110px; padding: 1px
 .yoke-cell { stroke: var(--grid, #d9d4ca); stroke-width: 0.5; }
 .yoke-marker-line.strong { stroke-width: 2; stroke-opacity: 0.9; }
 .yoke-row-num { fill: var(--muted); font-size: 9.5px; pointer-events: none; }
+.yoke-note { fill: var(--fg); font-size: 10.5px; paint-order: stroke; stroke: var(--canvas); stroke-width: 3px; stroke-linejoin: round; pointer-events: none; }
+.yoke-start path { stroke: var(--accent); stroke-width: 1.6; }
+.yoke-start polygon { fill: var(--accent); }
 .yoke-ov { fill: none; stroke-width: 1; opacity: 0.8; }
 .yoke-ov.current { stroke-width: 2.2; opacity: 1; }
 .yoke-ov.thin { stroke-width: 0.7; opacity: 0.6; }

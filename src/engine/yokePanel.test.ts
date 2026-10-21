@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildChart } from './chart';
-import { generateYoke, yokePanel, ZONES } from './contiguous';
+import { defaultYoke, generateYoke, yokePanel, ZONES } from './contiguous';
 import { measureEdge } from './joins';
 import { localOutline, refHeight } from './layout';
 import type { Project } from './model';
@@ -8,7 +8,8 @@ import { computePanel } from './panel';
 import { fixtureProject, sizeId } from './testFixtures';
 import { zoneStarts } from './yokePanel';
 
-const panel = yokePanel();
+// The method's start (back neck only); the whole-neck start's chart is tested at the end.
+const panel = { ...yokePanel(), yoke: defaultYoke('round', 'back') };
 const p: Project = { ...fixtureProject(), panels: [panel] };
 const M = sizeId(p, 'M');
 
@@ -97,3 +98,27 @@ describe('the yoke chart', () => {
     expect(c.roundRows).toEqual({ from: R + 1, to: y.counts.total });
   });
 });
+
+describe('the yoke chart, whole-neck start', () => {
+  const wp = { ...yokePanel(), yoke: defaultYoke('round', 'neck') };
+  const pp: Project = { ...fixtureProject(), panels: [wp] };
+  const Mw = sizeId(pp, 'M');
+  const cw = computePanel(pp, wp, Mw);
+  const yw = cw.yoke!;
+  const ch = buildChart(pp, wp, cw);
+
+  it("works only the short row's span, with a German turn where it turns", () => {
+    for (const row of yw.rows.filter((r) => r.span)) {
+      const cells = ch.rows[row.row - 1].cells;
+      const start = zoneStarts(row, ch.x0)[0];
+      const [from, to] = row.span!;
+      const worked = cells.slice(start, start + row.total).map((v) => v !== '');
+      expect(worked.filter(Boolean).length).toBe(to - from);
+      expect(worked.slice(from, to).every(Boolean)).toBe(true);
+      if (row.turn) expect(cells[start + row.turn.at]).toBe('turn-german');
+    }
+    const full = yw.rows[yw.shortRows!.endRow];
+    expect(ch.rows[full.row - 1].cells.filter((v) => v !== '').length).toBe(full.total);
+  });
+});
+

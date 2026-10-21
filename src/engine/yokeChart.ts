@@ -19,7 +19,9 @@ export function buildYokeChart(project: Project, panel: Panel, c: ComputedPanel)
   for (const yr of y.rows) {
     const cells = new Array<string>(cols).fill('');
     const starts = zoneStarts(yr, x0);
-    for (let k = starts[0]; k < starts[5]; k++) if (k >= 0 && k < cols) cells[k] = PLAIN;
+    // A short row works only its span; the rest of the row stays blank.
+    const [from, to] = yr.span ?? [0, yr.total];
+    for (let k = starts[0] + from; k < starts[0] + to; k++) if (k >= 0 && k < cols) cells[k] = PLAIN;
     for (const inc of yr.incs) {
       const k = starts[ZONES.indexOf(inc.zone)] + inc.at;
       if (k >= 0 && k < cols) cells[k] = inc.symbol;
@@ -33,6 +35,10 @@ export function buildYokeChart(project: Project, panel: Panel, c: ComputedPanel)
         for (let j = 0; j < co.count - half; j++) cells[starts[5] - 1 - j] = 'co';
       } else if (co.zone === 'rightFront') for (let j = 0; j < co.count; j++) cells[starts[zi + 1] - 1 - j] = 'co';
       else for (let j = 0; j < co.count; j++) cells[starts[zi] + j] = 'co';
+    }
+    if (yr.turn) {
+      const k = starts[0] + yr.turn.at;
+      if (k >= 0 && k < cols && cells[k] === PLAIN) cells[k] = 'turn-german';
     }
     const key = String(yr.row);
     zoneRuns[key] = ZONES.map((_, zi) => ({ from: starts[zi], to: starts[zi + 1], zone: zi }));
