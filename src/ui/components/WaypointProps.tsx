@@ -92,6 +92,12 @@ export function WaypointProps({ ctx, wp }: { ctx: PropsContext; wp: Waypoint }) 
         {cw && <div className="hint">Refer to it as <code>{cw.key}.height</code>, <code>{cw.key}.width</code></div>}
       </div>
       <p className="hint">Drag its line on the schematic to move it, its end squares to change the width: every size follows proportionally (Alt: this size only).</p>
+      {panel.template === 'rectangle' && panel.waypoints.length === 2 && (
+        <p className="hint">
+          This rectangle's widths and height can be set for all sizes or from a measurement:{' '}
+          <button className="link" onClick={() => ctx.select({ kind: 'panel' })}>size options</button>
+        </p>
+      )}
       <PartnerMatch ctx={ctx} wp={wp} />
       <ExprField label="Height from start edge" value={wp.height} onChange={setDim('height')} fieldKey="height" {...common} detail={cw && <>→ row {cw.row}</>} />
       {cw && <RoundingSteps r={cw.rowRounding} />}

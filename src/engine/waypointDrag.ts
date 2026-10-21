@@ -206,13 +206,38 @@ export function dragHeight(project: Project, panelId: Id, wpId: Id, sizeId: Id, 
   return mode === 'all' ? pinSizes(project, out, [panelId, ...(pw ? [pw.partner.id] : [])], notCascaded(project, sizeId, cascade)) : out;
 }
 
+/**
+ * A plain rectangle without shaping (its top follows the bottom, or the segment between them is straight, as in
+ * rectangles made before the size rules): returns its bottom waypoint. A width drag on either edge then resizes the
+ * bottom and makes the top follow it, so the rectangle stays a rectangle; a straight top of its own couldn't change
+ * width anyway.
+ */
+export function unshapedRectangleBottom(panel: Panel): Waypoint | undefined {
+  const [bottom, top] = panel.waypoints;
+  if (panel.template !== 'rectangle' || panel.waypoints.length !== 2 || !top.symmetric || !bottom.symmetric) return undefined;
+  const follows = top.width.expr.replace(/\s+/g, '') === `${waypointKey(bottom.name)}.width`;
+  const seg = panel.segments.find((x) => x.fromWaypoint === bottom.id);
+  const straight = !!seg && seg.left.kind === 'straight' && seg.right.kind === 'straight';
+  return follows || straight ? bottom : undefined;
+}
+
 /** Drag a waypoint's width (or half). A linked partner's waypoint changes by the same proportion. `cascade`: as dragHeight. */
-export function dragWidth(project: Project, panelId: Id, wpId: Id, sizeId: Id, part: WidthPart, value: number, mode: DragMode, cascade?: Id[]): Project {
+export function dragWidth(project: Project, panelId: Id, dragged: Id, sizeId: Id, part: WidthPart, value: number, mode: DragMode, cascade?: Id[]): Project {
   const panel = project.panels.find((p) => p.id === panelId);
+  const rect = panel && part === 'width' ? unshapedRectangleBottom(panel) : undefined;
+  const wpId = rect?.id ?? dragged;
   const wp = panel?.waypoints.find((w) => w.id === wpId);
   if (!panel || !wp) return project;
   const before = widthOf(project, panel, wp, part, sizeId);
-  let out = withPanel(project, placeWidth(project, panel, wpId, sizeId, part, value, mode));
+  const placed = placeWidth(project, panel, wpId, sizeId, part, value, mode);
+  if (rect) {
+    const top = placed.waypoints[1];
+    const follow = `${waypointKey(rect.name)}.width`;
+    top.width = { expr: follow, overrides: {} };
+    top.left = { expr: `(${follow}) / 2`, overrides: {} };
+    top.right = { expr: `(${follow}) / 2`, overrides: {} };
+  }
+  let out = withPanel(project, placed);
   const pw = partnerWaypoint(project, panel, wpId);
   if (pw && before > 0) {
     const f = value / before;

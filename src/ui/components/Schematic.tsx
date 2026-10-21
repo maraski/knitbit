@@ -9,7 +9,7 @@ import { SizeGrid, SizeLegend } from './SizeGrid';
 import type { SizeMode } from './SizeModeBar';
 import type { Project } from '../../engine/model';
 import type { EdgeKey, Join, KnitDirection } from '../../engine/model';
-import { rowCentre, type ComputedPanel, type ComputedSegment, type Edge, type Marker, type ShapeEvent } from '../../engine/panel';
+import { rowCentre, rowInPanel, type ComputedPanel, type ComputedSegment, type Edge, type Marker, type ShapeEvent } from '../../engine/panel';
 import { SYMBOLS, type SymbolId } from '../../engine/symbols';
 import { wedgeBands } from '../../engine/bust';
 import { freeCells } from '../../engine/free';
@@ -19,6 +19,7 @@ import type { MarkerActions } from '../markerActions';
 import type { Units } from '../../engine/units';
 import { len, rows as rowsText, sts } from '../format';
 import { sameSelection, type Selection } from '../selection';
+import { unshapedRectangleBottom } from '../../engine/waypointDrag';
 
 interface Props {
   computed: ComputedPanel;
@@ -214,6 +215,8 @@ export function Schematic({ computed: c, direction, units, selection, onSelect, 
 
   const vertical = direction !== 'side-to-side';
   const panelDef = project?.panels.find((p) => p.id === c.panelId);
+  // A plain rectangle without shaping: its side edges drag the width, its top edge the height, no selecting first.
+  const rect = panelDef && mode === 'single' && onDragWaypoint && vertical ? unshapedRectangleBottom(panelDef) : undefined;
   const transitions = project && panelDef && mode === 'single' ? regionTransitions(project, panelDef, c) : [];
   const top = c.totalRows;
   // Waypoints from the garment's bottom to its top, whatever the knitting direction.
@@ -267,14 +270,14 @@ export function Schematic({ computed: c, direction, units, selection, onSelect, 
     const centre = rowCentre(c, row) / spc;
     return { h: Y, x: X - centre, sx, sy };
   };
-  const startWpDrag = (e: React.PointerEvent, w: ComputedPanel['waypoints'][number], kind: 'height' | 'width', part: 'width' | 'left' | 'right') => {
+  const startWpDrag = (e: React.PointerEvent, w: ComputedPanel['waypoints'][number], kind: 'height' | 'width', part: 'width' | 'left' | 'right', select: Selection = { kind: 'waypoint', id: w.id }) => {
     if (!onDragWaypoint || !vertical || e.button !== 0 || drawLine) return;
     e.stopPropagation();
     const half0 = part === 'left' ? -w.leftPos : part === 'right' ? w.rightPos : (w.rightPos - w.leftPos) / 2;
     if (half0 <= 0) return;
     wrapRef.current?.setPointerCapture(e.pointerId);
     wpDrag.current = { wpId: w.id, kind, part, half0, key: `drag:wp:${Date.now()}`, x: e.clientX, y: e.clientY, moved: false, last: '' };
-    onSelect({ kind: 'waypoint', id: w.id });
+    onSelect(select);
   };
   const onPointerDown = (e: React.PointerEvent) => {
     if (e.button !== 0) return;
@@ -469,6 +472,9 @@ export function Schematic({ computed: c, direction, units, selection, onSelect, 
     );
   }
 
+  // Rows kept from before an edit may be past a panel that got shorter (e.g. its top dragged down).
+  const liveHover = rowInPanel(c, hoverRow);
+  const liveDrag = rowInPanel(c, dragRow);
   return (
     <div
       className="canvas"
@@ -563,8 +569,8 @@ export function Schematic({ computed: c, direction, units, selection, onSelect, 
                 y1={a.y}
                 x2={b.x}
                 y2={b.y}
-                className={`hit${onDragWaypoint && vertical && i > 0 && sel ? ' drag-y' : ''}`}
-                onPointerDown={(e) => i > 0 && sel && startWpDrag(e, w, 'height', 'width')}
+                className={`hit${onDragWaypoint && vertical && i > 0 && (sel || rect) ? ' drag-y' : ''}`}
+                onPointerDown={(e) => i > 0 && (sel ? startWpDrag(e, w, 'height', 'width') : rect && startWpDrag(e, w, 'height', 'width', { kind: 'panel' }))}
               />
               {onDragWaypoint && vertical && i > 0 && sel && (
                 <g className="wp-grip" onPointerDown={(e) => startWpDrag(e, w, 'height', 'width')}>
@@ -716,7 +722,9 @@ export function Schematic({ computed: c, direction, units, selection, onSelect, 
             return (
               <g
                 key={`${seg.fromWaypoint}-${edge}`}
-                onClick={click({ kind: 'segment', fromWaypoint: seg.fromWaypoint, edge })}
+                className={rect ? 'rect-side' : undefined}
+                onClick={rect ? undefined : click({ kind: 'segment', fromWaypoint: seg.fromWaypoint, edge })}
+                onPointerDown={rect ? (e) => { const b = c.waypoints.find((w) => w.id === rect.id); if (b) startWpDrag(e, b, 'width', 'width', { kind: 'panel' }); } : undefined}
                 onDoubleClick={(e) => {
                   e.stopPropagation();
                   if (!markers) return;
@@ -1015,25 +1023,25 @@ export function Schematic({ computed: c, direction, units, selection, onSelect, 
         })()}
 
         {/* drag readout */}
-        {dragRow !== null && markerDrag.current && (() => {
+        {liveDrag !== null && markerDrag.current && (() => {
           const md = markerDrag.current;
-          const p = S(shapeX(md.seg, md.edge, dragRow, md.stepLike ? 'bindoff' : 'dec'), md.stepLike ? dragRow - 1 : dragRow);
+          const p = S(shapeX(md.seg, md.edge, liveDrag, md.stepLike ? 'bindoff' : 'dec'), md.stepLike ? liveDrag - 1 : liveDrag);
           return (
             <text x={p.x + (md.edge === 'left' ? -12 : 12)} y={p.y - 8} className="drag-label" textAnchor={md.edge === 'left' ? 'end' : 'start'}>
-              row {dragRow} · {sts(c.counts[dragRow])}
+              row {liveDrag} · {sts(c.counts[liveDrag])}
             </text>
           );
         })()}
 
         {/* hover readout */}
-        {hoverRow !== null && dragRow === null && vertical && (() => {
-          const a = S(c.leftEdge[hoverRow], hoverRow);
-          const b = S(c.rightEdge[hoverRow], hoverRow);
+        {liveHover !== null && dragRow === null && vertical && (() => {
+          const a = S(c.leftEdge[liveHover], liveHover);
+          const b = S(c.rightEdge[liveHover], liveHover);
           return (
             <g className="hover" pointerEvents="none">
               <line x1={a.x - 8} y1={a.y} x2={b.x + 8} y2={b.y} />
               <text x={b.x + 12} y={b.y - 6}>
-                row {hoverRow} · {sts(c.counts[hoverRow])} · {len(hoverRow / rpc, units)}
+                row {liveHover} · {sts(c.counts[liveHover])} · {len(liveHover / rpc, units)}
               </text>
             </g>
           );
@@ -1041,7 +1049,7 @@ export function Schematic({ computed: c, direction, units, selection, onSelect, 
       </svg>
       <div className="canvas-hint">
         Scroll to zoom · drag to pan · F to fit
-        {markers && selection.kind === 'segment' ? ' · drag a marker to move it · double-click the edge to add one · Delete removes the selected marker' : ' · click an edge to edit its shaping'}
+        {markers && selection.kind === 'segment' ? ' · drag a marker to move it · double-click the edge to add one · Delete removes the selected marker' : rect ? ' · drag a side to change the width, the top to change the height' : ' · click an edge to edit its shaping'}
       </div>
     </div>
   );

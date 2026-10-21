@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { evaluate } from '../../engine/expr';
 import type { DimExpr, Project } from '../../engine/model';
 import { computePanel, waypointKey } from '../../engine/panel';
-import { clearRectOverrides, convertRule, readRule, rectWaypoints, ruleExpr, setRectDim, setRectExpr, type RectDim, type SizeRule } from '../../engine/rectSize';
+import { clearRectOverrides, convertRule, heightBase, readRule, rectWaypoints, ruleExpr, setRectDim, setRectExpr, type RectDim, type SizeRule } from '../../engine/rectSize';
 import { fromDisplay, roundTo, toDisplay, unitLabel } from '../../engine/units';
 import { len, rows, sts } from '../format';
 import { ExprField } from './ExprField';
@@ -57,7 +57,7 @@ interface FieldProps {
 function RuleField({ ctx, which, label, value, bottomKey, currentCm, perSize }: FieldProps) {
   const { project, panel, units } = ctx;
   const names = project.measurements.map((m) => m.name);
-  const rule = readRule(value.expr, names, which === 'top' ? bottomKey : undefined);
+  const rule = readRule(value.expr, names, which === 'top' ? bottomKey : undefined, which === 'height' ? heightBase(panel) : undefined);
   // Once "Expression" is chosen it stays, even while the text being typed looks like a simpler rule.
   const [asExpr, setAsExpr] = useState(false);
   const mode = asExpr ? 'custom' : rule.mode;
