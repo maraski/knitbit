@@ -9,6 +9,7 @@ import { produce } from '../edit';
 import { edgeMidpoint, edgePaths } from '../edgePaths';
 import { sizeColor } from '../sizeColors';
 import type { SizeMode } from './SizeModeBar';
+import { cancelDrag, pinchView, slop, usePinch, useTouchUi, zoomView } from '../touch';
 
 interface Props {
   project: Project;
@@ -100,16 +101,20 @@ export function LayoutView({ project, update, sizeId, mode, compare, align, comp
       const r = el.getBoundingClientRect();
       const mx = e.clientX - r.left;
       const my = e.clientY - r.top;
-      setView((v) => {
-        if (!v) return v;
-        const scale = Math.min(60, Math.max(0.2, v.scale * Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.0015))));
-        const f = scale / v.scale;
-        return { scale, ox: mx - (mx - v.ox) * f, oy: my - (my - v.oy) * f };
-      });
+      setView((v) => v && zoomView(v, Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.0015)), { x: mx, y: my }, 0.2, 60));
     };
     el.addEventListener('wheel', onWheel, { passive: false });
     return () => el.removeEventListener('wheel', onWheel);
   }, []);
+  // Two fingers zoom and pan; a second finger landing puts back a panel the first one started moving.
+  const touchUi = useTouchUi();
+  usePinch(wrapRef, {
+    start: () => {
+      if (drag.current?.kind === 'panel') cancelDrag(drag.current.key);
+      drag.current = null;
+    },
+    move: (s) => setView((v) => v && pinchView(v, s, 0.2, 60)),
+  });
 
   const v = view ?? { scale: 3, ox: size.w / 2, oy: size.h / 2 };
   const scr = (p: Point) => ({ x: v.ox + p.x * v.scale, y: v.oy - p.y * v.scale });
@@ -150,7 +155,7 @@ export function LayoutView({ project, update, sizeId, mode, compare, align, comp
     if (!g) return;
     const dx = e.clientX - g.x;
     const dy = e.clientY - g.y;
-    if (!g.moved && Math.hypot(dx, dy) < 3) return;
+    if (!g.moved && Math.hypot(dx, dy) < slop(e)) return;
     g.moved = true;
     if (g.kind === 'pan') setView({ ...v, ox: g.ox + dx, oy: g.oy + dy });
     else if (g.id) commitPlacement(g.id, { ...g.start, x: snap(g.start.x + dx / v.scale), y: snap(g.start.y - dy / v.scale) }, g.key);
@@ -205,6 +210,7 @@ export function LayoutView({ project, update, sizeId, mode, compare, align, comp
         for (const piece of edgePaths(c, ref.edge)) {
           const pts = piece.map((p) => place(toLocal(c, p), at));
           joinParts.push(<path key={`${j.id}-${joinParts.length}`} d={d(pts)} stroke={color} className="join-edge-path" onClick={(e) => { e.stopPropagation(); onSelectJoin(j.id); }} />);
+          if (touchUi) joinParts.push(<path key={`${j.id}-${joinParts.length}`} d={d(pts)} className="hit" onClick={(e) => { e.stopPropagation(); onSelectJoin(j.id); }} />);
         }
       }
       if (j.tag === 'seam' && j.edges[0] && j.partner[0]) {
@@ -229,7 +235,7 @@ export function LayoutView({ project, update, sizeId, mode, compare, align, comp
   const sizeIndex = (sid: Id) => project.sizes.findIndex((s) => s.id === sid);
   return (
     <div className="canvas layout" ref={wrapRef} onPointerDown={(e) => onPointerDown(e)} onPointerMove={onPointerMove} onPointerUp={onPointerUp}>
-      <svg width={size.w} height={size.h} className="schematic layout-svg">
+      <svg width={size.w} height={size.h} className={`schematic layout-svg${touchUi ? ' touch' : ''}`}>
         {shapes
           .slice()
           .sort((a, b) => sizeIndex(b.sizeId) - sizeIndex(a.sizeId))
@@ -267,7 +273,7 @@ export function LayoutView({ project, update, sizeId, mode, compare, align, comp
         {unarranged && <span className="muted small">Shown in a T-shape; drag a panel or press Auto-arrange to keep positions.</span>}
       </div>
       {mode === 'overlay' && <SizeLegend project={project} sizes={sizesShown} current={sizeId} align={align} />}
-      <div className="canvas-hint">Drag panels to move · scroll to zoom · drag the background to pan · F to fit · click a coloured edge or link to open its join</div>
+      <div className="canvas-hint">Drag panels to move · {touchUi ? 'pinch to zoom' : 'scroll to zoom'} · drag the background to pan · F to fit · {touchUi ? 'tap' : 'click'} a coloured edge or link to open its join</div>
     </div>
   );
 }

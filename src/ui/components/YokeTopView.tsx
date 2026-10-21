@@ -9,6 +9,7 @@ import { zoneStarts } from '../../engine/yokePanel';
 import { len } from '../format';
 import { cellFill, Glyph, Swatch } from '../glyphs';
 import { sizeColor } from '../sizeColors';
+import { cancelDrag, pinchView, TOUCH_SLOP, usePinch, useTouchUi, zoomView } from '../touch';
 
 type Mode = 'single' | 'overlay' | 'grid';
 
@@ -110,7 +111,7 @@ export function YokeTopView({ project, panel, computed: c, view, mode, compare, 
   const [size, setSize] = useState({ w: 800, h: 600 });
   const [vs, setVs] = useState<ViewState | null>(null);
   const [hover, setHover] = useState<{ sx: number; sy: number; text: string } | null>(null);
-  const drag = useRef<{ x: number; y: number; ox: number; oy: number } | null>(null);
+  const drag = useRef<{ x: number; y: number; ox: number; oy: number; moved: boolean } | null>(null);
   const buttonDrag = useRef<{ index: number; key: string; last: number } | null>(null);
 
   const y = c.yoke;
@@ -150,17 +151,22 @@ export function YokeTopView({ project, panel, computed: c, view, mode, compare, 
       const r = el.getBoundingClientRect();
       const mx = e.clientX - r.left;
       const my = e.clientY - r.top;
-      setVs((v) => {
-        if (!v) return v;
-        const f = Math.exp(-e.deltaY * 0.0015);
-        const scale = Math.min(400, Math.max(0.5, v.scale * f));
-        const k = scale / v.scale;
-        return { scale, ox: mx - (mx - v.ox) * k, oy: my - (my - v.oy) * k };
-      });
+      setVs((v) => v && zoomView(v, Math.exp(-e.deltaY * 0.0015), { x: mx, y: my }, 0.5, 400));
     };
     el.addEventListener('wheel', onWheel, { passive: false });
     return () => el.removeEventListener('wheel', onWheel);
   }, []);
+  // Two fingers zoom and pan; a second finger landing puts back a button the first one started moving.
+  const touchUi = useTouchUi();
+  usePinch(wrapRef, {
+    start: () => {
+      if (buttonDrag.current) cancelDrag(buttonDrag.current.key);
+      buttonDrag.current = null;
+      drag.current = null;
+      setHover(null);
+    },
+    move: (s) => setVs((v) => v && pinchView(v, s, 0.5, 400)),
+  });
 
   const chart = useMemo(() => (view === 'chart' && y && c.ok ? buildChart(project, panel, c) : null), [view, y, c, project, panel]);
 
@@ -170,7 +176,7 @@ export function YokeTopView({ project, panel, computed: c, view, mode, compare, 
 
   const onPointerDown = (e: React.PointerEvent) => {
     if (e.button !== 0) return;
-    drag.current = { x: e.clientX, y: e.clientY, ox: v.ox, oy: v.oy };
+    drag.current = { x: e.clientX, y: e.clientY, ox: v.ox, oy: v.oy, moved: false };
     (e.currentTarget as Element).setPointerCapture(e.pointerId);
   };
   const onPointerMove = (e: React.PointerEvent) => {
@@ -188,26 +194,37 @@ export function YokeTopView({ project, panel, computed: c, view, mode, compare, 
     }
     const d = drag.current;
     if (d) {
+      // A finger has to move a little before it pans, so a tap stays a tap.
+      if (!d.moved && e.pointerType === 'touch' && Math.hypot(e.clientX - d.x, e.clientY - d.y) < TOUCH_SLOP) return;
+      if (!d.moved && e.pointerType === 'touch') setHover(null);
+      d.moved = true;
       setVs({ ...v, ox: d.ox + e.clientX - d.x, oy: d.oy + e.clientY - d.y });
       return;
     }
-    if (mode !== 'single') return;
-    const sx = e.clientX - r.left;
-    const sy = e.clientY - r.top;
+    if (mode !== 'single' || e.pointerType === 'touch') return;
+    setHover(readoutAt(e.clientX - r.left, e.clientY - r.top));
+  };
+  /** The stitch readout at a point in the view, or null off the yoke. */
+  const readoutAt = (sx: number, sy: number) => {
     const hit = hitStitch(geo, (sx - v.ox) / v.scale, (sy - v.oy) / v.scale);
-    if (!hit) return setHover(null);
+    if (!hit) return null;
     const row = y.rows[hit.row - 1];
     const phase = y.phases.find((ph) => ph.id !== 'B' && ph.id !== 'neck' && hit.row >= ph.from && hit.row <= ph.to);
     const counts = ZONES.map((z) => `${zoneName(z)} ${row.zones[z]}`).join(', ');
     const off = zoneOffsets(row.zones);
     const within = hit.index - off[ZONES.indexOf(hit.zone)] + 1;
-    setHover({
+    return {
       sx,
       sy,
       text: `Row ${hit.row} · ${row.round ? 'round' : row.rs ? 'RS' : 'WS'} · ${phase ? `${phase.id} ${phase.label}` : ''} · ${zoneName(hit.zone)} st ${within} · ${row.total} sts (${counts})`,
-    });
+    };
   };
-  const onPointerUp = () => {
+  const onPointerUp = (e: React.PointerEvent) => {
+    // A finger tap shows that stitch's readout; tapping off the yoke hides it.
+    if (e.pointerType === 'touch' && drag.current && !drag.current.moved && mode === 'single') {
+      const r = wrapRef.current!.getBoundingClientRect();
+      setHover(readoutAt(e.clientX - r.left, e.clientY - r.top));
+    }
     drag.current = null;
     buttonDrag.current = null;
   };
@@ -237,6 +254,7 @@ export function YokeTopView({ project, panel, computed: c, view, mode, compare, 
               buttonDrag.current = { index: i, key: `drag:button:${Date.now()}`, last: -1 };
             }}
           >
+            {touchUi && buttons.onDrag && <circle cx={q.x} cy={q.y} r={18} className="touch-hit" />}
             {hole ? <rect x={q.x - 5} y={q.y - 2} width={10} height={4} rx={2} /> : <circle cx={q.x} cy={q.y} r={4.5} />}
             <title>{`Button ${i + 1}: row ${ring.row} of the yoke · ${len(h, units)} up from the hem${buttons.onDrag ? ' — drag to move (this size)' : ''}`}</title>
           </g>,
@@ -263,7 +281,7 @@ export function YokeTopView({ project, panel, computed: c, view, mode, compare, 
   }
 
   return (
-    <div className="canvas yoke-top" ref={wrapRef} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerLeave={() => setHover(null)}>
+    <div className="canvas yoke-top" ref={wrapRef} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerLeave={(e) => e.pointerType !== 'touch' && setHover(null)}>
       <svg width={size.w} height={size.h} className="schematic">
         {mode === 'overlay' ? (
           all.map(({ c: cc, g }, k) => {
@@ -344,7 +362,7 @@ export function YokeTopView({ project, panel, computed: c, view, mode, compare, 
         </div>
       )}
       <div className="canvas-hint">
-        Seen from above: back at the top, fronts at the bottom, the left sleeve on the right · rings = rows, knitted outward from the cast-on round the back neck · scroll to zoom · drag to pan · F to fit
+        Seen from above: back at the top, fronts at the bottom, the left sleeve on the right · rings = rows, knitted outward from the cast-on round the back neck · {touchUi ? 'pinch to zoom · drag to pan · tap a stitch for its count' : 'scroll to zoom · drag to pan · F to fit'}
       </div>
     </div>
   );

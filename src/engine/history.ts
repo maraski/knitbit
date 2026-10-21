@@ -39,5 +39,11 @@ export function redo<T>(h: History<T>): History<T> {
   return { past: [...h.past, h.present], present: next, future: rest, lastKey: null, lastTime: 0 };
 }
 
+/** Drop the step made by edits with this key, if they were the last ones (a drag cut short by a pinch). Not redoable. */
+export function revert<T>(h: History<T>, key: string): History<T> {
+  if (h.lastKey !== key || !h.past.length) return h;
+  return { past: h.past.slice(0, -1), present: h.past[h.past.length - 1], future: h.future, lastKey: null, lastTime: 0 };
+}
+
 export const canUndo = <T>(h: History<T>) => h.past.length > 0;
 export const canRedo = <T>(h: History<T>) => h.future.length > 0;

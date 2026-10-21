@@ -20,6 +20,7 @@ import type { Units } from '../../engine/units';
 import { len, rows as rowsText, sts } from '../format';
 import { sameSelection, type Selection } from '../selection';
 import { unshapedRectangleBottom } from '../../engine/waypointDrag';
+import { cancelDrag, handledDoubleTap, isDoubleTap, pinchView, slop, usePinch, useTouchUi, zoomView } from '../touch';
 
 interface Props {
   computed: ComputedPanel;
@@ -106,6 +107,8 @@ export function Schematic({ computed: c, direction, units, selection, onSelect, 
   const suppressClick = useRef(false);
   const markerDrag = useRef<MarkerDrag | null>(null);
   const buttonDrag = useRef<{ index: number; key: string; last: number } | null>(null);
+  /** A finger put down while drawing a line: the point is placed when it lifts (unless it becomes a pinch). */
+  const touchDraw = useRef<number | null>(null);
   const [dragRow, setDragRow] = useState<number | null>(null);
 
   const spc = c.stitchesPerCm;
@@ -185,17 +188,29 @@ export function Schematic({ computed: c, direction, units, selection, onSelect, 
       const r = el.getBoundingClientRect();
       const mx = e.clientX - r.left;
       const my = e.clientY - r.top;
-      setView((v) => {
-        if (!v) return v;
-        const k = Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.0015));
-        const scale = Math.min(200, Math.max(0.3, v.scale * k));
-        const f = scale / v.scale;
-        return { scale, ox: mx - (mx - v.ox) * f, oy: my - (my - v.oy) * f };
-      });
+      setView((v) => v && zoomView(v, Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.0015)), { x: mx, y: my }, 0.3, 200));
     };
     el.addEventListener('wheel', onWheel, { passive: false });
     return () => el.removeEventListener('wheel', onWheel);
   }, []);
+
+  // Two fingers zoom and pan; a second finger landing takes back whatever the first one started.
+  const touchUi = useTouchUi();
+  usePinch(wrapRef, {
+    start: () => {
+      for (const d of [wpDrag.current, buttonDrag.current, markerDrag.current]) if (d) cancelDrag(d.key);
+      wpDrag.current = null;
+      buttonDrag.current = null;
+      markerDrag.current = null;
+      drag.current = null;
+      touchDraw.current = null;
+      suppressClick.current = true;
+      setWpReadout(null);
+      setDragRow(null);
+      setHoverRow(null);
+    },
+    move: (s) => setView((v) => v && pinchView(v, s, 0.3, 200)),
+  });
 
   if (!c.ok) {
     return (
@@ -279,16 +294,28 @@ export function Schematic({ computed: c, direction, units, selection, onSelect, 
     wpDrag.current = { wpId: w.id, kind, part, half0, key: `drag:wp:${Date.now()}`, x: e.clientX, y: e.clientY, moved: false, last: '' };
     onSelect(select);
   };
+  const drawAt = (clientX: number, clientY: number) => {
+    const p = garmentAt(clientX, clientY);
+    if (!drawPts.first) setDrawPts({ first: p, cursor: { sx: p.sx, sy: p.sy } });
+    else {
+      onDrawLine?.({ h: drawPts.first.h, x: drawPts.first.x }, { h: p.h, x: p.x });
+      setDrawPts({ first: null, cursor: null });
+    }
+  };
+  /** Double-click (or double-tap) on an edge: a shaping marker on that row. */
+  const addMarker = (seg: ComputedSegment, edge: Edge, clientX: number, clientY: number) => {
+    if (!markers) return;
+    const target = seg.mirror ? 'left' : edge;
+    const row = Math.max(seg.rowFrom, Math.min(seg.rowTo, Math.round(knitYAt(clientX, clientY))));
+    markers.add(seg, target, row - seg.rowFrom + 1);
+    onSelect({ kind: 'segment', fromWaypoint: seg.fromWaypoint, edge: target });
+  };
   const onPointerDown = (e: React.PointerEvent) => {
     if (e.button !== 0) return;
     if (drawLine && vertical) {
       e.stopPropagation();
-      const p = garmentAt(e.clientX, e.clientY);
-      if (!drawPts.first) setDrawPts({ first: p, cursor: { sx: p.sx, sy: p.sy } });
-      else {
-        onDrawLine?.({ h: drawPts.first.h, x: drawPts.first.x }, { h: p.h, x: p.x });
-        setDrawPts({ first: null, cursor: null });
-      }
+      if (e.pointerType === 'touch') touchDraw.current = e.pointerId;
+      else drawAt(e.clientX, e.clientY);
       suppressClick.current = true;
       return;
     }
@@ -302,6 +329,16 @@ export function Schematic({ computed: c, direction, units, selection, onSelect, 
     const wy = (clientY - r.top - v.oy) / v.scale;
     const G = (direction === 'side-to-side' ? wx : -wy) * rpc;
     return c.topDown ? top - G : G;
+  };
+
+  /** Panel row at a screen point, or null outside the panel's rows. */
+  const rowAt = (clientX: number, clientY: number) => {
+    const r = wrapRef.current!.getBoundingClientRect();
+    const wx = (clientX - r.left - v.ox) / v.scale;
+    const wy = (clientY - r.top - v.oy) / v.scale;
+    const G = Math.round((direction === 'side-to-side' ? wx : -wy) * rpc);
+    const row = c.topDown ? top - G : G;
+    return row >= 0 && row <= top ? row : null;
   };
 
   const onPointerMove = (e: React.PointerEvent) => {
@@ -318,7 +355,7 @@ export function Schematic({ computed: c, direction, units, selection, onSelect, 
     }
     const wd = wpDrag.current;
     if (wd && onDragWaypoint) {
-      if (!wd.moved && Math.hypot(e.clientX - wd.x, e.clientY - wd.y) < 3) return;
+      if (!wd.moved && Math.hypot(e.clientX - wd.x, e.clientY - wd.y) < slop(e)) return;
       wd.moved = true;
       suppressClick.current = true;
       const p = garmentAt(e.clientX, e.clientY);
@@ -364,25 +401,29 @@ export function Schematic({ computed: c, direction, units, selection, onSelect, 
       }
       return;
     }
-    const r = wrapRef.current!.getBoundingClientRect();
     const d = drag.current;
     if (d) {
       const dx = e.clientX - d.x;
       const dy = e.clientY - d.y;
-      if (!d.moved && Math.hypot(dx, dy) > 3) {
+      if (!d.moved && Math.hypot(dx, dy) > slop(e)) {
         d.moved = true;
         (e.currentTarget as Element).setPointerCapture(e.pointerId);
       }
       if (d.moved) setView({ ...v, ox: d.ox + dx, oy: d.oy + dy });
     }
-    // Hover row readout.
-    const wx = (e.clientX - r.left - v.ox) / v.scale;
-    const wy = (e.clientY - r.top - v.oy) / v.scale;
-    const G = Math.round((direction === 'side-to-side' ? wx : -wy) * rpc);
-    const row = c.topDown ? top - G : G;
-    setHoverRow(row >= 0 && row <= top ? row : null);
+    // Hover row readout (a finger shows it with a tap instead, and hides it by panning).
+    if (e.pointerType === 'touch') {
+      if (d?.moved) setHoverRow(null);
+      return;
+    }
+    setHoverRow(rowAt(e.clientX, e.clientY));
   };
-  const onPointerUp = () => {
+  const onPointerUp = (e: React.PointerEvent) => {
+    if (touchDraw.current === e.pointerId) {
+      touchDraw.current = null;
+      drawAt(e.clientX, e.clientY);
+      return;
+    }
     if (buttonDrag.current) {
       buttonDrag.current = null;
       setWpReadout(null);
@@ -404,6 +445,8 @@ export function Schematic({ computed: c, direction, units, selection, onSelect, 
       return;
     }
     if (drag.current?.moved) suppressClick.current = true;
+    // A tap with a finger shows that row's readout; tapping outside the rows hides it.
+    else if (drag.current && e.pointerType === 'touch') setHoverRow(rowAt(e.clientX, e.clientY));
     drag.current = null;
   };
 
@@ -482,11 +525,11 @@ export function Schematic({ computed: c, direction, units, selection, onSelect, 
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
-      onPointerLeave={() => setHoverRow(null)}
+      onPointerLeave={(e) => e.pointerType !== 'touch' && setHoverRow(null)}
       onClick={() => !suppressClick.current && !drawLine && onSelect({ kind: 'panel' })}
       style={drawLine ? { cursor: 'crosshair' } : undefined}
     >
-      <svg width={size.w} height={size.h} className="schematic">
+      <svg width={size.w} height={size.h} className={`schematic${touchUi ? ' touch' : ''}`}>
         <defs>
           <pattern id="section-hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
             <line x1="0" y1="0" x2="0" y2="6" className="hatch-line" />
@@ -574,6 +617,7 @@ export function Schematic({ computed: c, direction, units, selection, onSelect, 
               />
               {onDragWaypoint && vertical && i > 0 && sel && (
                 <g className="wp-grip" onPointerDown={(e) => startWpDrag(e, w, 'height', 'width')}>
+                  {touchUi && <rect x={(a.x + b.x) / 2 - 24} y={(a.y + b.y) / 2 - 18} width={48} height={36} className="touch-hit" />}
                   <rect x={(a.x + b.x) / 2 - 14} y={(a.y + b.y) / 2 - 7} width={28} height={14} rx={7} />
                   <path d={`M${(a.x + b.x) / 2 - 6},${(a.y + b.y) / 2 - 2} h12 M${(a.x + b.x) / 2 - 6},${(a.y + b.y) / 2 + 2} h12`} />
                   <title>Drag up or down (or use ↑ ↓; Alt: this size only)</title>
@@ -727,12 +771,9 @@ export function Schematic({ computed: c, direction, units, selection, onSelect, 
                 onPointerDown={rect ? (e) => { const b = c.waypoints.find((w) => w.id === rect.id); if (b) startWpDrag(e, b, 'width', 'width', { kind: 'panel' }); } : undefined}
                 onDoubleClick={(e) => {
                   e.stopPropagation();
-                  if (!markers) return;
-                  const target = seg.mirror ? 'left' : edge;
-                  const row = Math.max(seg.rowFrom, Math.min(seg.rowTo, Math.round(knitYAt(e.clientX, e.clientY))));
-                  markers.add(seg, target, row - seg.rowFrom + 1);
-                  onSelect({ kind: 'segment', fromWaypoint: seg.fromWaypoint, edge: target });
+                  if (!handledDoubleTap()) addMarker(seg, edge, e.clientX, e.clientY);
                 }}
+                onPointerUp={(e) => !drag.current?.moved && !wpDrag.current?.moved && isDoubleTap(e) && addMarker(seg, edge, e.clientX, e.clientY)}
               >
                 {sel && <path d={path(pts)} className="edge-selected" />}
                 <path d={path(pts)} className="hit" />
@@ -802,9 +843,12 @@ export function Schematic({ computed: c, direction, units, selection, onSelect, 
             const p = S(side === 'left' ? c.leftEdge[w.row] : c.rightEdge[w.row], w.row);
             const part = w.symmetric ? 'width' : side;
             return (
-              <rect key={side} x={p.x - 5} y={p.y - 5} width={10} height={10} className="wp-handle" onPointerDown={(e) => startWpDrag(e, w, 'width', part)}>
-                <title>Drag to change the width (Alt: this size only)</title>
-              </rect>
+              <g key={side} onPointerDown={(e) => startWpDrag(e, w, 'width', part)}>
+                {touchUi && <rect x={p.x - 20} y={p.y - 20} width={40} height={40} className="touch-hit" />}
+                <rect x={p.x - 5} y={p.y - 5} width={10} height={10} className="wp-handle">
+                  <title>Drag to change the width (Alt: this size only)</title>
+                </rect>
+              </g>
             );
           });
         })()}
@@ -870,6 +914,7 @@ export function Schematic({ computed: c, direction, units, selection, onSelect, 
                 }}
                 onClick={(e) => e.stopPropagation()}
               >
+                {touchUi && bands.onDrag && <circle cx={p.x} cy={p.y} r={18} className="touch-hit" />}
                 {bands.kind === 'button' ? <circle cx={p.x} cy={p.y} r={5} /> : <rect x={p.x - 6} y={p.y - 2} width={12} height={4} rx={2} />}
                 <title>{`Button ${i + 1}: ${len(h, units)} up${bands.onDrag ? ' — drag to move (this size)' : ''}`}</title>
               </g>,
@@ -1013,6 +1058,7 @@ export function Schematic({ computed: c, direction, units, selection, onSelect, 
                     }}
                     onClick={(e) => e.stopPropagation()}
                   >
+                    {touchUi && <circle cx={p.x} cy={p.y} r={18} className="touch-hit" />}
                     <circle cx={p.x} cy={p.y} r={6} />
                     <title>{`Row ${ev.row}: ${sym?.abbr ?? ev.symbol} ${ev.delta > 0 ? '+' : ''}${ev.delta} — drag to move, Delete to remove`}</title>
                   </g>
@@ -1048,8 +1094,8 @@ export function Schematic({ computed: c, direction, units, selection, onSelect, 
         })()}
       </svg>
       <div className="canvas-hint">
-        Scroll to zoom · drag to pan · F to fit
-        {markers && selection.kind === 'segment' ? ' · drag a marker to move it · double-click the edge to add one · Delete removes the selected marker' : rect ? ' · drag a side to change the width, the top to change the height' : ' · click an edge to edit its shaping'}
+        {touchUi ? 'Pinch to zoom · drag to pan · tap a row for its count' : 'Scroll to zoom · drag to pan · F to fit'}
+        {markers && selection.kind === 'segment' ? ' · drag a marker to move it · double-click the edge to add one · Delete removes the selected marker' : rect ? ' · drag a side to change the width, the top to change the height' : ` · ${touchUi ? 'tap' : 'click'} an edge to edit its shaping`}
       </div>
     </div>
   );
