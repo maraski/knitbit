@@ -630,15 +630,19 @@ per phase, back length, underarm cast-on, held stitches). Removing a size clears
 - **Seen from above.** Both the Schematic and the Chart show the yoke from above: the neck in the middle, each row a
   ring around it (spaced by the row height), each stitch an angle by its share of the ring. Back at the top, fronts at
   the bottom, the wearer's left sleeve on the right. Before a pullover's neck is joined (and on a cardigan, all the
-  way) the ring is open at centre front. Scroll to zoom, drag to pan, F to fit; hover a stitch for its row, RS/WS,
+  way) the ring is open at centre front. Where the fronts cast on at the neck, the edge follows that row round to
+  centre front (the bottom of the neck), not a straight line across it. The cast-on is round the back neck (back neck,
+  both shoulders' seam stitches and one front stitch each side); zoomed in, the view labels it, marks where row 1
+  starts (a RS row starts at the right front edge, going clockwise seen from above) and names the row that closes the
+  front neck. Scroll to zoom, drag to pan, F to fit; hover a stitch for its row, RS/WS,
   phase, zone and the per-zone counts. A key (top left) lists the cast-on, shoulder seam, cap height, the phase rings
   and the split. (The Layout still shows the yoke unrolled, each row as wide as its stitches.)
 - **Schematic:** the five zones tinted (fronts green, seams/sleeves orange, back blue), the four markers as red lines
   from the neck out, the front edges, dashed rings at the end of A, C and D and where the neck is joined, and the
   held stitches at the split. Overlay draws every size's outline and markers at one scale; Grid shows every size.
 - **Chart:** the same rings, one per row, with stitch boundaries when zoomed in; increases and cast-ons drawn at their
-  stitches, symbols pointing away from the neck (the knitting direction); markers as bold red lines; row numbers down
-  centre front; the symbol legend (incl. *place marker on row 1, slip after*) at the bottom right.
+  stitches, symbols pointing away from the neck (the knitting direction); markers as bold red lines; cast-on marks round
+  the neck; row numbers up centre back (row 1 next to the cast-on); the symbol legend (incl. *place marker on row 1, slip after*) at the bottom right.
 
 **Body and sleeves.** *Add body and sleeves* (Project → Garment with the contiguous construction, or the yoke's
 properties) adds the yoke if there is none and the panels it lacks, all top-down; it never runs on its own and adds
@@ -661,16 +665,18 @@ the yoke's held edges: a new edge kind `{ "kind": "held", "part": "leftSleeve" |
 *Underarm cast-on*. Change the yoke and the body and sleeves follow in every size.
 
 **Front neck.** The yoke's neck uses the neckline shapes (round, V, square, boat) worked top-down: increases at each
-front edge (inside the edge stitch), then a cast-on. The neck opening at the top is the back neck (the fronts begin
-at the neck points), so the neck width is the back neck; *depth* and *centre* are expressions with per-size values.
+front edge (inside the edge stitch), then a cast-on. The neck opening at the top is cast on across the back (the
+fronts begin at the neck points), so its *width* is the back neck: `back_neck_width`, or `back_neck_width + 6` for a
+boat neck (wider, so the shoulder seams are shorter). *Width*, *depth* and *centre* are expressions with per-size
+values; yokes saved before the width existed keep `back_neck_width`.
 The properties show the numbers, e.g. M, round: *Neck row R = depth × row gauge = 8.5 × 3 = 25.5 → 26 → row 27
-(a RS row)*; *increases at each front edge = (back neck − centre) / 2 = (33 − 13) / 2 = 10*; then
+(a RS row)*; *increases at each front edge = (neck width − centre) / 2 = (33 − 13) / 2 = 10*; then
 
 - **pullover:** cast on the centre (13 sts) at the end of row R and join in the round; the yoke is in rounds after;
 - **cardigan:** each front casts on (centre − `closing_r`) / 2 at its front edge (the right front on row R, the left
   front on row R + 1) and the fronts stay open, flat to the split.
 
-V is all increases (no centre, or one stitch), square and boat all centre (boat shallow). A neck that would close
+V is all increases (no centre, or one stitch), square all centre, boat wide and shallow, mostly centre. A neck that would close
 below the split is an error.
 
 **Cardigan edges on a contiguous yoke.** The yoke has a neck edge (cast-on, two neck slopes, and the centre or

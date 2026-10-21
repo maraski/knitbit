@@ -253,8 +253,9 @@ export interface YokeSpec {
   body: { width: DimExpr; increases: boolean; zone: DimExpr };
   /** Phase F: stitches cast on at each underarm (cm), shared by body and sleeve. */
   underarm: { castOn: DimExpr };
-  /** Front neck, worked as increases at the front edges, then (pullover) a centre cast-on that joins the round. */
-  neck: { shape: NecklineShape; depth: DimExpr; centre: DimExpr };
+  /** Front neck, worked as increases at the front edges, then (pullover) a centre cast-on that joins the round.
+   * `width` is the neck opening, cast on across the back (absent in older files: back_neck_width). */
+  neck: { shape: NecklineShape; depth: DimExpr; centre: DimExpr; width?: DimExpr };
 }
 
 export type BustMethod = 'shortrows' | 'horizontal-dart' | 'vertical-dart' | 'none';

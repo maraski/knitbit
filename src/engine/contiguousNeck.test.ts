@@ -98,10 +98,27 @@ describe('neck shapes on a contiguous yoke', () => {
     expect(v.row).toBeGreaterThan(neck('round').row);
   });
 
-  it('square: all centre, no increases; boat: shallow, all centre', () => {
+  it('square: all centre, no increases; boat: wider and shallow, mostly centre', () => {
     expect(neck('square')).toMatchObject({ perSide: 0, centre: bn });
     const b = neck('boat');
-    expect(b).toMatchObject({ perSide: 0, centre: bn });
+    expect(b.backNeck).toBeGreaterThan(bn);
+    expect(b.centre + 2 * b.perSide).toBe(b.backNeck);
+    expect(b.perSide).toBeLessThanOrEqual(Math.ceil(b.backNeck * 0.1));
     expect(b.row).toBeLessThan(neck('round').row);
+  });
+
+  it('a boat neck is cast on wider than the back neck; older yokes without a width keep the back neck', () => {
+    const p = fixtureProject();
+    const M = sizeId(p, 'M');
+    const round = generateYoke(p, defaultYoke('round'), M);
+    const boat = generateYoke(p, defaultYoke('boat'), M);
+    const spc = boat.stitchesPerCm;
+    expect(boat.castOnZones.back).toBe(Math.round((round.params.neckWidth.value + 6) * spc));
+    expect(boat.castOnZones.back - round.castOnZones.back).toBeGreaterThanOrEqual(Math.round(6 * spc) - 1);
+    // Shorter shoulders: the back still reaches the same width after them.
+    expect(boat.counts.A).toBeLessThan(round.counts.A);
+    const legacy = defaultYoke('boat');
+    delete legacy.neck.width;
+    expect(generateYoke(p, legacy, M).castOnZones.back).toBe(round.castOnZones.back);
   });
 });

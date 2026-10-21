@@ -127,7 +127,7 @@ export function defaultYoke(shape: NecklineShape = 'round'): YokeSpec {
     depth: { mode: 'back-length', backLength: dim('shoulder_drop + armhole_depth - back_neck_drop'), extra: dim(0), deepen: true, maxRapid: dim(0.5) },
     body: { width: dim('upper_chest + ease'), increases: true, zone: dim(0.6) },
     underarm: { castOn: dim('underarm_co') },
-    neck: { shape, depth: dim(n.depth), centre: dim(n.centre) },
+    neck: { shape, depth: dim(n.depth), centre: dim(n.centre), width: dim(n.width) },
   };
 }
 
@@ -169,8 +169,9 @@ export function generateYoke(project: Project, spec: YokeSpec, sizeId: Id): Yoke
 
   // ---- cast-on ----
   const seam = Math.max(1, Math.round(val('seamSts', 'Seam stitches', spec.seamSts, 'sts')));
-  const bn = sts(scope.back_neck_width ?? 0);
-  if (!(bn > 0)) issues.push({ severity: 'error', message: 'back_neck_width gives no back neck stitches.' });
+  // The neck opening is cast on across the back; a boat neck widens it (older files have no width: the back neck).
+  const bn = sts(spec.neck.width ? val('neckWidth', 'Neck width (cast on across the back)', spec.neck.width, 'cm') : scope.back_neck_width ?? 0);
+  if (!(bn > 0)) issues.push({ severity: 'error', message: 'The neck width gives no back neck stitches.' });
   const castOnZones: ZoneCounts = { leftFront: 1, leftSleeve: seam, back: bn, rightSleeve: seam, rightFront: 1 };
   const castOn = sum(castOnZones);
 

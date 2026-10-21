@@ -44,6 +44,7 @@ function allDims(panel: Panel): DimExpr[] {
     out.push(y.seamSts, y.shoulder.backWidth, y.shoulder.length, y.shoulder.shorten, y.shoulder.extraRows, y.backNeck.perRow, y.backNeck.rows);
     out.push(y.cap.topSts, y.cap.rapidRows, y.sleeveWidth, y.depth.backLength, y.depth.extra, y.depth.maxRapid);
     out.push(y.body.width, y.body.zone, y.underarm.castOn, y.neck.depth, y.neck.centre);
+    if (y.neck.width) out.push(y.neck.width);
   }
   return out;
 }

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { backNeckPositions, defaultYoke, type YokeParam } from '../../engine/contiguous';
 import { generateBodyAndSleeves, missingYokePanels } from '../../engine/contiguousGarment';
 import { FRONT_NECKS } from '../../engine/templates';
-import type { DimExpr, NecklineShape, YokeSpec } from '../../engine/model';
+import { dim, type DimExpr, type NecklineShape, type YokeSpec } from '../../engine/model';
 import { computePanel } from '../../engine/panel';
 import { SYMBOLS } from '../../engine/symbols';
 import { editPanel } from '../edit';
@@ -135,6 +135,7 @@ export function YokeProps({ ctx }: { ctx: PropsContext }) {
           {(Object.keys(FRONT_NECKS) as NecklineShape[]).map((k) => <option key={k} value={k}>{k}</option>)}
         </select>
       </div>
+      {cm('Neck width, cast on across the back (cm)', (s) => s.neck.width ?? dim('back_neck_width'), (s, d) => (s.neck.width = d), 'neckWidth')}
       {cm('Depth below the neck point (cm)', (s) => s.neck.depth, (s, d) => (s.neck.depth = d), 'neckDepth')}
       {spec.neck.shape !== 'v' && spec.neck.shape !== 'square' && cm('Centre (cm)', (s) => s.neck.centre, (s, d) => (s.neck.centre = d), 'neckCentre')}
       {y && <NeckWorked y={y} cardigan={project.garment.opening === 'cardigan'} rpc={y.rowsPerCm} />}
@@ -213,7 +214,7 @@ function NeckWorked({ y, cardigan, rpc }: { y: NonNullable<PropsContext['compute
         {n.row !== n.depthRows ? ` → row ${n.row} (a RS row)` : ` (a RS row)`}.
       </div>
       <div>
-        Increases at each front edge: (back neck − centre) / 2 = ({n.backNeck} − {n.centre}) / 2 = <b>{n.perSide}</b>
+        Increases at each front edge: (neck width − centre) / 2 = ({n.backNeck} − {n.centre}) / 2 = <b>{n.perSide}</b>
         {n.perSide ? `, on rows ${y.rows.filter((r) => r.neck).map((r) => r.row).join(', ')}` : ''}.
       </div>
       {cardigan ? (
@@ -223,7 +224,7 @@ function NeckWorked({ y, cardigan, rpc }: { y: NonNullable<PropsContext['compute
         </div>
       ) : (
         <div>
-          Cast on <b>{n.centre}</b> sts at centre front at the end of row {n.row} (back neck − 2 × increases = {n.backNeck} − 2 × {n.perSide}) and join in the round.
+          Cast on <b>{n.centre}</b> sts at centre front at the end of row {n.row} (neck width − 2 × increases = {n.backNeck} − 2 × {n.perSide}) and join in the round.
         </div>
       )}
     </div>

@@ -219,7 +219,7 @@ const panel = obj({
         depth: obj({ mode: oneOf('back-length', 'armhole'), backLength: dimExpr, extra: dimExpr, deepen: bool, maxRapid: dimExpr }),
         body: obj({ width: dimExpr, increases: bool, zone: dimExpr }),
         underarm: obj({ castOn: dimExpr }),
-        neck: obj({ shape: oneOf('round', 'v', 'square', 'boat'), depth: dimExpr, centre: dimExpr }),
+        neck: obj({ shape: oneOf('round', 'v', 'square', 'boat'), depth: dimExpr, centre: dimExpr, width: optional(dimExpr) }),
       }),
     ),
   ),
