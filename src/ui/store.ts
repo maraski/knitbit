@@ -34,15 +34,18 @@ export const loadSample = () => import('./sample');
 export interface StartState {
   project: Project;
   notice: Notice | null;
+  /** Nothing saved yet: the New garment dialog opens over an empty project on the sample sizing table. */
+  firstRun?: boolean;
 }
 
 /**
- * The project to start with: the auto-save, or the sample project on first run (or when the auto-save can't be
- * restored). Resolved before the first render, so starting from the sample only waits for its code then.
+ * The project to start with: the auto-save; on first run an empty project on the sample sizing table (with the New
+ * garment dialog); the sample project when the auto-save can't be restored. Resolved before the first render, so
+ * those only wait for the sample's code.
  */
 export function startState(): StartState | Promise<StartState> {
   const saved = readAutosave(window.localStorage);
-  if (!saved.found) return loadSample().then((m) => ({ project: m.sampleProject(), notice: null }));
+  if (!saved.found) return loadSample().then((m) => ({ project: m.sampleTable(), notice: null, firstRun: true }));
   if (saved.ok) {
     if (saved.migratedFrom !== null) return { project: saved.project, notice: migrationNotice('Restored auto-save', saved.migratedFrom, saved.migrationNotes, saved.warnings) };
     const lines = [...saved.warnings];

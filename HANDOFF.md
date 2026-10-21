@@ -127,6 +127,7 @@ flagged `topDown`; the renderer flips them so every panel is drawn **upright**.
 | — | **Top-down shoulders-first construction** (user's usual method) | `templates.ts`: `construction` (default `shoulders-first` for top-down), `shoulderSlope` (short rows / none), `backNeck` (straight default / shaped); front `startFrom: 'pickup'`; armhole_bo = `underarm.width − 2·round(underarm_co/2/st_w)·st_w` so front and back cast on the same whole number of sts per side (half each); armhole_end at 0.6 (back) / 0.75 (front) of armhole depth so 4X fits; `topDownTop()` returns back + front + 2 joins (front top pick-up; underarm cast-on front sides vs back sides); 'top' template in the sidebar adds the set. Engine: top-down round start = max(underarm join, neck close) with an info note; top-down neck parity now checks row 1 (was the hem: a bug); square neck centre/width rounding; `measureEdge('top')` counts short-row-held cast-on sts. New estimate `underarm_co`. Tests: `construction.test.ts`, template cases. |
 | — | **Drag waypoints + linked panels** (user request) | `engine/waypointDrag.ts`: `placeHeight` (proportional `lo + (hi − lo) × t` between neighbours, skipping ones that would create a cycle; fixed offset for the top/bottom; 'size' = per-size override), `placeWidth`/`scaleExpr` (`(expr) × f`, factors folded), `dragHeight`/`dragWidth` (linked partner by waypoint name: same amount in this size, proportional elsewhere), `matchPartner`, `linkPanels` (`Panel.linkedTo`, symmetric, set manually). Schematic: click a waypoint line to activate it, then drag the line/grip (ns-resize) or the width handles (drawn on top); ↑↓ / ←→ nudge by a row / a stitch each side (Shift ×5, Alt this size) in App's key handler, Alt = this size only, readout, one undo per drag (`drag:wp:`); App keeps the width at drag start. Panel props: Linked panel; waypoint props: Match buttons. Tests: `waypointDrag.test.ts`. |
 | — | **Cloud save** (2026-10, branches `claude/cloud-sync-m1…m5-*`; plan M1–M5 in `docs/cloud-save-plan.md`) | `engine/cloudSync.ts` (`ProjectRemote`, sync marker + fingerprint, `decideSync`/`syncProject`, `resolveConflict`) and `cloudProjects.ts` (sort, rename, duplicate, delete, first-sign-in upload rule), tested with `testRemote.ts`. `ui/cloud/`: `config.ts` (env vars), `status.ts` (labels), `firebase.ts` (lazy: Google sign-in popup → redirect fallback, Firestore lite `ProjectRemote` with a `rev` token per save, soft delete), `saver.ts` (debounce, one sync at a time, offline + backoff, auth errors; `saver.test.ts` with fake timers), `useCloud.ts`. `CloudStatus.tsx` (sign-in button, status, avatar menu), `ProjectsDialog.tsx` (Open… when signed in), `ConflictDialog.tsx`. `firestore.rules`, `firebase.json`, `.env.example`. Commits: M1 `37a7414`, M2 `2e9b75a` + `6e4d370`, M3 `c580261`, M4 `6bcd1f0`, M5 docs `ed79296`. |
+| — | **New garment flow** (2026-10-21, branch `claude/new-garment-flow-19c1bd`) | `engine/garmentSetup.ts`: `METHODS` (seamed / top-down / contiguous / blank), `garmentChoice` (method, front, neckline, sleeves read from the pieces; no new fields, no schema bump), `garmentLabel`, `buildGarment` (pieces + joins per method, opening, ease preset, edges with strips), `changeMethod` (replaces bodices, sleeves, yoke; keeps the rest; notes say what changes), `setNeckline` (in place), `setSleeve`, `EASE_PRESETS`, `extraPieces`. No sleeve-cap seam join is made: the cap's intended ease would be flagged in every size. UI: lazy `NewGarmentDialog.tsx` (New…, and first run via `StartState.firstRun` over `sample.sampleTable()`), sidebar Garment / Pieces (+ Joins section) / Settings, method label by the project name, Add panel's top-down Construction renamed *Front worked from*. Tests: `garmentSetup.test.ts`. |
 | 10 | **Stitch chart + symbols & legend** | `engine/chart.ts` (`buildChart`: per knit row a cell array, `''` outside / `'k'` plain / `'h'` held / symbol id; bind-offs and cast-ons drawn in their row; shaping at `shapingInset`; neck split + mirrored neck shaping; vertical-dart symbols at the dart lines; **bust short rows inserted after `afterRow`** as SR1…SRn with turns and held stitches; RS/WS/round reading direction; worked + live counts; repeats from sections; legend of used symbols; `collapseColumns`). `ui/glyphs.tsx` (CYC-style SVG glyphs in a unit square, cell tints, low-zoom band colours, legend swatch). **Chart** tab (`ChartView.tsx`): upright like the schematic, row-virtualised, plain stitches drawn as runs over an SVG grid pattern, ⌘-scroll zoom, Fit, collapse plain middle, row/stitch numbers, count column, hover readout; select/drag/double-click-add/Delete markers via `markerActions`; One size / Grid (shared scale). **Custom symbols** (`project.symbols`: label, abbr, colour, stitch change) editable in the legend, offered in the marker Stitch menu, `markerDelta` honours them. |
 
 ---
@@ -260,7 +261,9 @@ All confirmed with the user unless marked _(my call)_.
             ├── BustProps.tsx, JoinProps.tsx, MeasurementProps.tsx (measurement + sizes)
             ├── MeasurementsView.tsx (grid), ImportDialog.tsx, CheckPanel.tsx
             ├── ExprField.tsx      expression input + evaluated value + per-size fixed value
-            ├── Sidebar.tsx        Panels / Joins / Project tabs, add-panel form
+            ├── Sidebar.tsx        Garment / Pieces (with Joins) / Settings tabs, add-a-piece form
+            ├── NewGarmentDialog.tsx New garment: method, front, neckline, sleeves, fit, edges, sizes, gauge (lazy)
+            ├── GarmentSettings.tsx  Garment tab: method (rebuild after confirm), front, neckline, sleeves, edges, tags
             ├── CloudStatus.tsx    Sign in with Google / save status / avatar menu; opens ConflictDialog (lazy)
             ├── ProjectsDialog.tsx online projects list (lazy), first-sign-in upload choice
             ├── ConflictDialog.tsx the three conflict choices + Decide later (lazy)
@@ -336,7 +339,7 @@ All confirmed with the user unless marked _(my call)_.
 - **Front wider at the waist than at the underarm** when bust method is *none* or *vertical darts* (front waist gets
   `+ waist_shift`, the underarm only gets `bust_side_w` for short rows/horizontal dart). Expected with this table; looks odd.
 - **Panels added from templates before a fix keep the old shape** (e.g. the staircase armhole bind-off pre-M7 fix).
-  Templates are one-off generators; delete and re-add, or press New.
+  Templates are one-off generators; delete and re-add, or start a New garment.
 
 **Engine gotchas**
 - **Renaming a waypoint does not update expressions that reference it** (`underarm.width` etc.); they show
@@ -370,7 +373,8 @@ All confirmed with the user unless marked _(my call)_.
 - **Undo shortcuts are ignored while focus is in an input** (native input undo applies instead). Click the canvas first.
 - **localStorage keys**: `knitbit.autosave.v1` (project), `knitbit.view.v1` (size, panel, centre view). Clear them to
   start fresh (`localStorage.clear()` in the devtools console).
-- **Window confirm dialogs** are used for deletes and New (simple, but they block automated browser testing).
+- **Window confirm dialogs** are used for deletes (simple, but they block automated browser testing). New and method
+  changes use the New garment dialog and an inline confirm in the Garment tab.
 - **Circular import** `BustProps.tsx` ↔ `Properties.tsx` (types + IssueList); harmless with ESM but don't add
   top-level side effects to either.
 
@@ -458,4 +462,4 @@ npm run build          # tsc -b && vite build → dist/
 npm run preview        # serve the production build
 ```
 
-Fresh start in the browser: open devtools console and run `localStorage.clear()`, then reload (or use **New** in the toolbar).
+Fresh start in the browser: open devtools console and run `localStorage.clear()`, then reload: the New garment dialog opens as on first run (or use **New…** in the toolbar).

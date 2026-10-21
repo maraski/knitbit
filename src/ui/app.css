@@ -513,3 +513,28 @@ button.cloud-status { padding: 0; border: 0; background: none; text-decoration: 
 .schematic .rect-side .hit { cursor: ew-resize; }
 .schematic .rect-side:hover .hit { stroke: var(--accent); stroke-opacity: 0.15; }
 .schematic .wp .hit.drag-y:hover { stroke: var(--accent); stroke-opacity: 0.12; }
+
+/* New garment dialog */
+/* Pinned near the top so the cards stay put while the form below changes height. */
+.modal-backdrop:has(.new-garment) { align-items: flex-start; padding-top: 6vh; }
+.modal.new-garment { width: min(820px, calc(100vw - 32px)); max-height: 88vh; }
+.method-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 6px; }
+.method-card { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 10px; text-align: left; border: 1px solid var(--line-strong); border-radius: 6px; background: none; }
+.method-card.active { border-color: var(--fg); box-shadow: inset 0 0 0 1px var(--fg); }
+.method-card .hint { margin: 0; }
+.method-sketch { width: 80px; height: 56px; color: var(--muted); }
+.method-card.active .method-sketch { color: var(--fg); }
+.new-garment-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 10px; }
+.new-garment .edge-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.new-garment .edge-row .check { margin: 2px 0; }
+.new-garment .modal-foot { align-items: center; margin-top: 0; border-top: 1px solid var(--line); }
+.garment-label { color: var(--muted); font-size: 12px; white-space: nowrap; }
+.method-changes { margin: 6px 0 10px; padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: 6px; }
+.method-changes ul { margin: 4px 0 8px; padding-left: 16px; }
+details.joins-section > summary { cursor: pointer; font-weight: 600; margin: 14px 0 6px; }
+@media (max-width: 720px) {
+  .method-cards { grid-template-columns: 1fr 1fr; }
+  .new-garment-grid { grid-template-columns: 1fr; }
+}
+.new-garment .field input[type=radio] { width: auto; }
+.new-garment .field > label.check { font-size: inherit; color: inherit; margin: 2px 0; }
