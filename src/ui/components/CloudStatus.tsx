@@ -34,7 +34,7 @@ export function CloudStatus({ cloud }: { cloud: Cloud }) {
   if (!cloud.available || user === undefined) return null;
   if (!user) {
     return (
-      <button onClick={cloud.signIn} title="Save projects online and open them on any device">
+      <button onClick={cloud.signIn} onPointerEnter={cloud.prepare} onFocus={cloud.prepare} title="Save projects online and open them on any device">
         Sign in with Google
       </button>
     );

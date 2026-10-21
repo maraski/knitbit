@@ -133,7 +133,15 @@ there is no server code. Until steps 1–7 are done the app simply shows no sign
      `firebase deploy --only firestore:rules --project <project-id>` (uses `firebase.json`).
 
    Re-publish whenever `firestore.rules` changes. No indexes are needed.
-7. **Redeploy on Vercel.** The variables are read at build time, so an existing deployment doesn't see them:
+7. **Serve sign-in from the site's own domain** (needed for the redirect fallback). Chrome, Safari and Firefox block
+   the storage a sign-in redirect uses when it finishes on `<project-id>.firebaseapp.com` while the app runs on
+   another domain: you come back from Google still signed out. `vercel.json` forwards `/__/auth/*` to Firebase, so:
+   - In `vercel.json`, the destination must be your `<project-id>.firebaseapp.com` (it is `knitbit-7ea36` here).
+   - Vercel: set `VITE_FIREBASE_AUTH_DOMAIN` (Production) to the site's domain, e.g. `knitbit.vercel.app`. Keep
+     `<project-id>.firebaseapp.com` in `.env.local` for local dev.
+   - Google Cloud console → APIs & Services → **Credentials** → the OAuth 2.0 client *Web client (auto created by
+     Google Service)* → **Authorised redirect URIs** → add `https://knitbit.vercel.app/__/auth/handler`, Save.
+8. **Redeploy on Vercel.** The variables are read at build time, so an existing deployment doesn't see them:
    Deployments → latest → ⋯ → **Redeploy** (or push a commit).
 
 **Check that it works**
