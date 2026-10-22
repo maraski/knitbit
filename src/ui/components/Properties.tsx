@@ -36,6 +36,7 @@ const NecklineProps = lazy(() => import('./NecklineProps').then((m) => ({ defaul
 const BustProps = lazy(() => import('./BustProps').then((m) => ({ default: m.BustProps })));
 const LineProps = lazy(() => import('./LineProps').then((m) => ({ default: m.LineProps })));
 const YokeProps = lazy(() => import('./YokeProps').then((m) => ({ default: m.YokeProps })));
+const RaglanProps = lazy(() => import('./RaglanProps').then((m) => ({ default: m.RaglanProps })));
 const RectangleSize = lazy(() => import('./RectangleSize').then((m) => ({ default: m.RectangleSize })));
 
 /** Shown in place of a property panel while its code loads. */
@@ -52,7 +53,7 @@ export function Properties({ ctx, selection }: { ctx: PropsContext; selection: S
 }
 
 function SelectionProps({ ctx, selection }: { ctx: PropsContext; selection: Selection }) {
-  if (ctx.panel.yoke) return <YokeProps ctx={ctx} />;
+  if (ctx.panel.yoke) return ctx.panel.yoke.style === 'raglan' ? <RaglanProps ctx={ctx} /> : <YokeProps ctx={ctx} />;
   switch (selection.kind) {
     case 'waypoint': {
       const wp = ctx.panel.waypoints.find((w) => w.id === selection.id);

@@ -524,7 +524,9 @@ button.cloud-status { padding: 0; border: 0; background: none; text-decoration: 
 /* Pinned near the top so the cards stay put while the form below changes height. */
 .modal-backdrop:has(.new-garment) { align-items: flex-start; padding-top: 6vh; }
 .modal.new-garment { width: min(820px, calc(100vw - 32px)); max-height: 88vh; }
-.method-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 6px; }
+.method-cards { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-bottom: 6px; }
+.method-choice { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.method-choice .hint { flex: 1; min-width: 200px; margin: 0; }
 .method-card { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 10px; text-align: left; border: 1px solid var(--line-strong); border-radius: 6px; background: none; }
 .method-card.active { border-color: var(--fg); box-shadow: inset 0 0 0 1px var(--fg); }
 .method-card .hint { margin: 0; }

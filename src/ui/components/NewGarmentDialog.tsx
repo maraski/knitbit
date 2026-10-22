@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { EDGE_STITCHES, EDGE_TREATMENTS, edgesOf } from '../../engine/edgeTreatments';
 import { OPENINGS } from '../../engine/garment';
-import { buildGarment, EASE_PRESETS, easePresetOf, garmentChoice, METHODS, NECKLINES, SLEEVES, sleevesFor, type GarmentMethod, type GarmentSpec, type SleeveChoice } from '../../engine/garmentSetup';
+import { buildGarment, EASE_PRESETS, easePresetOf, garmentChoice, isYokeMethod, METHODS, NECKLINES, necklinesFor, SLEEVES, sleevesFor, type GarmentMethod, type GarmentSpec, type SleeveChoice } from '../../engine/garmentSetup';
 import type { Gauge } from '../../engine/gauge';
 import type { EdgeStitch, EdgeTreatmentId, EdgeTreatments, Project } from '../../engine/model';
 import { loadSample } from '../store';
@@ -24,7 +24,7 @@ export function NewGarmentDialog({ project, firstRun, onCancel, onCreate, onSamp
   const [method, setMethod] = useState<GarmentMethod>(now.method === 'custom' || firstRun ? 'top-down' : now.method);
   const [opening, setOpening] = useState(project.garment.opening);
   const [neckline, setNeckline] = useState(now.neckline);
-  const [sleeve, setSleeve] = useState<SleeveChoice>(now.sleeve === 'contiguous' || now.sleeve === 'none' ? 'set-in' : now.sleeve);
+  const [sleeve, setSleeve] = useState<SleeveChoice>(now.sleeve === 'contiguous' || now.sleeve === 'raglan' || now.sleeve === 'none' ? 'set-in' : now.sleeve);
   const [ease, setEase] = useState(easePresetOf(project.ease) ?? 'standard');
   const [edges, setEdges] = useState<EdgeTreatments>(() => structuredClone(edgesOf(project)));
   const [sizes, setSizes] = useState<SizeSource>(firstRun ? 'sample' : 'keep');
@@ -34,12 +34,17 @@ export function NewGarmentDialog({ project, firstRun, onCancel, onCreate, onSamp
   const sleeves = sleevesFor(method);
   const sleeveChoice: SleeveChoice = sleeves.includes(sleeve) ? sleeve : sleeves[0] ?? 'none';
   const blank = method === 'blank';
+  const necks = necklinesFor(method);
+  const neck = necks.includes(neckline) ? neckline : 'round';
+  // One card per method, except a group (raglan): one card, with its choice below the cards.
+  const cards = METHODS.filter((m, i) => !m.group || METHODS.findIndex((x) => x.group?.id === m.group!.id) === i);
+  const group = METHODS.find((m) => m.id === method)?.group;
   const setEdge = (id: EdgeTreatmentId, patch: Partial<EdgeTreatments[EdgeTreatmentId]>) => setEdges({ ...edges, [id]: { ...edges[id], ...patch } });
 
   const create = async () => {
     setBusy(true);
     const base = sizes === 'keep' ? project : { ...(await loadSample()).sampleTable(), name: project.name };
-    const spec: GarmentSpec = { method, opening, neckline, sleeve: sleeveChoice, ease, edges: blank ? undefined : edges };
+    const spec: GarmentSpec = { method, opening, neckline: neck, sleeve: sleeveChoice, ease, edges: blank ? undefined : edges };
     const name = firstRun || sizes !== 'keep' ? (opening === 'cardigan' ? 'My cardigan' : 'My top') : project.name;
     onCreate(buildGarment({ ...base, name, gauge }, spec), sizes === 'import');
   };
@@ -54,15 +59,28 @@ export function NewGarmentDialog({ project, firstRun, onCancel, onCreate, onSamp
         <div className="modal-body">
           <h4>How it’s built</h4>
           <div className="method-cards" role="radiogroup" aria-label="Construction method">
-            {METHODS.map((m) => (
-              <button key={m.id} role="radio" aria-checked={method === m.id} className={`method-card${method === m.id ? ' active' : ''}`} onClick={() => setMethod(m.id)}>
-                <MethodSketch method={m.id} />
-                <strong>{m.label}</strong>
-                <span className="hint">{m.description}</span>
-              </button>
-            ))}
+            {cards.map((m) => {
+              const active = m.group ? group?.id === m.group.id : method === m.id;
+              return (
+                <button key={m.id} role="radio" aria-checked={active} className={`method-card${active ? ' active' : ''}`} onClick={() => !active && setMethod(m.id)}>
+                  <MethodSketch method={m.id} />
+                  <strong>{m.group?.label ?? m.label}</strong>
+                  <span className="hint">{m.group ? 'Classic raglan lines, or a modified raglan (PetiteKnit style).' : m.description}</span>
+                </button>
+              );
+            })}
           </div>
-          {method === 'contiguous' && <p className="hint">The yoke’s start and its phases are set in the yoke’s properties after it is made.</p>}
+          {group && (
+            <div className="field method-choice">
+              <div className="segmented" role="radiogroup" aria-label={group.label}>
+                {METHODS.filter((m) => m.group?.id === group.id).map((m) => (
+                  <button key={m.id} role="radio" aria-checked={method === m.id} className={method === m.id ? 'active' : ''} onClick={() => setMethod(m.id)}>{m.group!.choice}</button>
+                ))}
+              </div>
+              <div className="hint">{METHODS.find((m) => m.id === method)!.description}</div>
+            </div>
+          )}
+          {isYokeMethod(method) && <p className="hint">The yoke’s {method === 'raglan' ? 'raglan lines, neck and depth' : 'neck and phases'} are set in its properties after it is made.</p>}
 
           <div className="new-garment-grid">
             <div>
@@ -79,8 +97,8 @@ export function NewGarmentDialog({ project, firstRun, onCancel, onCreate, onSamp
                   <div className="row2">
                     <div className="field">
                       <label>Neckline</label>
-                      <select value={neckline} onChange={(e) => setNeckline(e.target.value as typeof neckline)}>
-                        {NECKLINES.map((n) => <option key={n.id} value={n.id}>{n.label}</option>)}
+                      <select value={neck} onChange={(e) => setNeckline(e.target.value as typeof neckline)}>
+                        {NECKLINES.filter((n) => necks.includes(n.id)).map((n) => <option key={n.id} value={n.id}>{n.label}</option>)}
                       </select>
                     </div>
                     <div className="field">
@@ -181,10 +199,19 @@ function MethodSketch({ method }: { method: GarmentMethod }) {
           {arrow(40, 22, 46)}
         </>
       )}
-      {method === 'contiguous' && (
+      {(method === 'contiguous' || method === 'modified-raglan') && (
         <>
           <ellipse {...s} cx="40" cy="22" rx="30" ry="14" />
           <ellipse {...s} cx="40" cy="20" rx="9" ry="5" />
+          <path {...s} d="M24 34 V52 H56 V34" />
+          {arrow(40, 27, 48)}
+        </>
+      )}
+      {method === 'raglan' && (
+        <>
+          <ellipse {...s} cx="40" cy="22" rx="30" ry="14" />
+          <ellipse {...s} cx="40" cy="20" rx="9" ry="5" />
+          <path {...s} d="M33 23 L20 34 M47 23 L60 34 M33 17 L22 10 M47 17 L58 10" strokeDasharray="2 1.5" />
           <path {...s} d="M24 34 V52 H56 V34" />
           {arrow(40, 27, 48)}
         </>

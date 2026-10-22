@@ -21,12 +21,13 @@ import { buildScope } from './measurements';
 import type { DimExpr, Id, NecklineShape, Project, YokeSpec, YokeStart } from './model';
 import { dim, newPanel, type Panel } from './model';
 import { backNeckFor, FRONT_NECKS } from './templates';
+import { defaultRaglan, generateRaglan } from './raglan';
 
 export type Zone = 'leftFront' | 'leftSleeve' | 'back' | 'rightSleeve' | 'rightFront';
 export const ZONES: Zone[] = ['leftFront', 'leftSleeve', 'back', 'rightSleeve', 'rightFront'];
 export type ZoneCounts = Record<Zone, number>;
 
-export type YokePhase = 'A' | 'C' | 'D' | 'E';
+export type YokePhase = 'A' | 'C' | 'D' | 'E' | 'R';
 
 export interface YokeInc {
   zone: Zone;
@@ -75,7 +76,7 @@ export interface YokeParam {
 }
 
 export interface PhaseSummary {
-  id: 'A' | 'B' | 'neck' | 'C' | 'D' | 'E';
+  id: 'A' | 'B' | 'neck' | 'C' | 'D' | 'E' | 'R';
   label: string;
   from: number; // first row
   to: number; // last row
@@ -126,6 +127,9 @@ export interface YokeResult {
   };
   stitchesPerCm: number;
   rowsPerCm: number;
+  /** A raglan yoke (raglan.ts): the sleeve top at the cast-on, the rows the body and the sleeves increase on (4 sts
+   * each), how many of those are extra rows beyond every other row, and the raglan line's length. */
+  raglan?: { sleeveTopSts: number; bodyRows: number[]; sleeveRows: number[]; bodyFast: number; sleeveFast: number; lineCm: number };
 }
 
 // ---------- defaults ----------
@@ -173,12 +177,14 @@ const BOAT_BACK_LENGTH = 'shoulder_drop * min(1, (shoulder_w - neck_w) / max(1, 
  * shape's default follows the new shape's default (settings you changed are kept).
  */
 export function yokeWithNeck(yoke: YokeSpec, shape: NecklineShape): YokeSpec {
-  const before = defaultYoke(yoke.neck.shape) as unknown as Record<string, unknown>;
-  const after = defaultYoke(shape) as unknown as Record<string, unknown>;
+  // A raglan keeps its start (both make every shape); its defaults are the raglan's.
+  const base = (s: NecklineShape) => (yoke.style === 'raglan' ? defaultRaglan(s, yoke.start ?? 'back') : defaultYoke(s));
+  const before = base(yoke.neck.shape) as unknown as Record<string, unknown>;
+  const after = base(shape) as unknown as Record<string, unknown>;
   const next = { ...yoke } as unknown as Record<string, unknown>;
   for (const k of Object.keys(after)) if (JSON.stringify(next[k]) === JSON.stringify(before[k])) next[k] = after[k];
   // The whole neck is the new shape's (a boat neck's back depth goes with it).
-  return { ...(next as unknown as YokeSpec), neck: defaultYoke(shape).neck };
+  return { ...(next as unknown as YokeSpec), neck: base(shape).neck };
 }
 
 const sum = (z: ZoneCounts) => ZONES.reduce((a, k) => a + z[k], 0);
@@ -194,6 +200,7 @@ function incSymbols(spec: YokeSpec): { before: string; after: string } {
 // ---------- generator ----------
 
 export function generateYoke(project: Project, spec: YokeSpec, sizeId: Id): YokeResult {
+  if (spec.style === 'raglan') return generateRaglan(project, spec, sizeId);
   const spc = stitchesPerCm(project.gauge);
   const rpc = rowsPerCm(project.gauge);
   const scope = buildScope(project, sizeId);
@@ -607,7 +614,7 @@ export function generateYoke(project: Project, spec: YokeSpec, sizeId: Id): Yoke
  * (the left back shoulder marker) to the first turn and the last row from the last turn back to it; a cardigan's
  * row 1 starts at the right front edge and its last row ends at the left front edge.
  */
-function shortRowSpan(sr: NonNullable<YokeResult['shortRows']>, r: number, row: YokeRow, cardigan: boolean): Pick<YokeRow, 'span' | 'turn'> {
+export function shortRowSpan(sr: NonNullable<YokeResult['shortRows']>, r: number, row: YokeRow, cardigan: boolean): Pick<YokeRow, 'span' | 'turn'> {
   const u = sr.turns;
   const n = sr.pairs;
   const T = row.total;
@@ -641,11 +648,11 @@ export function zoneName(z: Zone): string {
 }
 
 /** A new contiguous yoke panel (top-down, flat, generated from its phases). */
-export function yokePanel(shape: NecklineShape = 'round'): Panel {
+export function yokePanel(shape: NecklineShape = 'round', start?: YokeStart): Panel {
   const p = newPanel('Yoke');
   p.template = 'yoke';
   p.direction = 'top-down';
-  p.yoke = defaultYoke(shape);
+  p.yoke = defaultYoke(shape, start);
   p.notes = 'Contiguous method by Susie Myers (SusieM on Ravelry): worked top-down in one piece from the neck.';
   return p;
 }

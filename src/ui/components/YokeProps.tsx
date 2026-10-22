@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { backNeckPositions, defaultShortRows, yokeWithNeck, type YokeParam } from '../../engine/contiguous';
 import { generateBodyAndSleeves, missingYokePanels } from '../../engine/contiguousGarment';
 import { FRONT_NECKS } from '../../engine/templates';
-import { dim, type DimExpr, type NecklineShape, type YokeSpec, type YokeStart } from '../../engine/model';
+import { dim, type DimExpr, type NecklineShape, type YokeSpec } from '../../engine/model';
 import { computePanel } from '../../engine/panel';
 import { SYMBOLS } from '../../engine/symbols';
 import { editPanel } from '../edit';
@@ -17,6 +17,8 @@ export function YokeProps({ ctx }: { ctx: PropsContext }) {
   const { panel, computed: c, update, sizeId, sizeName, project } = ctx;
   const spec = panel.yoke!;
   const y = c.yoke;
+  // The whole-neck start is the modified raglan method; switching start is a method change (Garment tab).
+  const modified = spec.start === 'neck';
   const setYoke = (fn: (s: YokeSpec) => void, key: string | null = null) => update((p) => editPanel(p, panel.id, (pp) => fn(pp.yoke!)), key);
   // The yoke's own names (the boat neck's centre and back length use them), as this size works them.
   const local: Record<string, number> = y ? { neck_w: y.params.neckWidth?.value ?? ctx.scope.back_neck_width, neck_depth: y.params.neckDepth?.value ?? 0, back_depth: y.params.neckBackDepth?.value ?? ctx.scope.back_neck_drop } : {};
@@ -30,14 +32,14 @@ export function YokeProps({ ctx }: { ctx: PropsContext }) {
 
   return (
     <div className="props yoke-props">
-      <h3>Contiguous yoke</h3>
+      <h3>{modified ? 'Modified raglan yoke' : 'Contiguous yoke'}</h3>
       <div className="field">
         <label>Name</label>
         <input value={panel.name} onChange={(e) => update((p) => editPanel(p, panel.id, (pp) => void (pp.name = e.target.value)), `panel.${panel.id}.name`)} />
       </div>
       <p className="hint">
-        Worked top-down in one piece from the neck: the contiguous method by Susie Myers (SusieM on Ravelry). Rows come from these phases, not from
-        waypoints. Row 1 is a RS row that places the markers.
+        Worked top-down in one piece from the neck{modified ? ': the whole neck cast on and short rows raising the back (PetiteKnit style), then the shoulder and sleeve-cap phases of' : ':'} the
+        contiguous method by Susie Myers (SusieM on Ravelry). Rows come from these phases, not from waypoints. Row 1 is a RS row that places the markers.
       </p>
       <IssueList issues={c.issues} ctx={ctx} />
 
@@ -102,24 +104,10 @@ export function YokeProps({ ctx }: { ctx: PropsContext }) {
       {num('Seam stitches (more = rounder cap)', 'seamSts', (s) => s.seamSts, (s, d) => (s.seamSts = d))}
 
       <h4>Start</h4>
-      <div className="field">
-        <label>Cast on</label>
-        <select
-          value={spec.start ?? 'back'}
-          onChange={(e) => {
-            const start = e.target.value as YokeStart;
-            // Each start brings its back neck default: increases for the method's start, none with short rows.
-            setYoke((s) => {
-              s.start = start;
-              s.shortRows ??= defaultShortRows();
-              s.backNeck.perRow = dim(start === 'neck' ? 0 : 2);
-            });
-          }}
-        >
-          <option value="neck">the whole neck, short rows raise the back</option>
-          <option value="back">the back neck only (as the method's PDF)</option>
-        </select>
-      </div>
+      <p className="hint">
+        Cast on {modified ? 'the whole neck; short rows raise the back (modified raglan)' : 'the back neck only, as the method’s PDF; the front neck is shaped by increases'}. The other start is
+        the {modified ? 'contiguous' : 'modified raglan'} method: change it in the Garment tab.
+      </p>
       {spec.start === 'neck' && (
         <>
           {num('Front cast-on, both fronts (cm)', 'frontCo', (s) => (s.shortRows ?? defaultShortRows()).frontCo, (s, d) => ((s.shortRows ??= defaultShortRows()).frontCo = d))}
@@ -162,15 +150,17 @@ export function YokeProps({ ctx }: { ctx: PropsContext }) {
             const shape = e.target.value as NecklineShape;
             setYoke((s) => {
               Object.assign(s, yokeWithNeck(s, shape));
-              // Short rows can't make a V's depth: a V neck takes the method's start with its neck increases.
+              // Short rows can't make a V's depth: a V neck takes the back start with its neck increases (only a
+              // classic raglan offers V with the whole-neck start; the modified raglan has no V).
               if (shape === 'v' && s.start === 'neck') {
                 s.start = 'back';
-                s.backNeck.perRow = dim(2);
+                if (s.style !== 'raglan') s.backNeck.perRow = dim(2);
               }
             });
           }}
         >
-          {(Object.keys(FRONT_NECKS) as NecklineShape[]).map((k) => <option key={k} value={k}>{k}</option>)}
+          {/* Short rows can't make a V's depth: the modified raglan has no V. */}
+          {(Object.keys(FRONT_NECKS) as NecklineShape[]).filter((k) => !modified || k !== 'v' || spec.neck.shape === 'v').map((k) => <option key={k} value={k}>{k}</option>)}
         </select>
       </div>
       {cm('Neck width, cast on across the back (cm)', (s) => s.neck.width ?? dim('back_neck_width'), (s, d) => (s.neck.width = d), 'neckWidth')}
@@ -242,7 +232,7 @@ export function YokeProps({ ctx }: { ctx: PropsContext }) {
 }
 
 /** How the whole-neck start is worked in this size: the cast-on, the short rows and where the rounds begin. */
-function ShortRowsWorked({ y, cardigan }: { y: NonNullable<PropsContext['computed']['yoke']>; cardigan: boolean }) {
+export function ShortRowsWorked({ y, cardigan }: { y: NonNullable<PropsContext['computed']['yoke']>; cardigan: boolean }) {
   const sr = y.shortRows!;
   const z = y.castOnZones;
   return (
@@ -270,7 +260,7 @@ function ShortRowsWorked({ y, cardigan }: { y: NonNullable<PropsContext['compute
 }
 
 /** How the front neck is worked in this size, with the numbers plugged in. */
-function NeckWorked({ y, cardigan, rpc }: { y: NonNullable<PropsContext['computed']['yoke']>; cardigan: boolean; rpc: number }) {
+export function NeckWorked({ y, cardigan, rpc }: { y: NonNullable<PropsContext['computed']['yoke']>; cardigan: boolean; rpc: number }) {
   const n = y.neck;
   const depthCm = y.params.neckDepth?.value ?? 0;
   const r2 = (x: number) => Math.round(x * 100) / 100;
@@ -299,7 +289,7 @@ function NeckWorked({ y, cardigan, rpc }: { y: NonNullable<PropsContext['compute
 }
 
 /** An expression in rows, stitches or a fraction (not cm), with its numbers plugged in and a per-size value. */
-function ParamField({ label, value, param, sizeId, sizeName, onChange }: { label: string; value: DimExpr; param?: YokeParam; sizeId: string; sizeName: string; onChange: (d: DimExpr, key: string) => void }) {
+export function ParamField({ label, value, param, sizeId, sizeName, onChange }: { label: string; value: DimExpr; param?: YokeParam; sizeId: string; sizeName: string; onChange: (d: DimExpr, key: string) => void }) {
   const overridden = sizeId in value.overrides;
   const [ov, setOv] = useState('');
   useEffect(() => setOv(overridden ? String(value.overrides[sizeId]) : ''), [overridden, value.overrides, sizeId]);
