@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { EDGE_STITCHES, EDGE_TREATMENTS, edgesOf } from '../../engine/edgeTreatments';
 import { OPENINGS } from '../../engine/garment';
-import { buildGarment, EASE_PRESETS, easePresetOf, garmentChoice, isYokeMethod, METHODS, NECKLINES, necklinesFor, SLEEVES, sleevesFor, type GarmentMethod, type GarmentSpec, type SleeveChoice } from '../../engine/garmentSetup';
+import { buildGarment, EASE_PRESETS, easePresetOf, garmentChoice, isYokeMethod, lengthFor, lengthsFor, METHODS, NECKLINES, necklinesFor, SLEEVES, sleevesFor, type GarmentMethod, type GarmentSpec, type SleeveChoice } from '../../engine/garmentSetup';
+import { SLEEVE_LENGTHS } from '../../engine/sleeveLength';
 import type { Gauge } from '../../engine/gauge';
 import type { EdgeStitch, EdgeTreatmentId, EdgeTreatments, Project } from '../../engine/model';
 import { loadSample } from '../store';
@@ -25,6 +26,7 @@ export function NewGarmentDialog({ project, firstRun, onCancel, onCreate, onSamp
   const [opening, setOpening] = useState(project.garment.opening);
   const [neckline, setNeckline] = useState(now.neckline);
   const [sleeve, setSleeve] = useState<SleeveChoice>(now.sleeve === 'contiguous' || now.sleeve === 'raglan' || now.sleeve === 'none' ? 'set-in' : now.sleeve);
+  const [length, setLength] = useState(now.sleeveLength);
   const [ease, setEase] = useState(easePresetOf(project.ease) ?? 'standard');
   const [edges, setEdges] = useState<EdgeTreatments>(() => structuredClone(edgesOf(project)));
   const [sizes, setSizes] = useState<SizeSource>(firstRun ? 'sample' : 'keep');
@@ -33,6 +35,8 @@ export function NewGarmentDialog({ project, firstRun, onCancel, onCreate, onSamp
 
   const sleeves = sleevesFor(method);
   const sleeveChoice: SleeveChoice = sleeves.includes(sleeve) ? sleeve : sleeves[0] ?? 'none';
+  const lengths = lengthsFor(sleeveChoice);
+  const sleeveLength = lengthFor(sleeveChoice, length);
   const blank = method === 'blank';
   const necks = necklinesFor(method);
   const neck = necks.includes(neckline) ? neckline : 'round';
@@ -44,7 +48,7 @@ export function NewGarmentDialog({ project, firstRun, onCancel, onCreate, onSamp
   const create = async () => {
     setBusy(true);
     const base = sizes === 'keep' ? project : { ...(await loadSample()).sampleTable(), name: project.name };
-    const spec: GarmentSpec = { method, opening, neckline: neck, sleeve: sleeveChoice, ease, edges: blank ? undefined : edges };
+    const spec: GarmentSpec = { method, opening, neckline: neck, sleeve: sleeveChoice, sleeveLength, ease, edges: blank ? undefined : edges };
     const name = firstRun || sizes !== 'keep' ? (opening === 'cardigan' ? 'My cardigan' : 'My top') : project.name;
     onCreate(buildGarment({ ...base, name, gauge }, spec), sizes === 'import');
   };
@@ -108,11 +112,20 @@ export function NewGarmentDialog({ project, firstRun, onCancel, onCreate, onSamp
                       </select>
                     </div>
                   </div>
-                  <div className="field">
-                    <label>Fit (ease)</label>
-                    <select value={ease} onChange={(e) => setEase(e.target.value as typeof ease)}>
-                      {EASE_PRESETS.map((e) => <option key={e.id} value={e.id}>{e.label}: {e.global} cm around, bicep {e.bicep} cm</option>)}
-                    </select>
+                  <div className="row2">
+                    <div className="field">
+                      <label>Sleeve length</label>
+                      <select value={sleeveLength} onChange={(e) => setLength(e.target.value as typeof length)} disabled={!lengths.length}>
+                        {!lengths.length && <option value={sleeveLength}>—</option>}
+                        {SLEEVE_LENGTHS.filter((l) => lengths.includes(l.id)).reverse().map((l) => <option key={l.id} value={l.id}>{l.id === 'cap' ? 'Cap sleeve' : l.label}</option>)}
+                      </select>
+                    </div>
+                    <div className="field">
+                      <label>Fit (ease)</label>
+                      <select value={ease} onChange={(e) => setEase(e.target.value as typeof ease)}>
+                        {EASE_PRESETS.map((e) => <option key={e.id} value={e.id}>{e.label}: {e.global} cm around, bicep {e.bicep} cm</option>)}
+                      </select>
+                    </div>
                   </div>
                   <h4>Edges</h4>
                   {EDGE_TREATMENTS.filter((d) => d.id !== 'frontBands' || opening === 'cardigan').map((d) => (

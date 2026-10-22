@@ -207,6 +207,7 @@ const panel = obj({
   edge: optional(edgeId),
   band: optional(oneOf('button', 'buttonhole', 'continuous')),
   fromYoke: optional(oneOf('back', 'front', 'leftSleeve', 'rightSleeve')),
+  sleeveLength: optional(oneOf('cap', 'short', 'elbow', 'three-quarter', 'long')),
   yoke: optional(
     nullable(
       obj({

@@ -14,6 +14,22 @@ const spec = (s: Partial<GarmentSpec>): GarmentSpec => ({ method: 'raglan', open
 const names = (p: Project) => p.panels.map((x) => x.name);
 const yokeOf = (p: Project) => p.panels.find((x) => x.yoke)!.yoke!;
 
+describe('raglan sleeves at every length', () => {
+  // A yoke's sleeves come from its held stitches, so a raglan's can be any length, cap included.
+  for (const sleeveLength of ['long', 'three-quarter', 'elbow', 'short', 'cap'] as const) {
+    it(`raglan × ${sleeveLength}: builds without errors in every size and reads back the length`, () => {
+      const p = buildGarment(base(), spec({ sleeveLength }));
+      expect(garmentChoice(p)).toMatchObject({ method: 'raglan', sleeve: 'raglan', sleeveLength });
+      for (const s of p.sizes) {
+        for (const panel of p.panels) {
+          const c = computePanel(p, panel, s.id);
+          expect(c.ok, `${s.name} ${panel.name}: ${c.issues.filter((i) => i.severity === 'error').map((i) => i.message).join('; ')}`).toBe(true);
+        }
+      }
+    });
+  }
+});
+
 describe('New garment: raglan and modified raglan', () => {
   const cases: [GarmentSpec['method'], FrontOpening, string[]][] = [
     ['raglan', 'closed', ['Yoke', 'Back', 'Front', 'Left sleeve', 'Right sleeve']],
