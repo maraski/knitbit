@@ -3,7 +3,7 @@ import { projectChecks } from './checks';
 import { joinReport } from './joins';
 import { defaultYoke, generateYoke } from './contiguous';
 import { defaultEdges } from './edgeTreatments';
-import { buildGarment, garmentChoice, setNeckline, type GarmentSpec } from './garmentSetup';
+import { buildGarment, garmentChoice, isYokeMethod, setNeckline, type GarmentSpec } from './garmentSetup';
 import { rowsPerCm, stitchesPerCm } from './gauge';
 import { buildScope } from './measurements';
 import type { FrontOpening, Panel, Project } from './model';
@@ -12,7 +12,7 @@ import { fixtureProject, sizeId } from './testFixtures';
 
 const base = () => ({ ...fixtureProject(), panels: [], joins: [] });
 const garment = (method: GarmentSpec['method'], opening: FrontOpening = 'closed', neckline: GarmentSpec['neckline'] = 'boat') =>
-  buildGarment(base(), { method, opening, neckline, sleeve: method === 'contiguous' ? 'contiguous' : 'set-in', ease: 'standard', edges: defaultEdges() });
+  buildGarment(base(), { method, opening, neckline, sleeve: isYokeMethod(method) ? 'contiguous' : 'set-in', ease: 'standard', edges: defaultEdges() });
 const errors = (p: Project, size: string) =>
   p.panels.flatMap((x) => computePanel(p, x, size).issues.filter((i) => i.severity === 'error').map((i) => `${x.name}: ${i.message}`));
 const named = (p: Project, name: string) => p.panels.find((x) => x.name === name)!;
@@ -117,8 +117,9 @@ describe('boat neck: seamed and top-down panels', () => {
 
 describe('boat neck: contiguous yoke', () => {
   for (const opening of ['closed', 'cardigan'] as const) {
+    // The whole-neck start is the modified raglan's (the contiguous method makes the back start).
     it(`whole-neck start, ${opening}: cast on the wide neck, short rows raise the back by front − back depth`, () => {
-      const p = garment('contiguous', opening);
+      const p = garment('modified-raglan', opening);
       const spc = stitchesPerCm(p.gauge);
       const rpc = rowsPerCm(p.gauge);
       const yoke = p.panels.find((x) => x.yoke)!;

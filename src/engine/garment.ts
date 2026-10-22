@@ -21,8 +21,10 @@ export const OPENINGS: { id: FrontOpening; label: string; description: string }[
 
 export const DEFAULT_GARMENT: GarmentOptions = { construction: 'panels', opening: 'closed' };
 
-/** Tag added while the construction is contiguous. */
+/** Tag added while the construction is contiguous (a raglan yoke is tagged "raglan" instead, by the New garment
+ * dialog and method changes). */
 export const CONTIGUOUS_TAG = 'contiguous';
+export const RAGLAN_TAG = 'raglan';
 
 /** Credit for the contiguous method; goes in the footer of PDF and PNG exports (Project → export credit). */
 export const CONTIGUOUS_CREDIT =
@@ -74,8 +76,10 @@ export function conformToGarment(p: Project, notes: string[] = []): Project {
 }
 
 /** Lines for the footer of an export (empty when there is nothing to credit or the credit is switched off). */
-export function exportFooter(p: Pick<Project, 'garment' | 'settings'>): string[] {
+export function exportFooter(p: Pick<Project, 'garment' | 'settings'> & Partial<Pick<Project, 'panels'>>): string[] {
   if (p.settings.exportCredit === false) return [];
+  // A raglan yoke isn't the contiguous method; the modified raglan (contiguous shaping, whole-neck start) is.
+  if (p.panels?.some((x) => x.yoke?.style === 'raglan')) return [];
   return p.garment.construction === 'contiguous' ? [CONTIGUOUS_CREDIT] : [];
 }
 

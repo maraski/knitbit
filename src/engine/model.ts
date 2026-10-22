@@ -230,7 +230,16 @@ export type YokeIncrease = 'kfb' | 'm1' | 'other';
  */
 export type YokeStart = 'back' | 'neck';
 
+/** What the yoke is: 'contiguous' (absent in older files; set-in-look sleeves, either start) or 'raglan' (four raglan
+ * lines from the neck to the underarm). A contiguous yoke with the whole-neck start is shown as "modified raglan". */
+export type YokeStyle = 'contiguous' | 'raglan';
+
 export interface YokeSpec {
+  style?: YokeStyle;
+  /** Raglan only: the top of each sleeve at the cast-on (cm, between its raglan lines). The raglan line is `seamSts`
+   * wide; `depth`, `body.width`, `sleeveWidth` and `underarm` are shared with the contiguous yoke (the shoulder, back
+   * neck and cap phases are not used). */
+  raglan?: { sleeveTop: DimExpr };
   increase: { type: YokeIncrease; symbol: string };
   /** Stitches in each shoulder seam group (2; more makes a rounder cap). */
   seamSts: DimExpr;
