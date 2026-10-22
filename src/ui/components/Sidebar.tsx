@@ -3,7 +3,7 @@ import { DEFAULT_REGION_GAP } from '../../engine/fitChecks';
 import { FitSettings } from './FitSettings';
 import { ContiguousPanels, GarmentSettings } from './GarmentSettings';
 import { conformToGarment } from '../../engine/garment';
-import { EASE_PRESETS, easePresetOf, extraPieces, garmentChoice, withEasePreset, type EasePresetId } from '../../engine/garmentSetup';
+import { EASE_PRESETS, easePresetOf, extraPieces, garmentChoice, isYokeMethod, withEasePreset, type EasePresetId } from '../../engine/garmentSetup';
 import { convertGauge, type GaugeBasis } from '../../engine/gauge';
 import { newId, type Id, type Project } from '../../engine/model';
 import { ensureEstimates } from '../../engine/estimates';
@@ -160,7 +160,7 @@ function PanelList({ project, panelId, update, selectPanel }: Props) {
         ))}
         {project.panels.length === 0 && <li className="muted">No pieces yet.</li>}
       </ul>
-      {method === 'contiguous' && <ContiguousPanels project={project} update={update} />}
+      {isYokeMethod(method) && <ContiguousPanels project={project} update={update} />}
       <h4>Add a piece</h4>
       <div className="add-panel">
         <select value={tpl} onChange={(e) => setTpl(e.target.value as TemplateId)}>

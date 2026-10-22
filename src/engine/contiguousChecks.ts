@@ -26,13 +26,15 @@ export function contiguousChecks(project: Project, sizeId: Id, cache: PanelCache
   const tol = project.settings.seamToleranceCm;
   const push = (severity: Issue['severity'], message: string, at = panel) => out.push({ panelId: at.id, panelName: at.name, issue: { severity, message, ref: { kind: 'panel' } } });
 
+  const raglan = !!y.raglan;
   // Widths at the end of the shoulders (info: the back follows the cross back by design; the shoulder width is a style).
+  // A raglan has no shoulders: its checks are below.
   const cb = scope.cross_back_w ?? scope.cross_back;
-  if (cb !== undefined) {
+  if (cb !== undefined && !raglan) {
     const d = y.derived.backEndOfACm - cb;
     push('info', `End of the shoulders (row ${y.counts.A}): the back is ${cm(y.derived.backEndOfACm)}, ${d >= 0 ? `${cm(d)} wider` : `${cm(-d)} narrower`} than the cross back (${cm(cb)}).`);
   }
-  if (scope.cross_front !== undefined) {
+  if (scope.cross_front !== undefined && !raglan) {
     const d = y.derived.frontEndOfACm - scope.cross_front;
     push('info', `End of the shoulders: the fronts (with the neck between them) are ${cm(y.derived.frontEndOfACm)}, ${d >= 0 ? `${cm(d)} wider` : `${cm(-d)} narrower`} than the cross front (${cm(scope.cross_front)}).`);
   }
@@ -46,8 +48,9 @@ export function contiguousChecks(project: Project, sizeId: Id, cache: PanelCache
     else if (d > Math.max(tol, 0.1 * target)) push('info', `The sleeve at the underarm is ${cm(y.derived.sleeveCm)}, ${cm(d)} more than bicep + ease (${cm(target)}).`);
   }
 
-  // Around the armhole: both armhole edges, the cap top and the underarm cast-on, against the body's scye.
-  if (scope.scye_circumference !== undefined) {
+  // Around the armhole: both armhole edges, the cap top and the underarm cast-on, against the body's scye. (A raglan's
+  // armhole runs up to the neck, so it isn't compared.)
+  if (scope.scye_circumference !== undefined && !raglan) {
     const s = scope.scye_circumference;
     const d = y.derived.armholeCm - s;
     if (d < -tol) push('warning', `Around the armhole (yoke edges + cap top + ${y.underarmCo} sts cast on) is ${cm(y.derived.armholeCm)}, ${cm(-d)} less than the scye circumference (${cm(s)}): the sleeve may be tight at the underarm (a deeper yoke, extra depth, or a larger underarm cast-on helps).`);
@@ -56,7 +59,22 @@ export function contiguousChecks(project: Project, sizeId: Id, cache: PanelCache
 
   // Hint: a long shoulder seam with few rapid rows gives a narrow, pointy cap top.
   const { A, C } = y.counts;
-  if (C < A / 2) push('info', `Hint: the cap may look pointy: the shoulder seam is ${A} rows but the rapid cap only ${C}. More rapid rows (or more seam stitches) round it.`);
+  if (!raglan && C < A / 2) push('info', `Hint: the cap may look pointy: the shoulder seam is ${A} rows but the rapid cap only ${C}. More rapid rows (or more seam stitches) round it.`);
+
+  if (y.raglan) {
+    // The body at the split against its target (4 sts per increase row, so it can be up to 2 sts off), and how deep
+    // the raglan is next to a set-in armhole.
+    const body = y.params.bodyWidth?.value;
+    if (body !== undefined) {
+      const closing = project.garment.opening === 'cardigan' ? scope.closing_r ?? 0 : 0;
+      const d = y.derived.bodyCm + closing - body;
+      if (Math.abs(d) > Math.max(tol, 2 / y.stitchesPerCm + 1e-6)) push('warning', `The body at the underarm is ${cm(y.derived.bodyCm + closing)} (${y.held.body} + 2 × ${y.underarmCo} sts), ${d > 0 ? `${cm(d)} more` : `${cm(-d)} less`} than its target (${cm(body)}).`);
+    }
+    if (scope.armhole_depth !== undefined) {
+      const lower = y.derived.backLengthCm - (scope.shoulder_drop ?? 0) + (scope.back_neck_drop ?? 0);
+      if (lower < scope.armhole_depth - tol) push('warning', `The raglan splits ${cm(scope.armhole_depth - lower)} higher than the armhole depth (${cm(scope.armhole_depth)} below the shoulder): it may bind at the underarm. Deepen it.`);
+    }
+  }
 
   // Body and sleeves continuing from the held stitches: their first row should take exactly those plus the cast-on.
   const N = y.underarmCo;

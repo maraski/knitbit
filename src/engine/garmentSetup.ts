@@ -3,23 +3,46 @@
 // read back from the pieces (garmentChoice), so older projects show their method without a migration.
 
 import { defaultYoke, yokePanel } from './contiguous';
+import { defaultRaglan, raglanPanel } from './raglan';
 import { generateBodyAndSleeves } from './contiguousGarment';
 import { applyEdgeTreatments } from './edgeTreatments';
 import { ensureEstimates } from './estimates';
-import { conformToGarment, setConstruction } from './garment';
+import { conformToGarment, CONTIGUOUS_TAG, RAGLAN_TAG, setConstruction } from './garment';
 import { dropPanelFromJoins } from './joins';
 import type { EaseSettings, EdgeRef, EdgeTreatments, FrontOpening, Join, NecklineShape, Panel, Project, YokeSpec } from './model';
 import { dim, newId } from './model';
 import { bodice, FRONT_NECKS, sleeve, TEMPLATE_MEASUREMENTS, topDownTop, type SleeveType, type TemplateId } from './templates';
 
-/** How the garment is built. 'blank' makes no pieces (drawn by hand); a project without bodices reads as 'custom'. */
-export type GarmentMethod = 'seamed' | 'top-down' | 'contiguous' | 'blank';
-export type SleeveChoice = SleeveType | 'contiguous' | 'none';
+/**
+ * How the garment is built. 'blank' makes no pieces (drawn by hand); a project without bodices reads as 'custom'.
+ * The yoke methods (contiguous, raglan, modified raglan) are all a top-down yoke (construction 'contiguous'); which
+ * one is read from the yoke: a raglan yoke, or a contiguous yoke started with the whole neck (modified raglan).
+ */
+export type GarmentMethod = 'seamed' | 'top-down' | 'contiguous' | 'raglan' | 'modified-raglan' | 'blank';
+export type SleeveChoice = SleeveType | 'contiguous' | 'raglan' | 'none';
+export type YokeMethod = 'contiguous' | 'raglan' | 'modified-raglan';
 
-export const METHODS: { id: GarmentMethod; label: string; short: string; description: string }[] = [
+export const isYokeMethod = (m: GarmentMethod | 'custom'): m is YokeMethod => m === 'contiguous' || m === 'raglan' || m === 'modified-raglan';
+
+/** Methods; those with a `group` are shown as one card with a choice between them (New garment dialog). */
+export const METHODS: { id: GarmentMethod; label: string; short: string; description: string; group?: { id: 'raglan'; label: string; choice: string } }[] = [
   { id: 'seamed', label: 'Seamed panels, bottom-up', short: 'Seamed panels', description: 'Back, front and sleeves knit flat from the hem up and sewn together.' },
   { id: 'top-down', label: 'Top-down, shoulders first', short: 'Top-down', description: 'Back cast on at the shoulders, fronts picked up from it, joined at the underarms and knit down in the round.' },
-  { id: 'contiguous', label: 'Contiguous yoke, top-down', short: 'Contiguous', description: 'One piece from the neck with set-in-look sleeves (Susie Myers’ contiguous method); body and sleeves continue from the yoke.' },
+  { id: 'contiguous', label: 'Contiguous yoke, top-down', short: 'Contiguous', description: 'One piece from the back neck with set-in-look sleeves (Susie Myers’ contiguous method); body and sleeves continue from the yoke.' },
+  {
+    id: 'raglan',
+    label: 'Raglan, top-down',
+    short: 'Raglan',
+    description: 'One piece from the neck with four raglan lines to the underarms; body and sleeves continue from the yoke.',
+    group: { id: 'raglan', label: 'Raglan, top-down', choice: 'Classic' },
+  },
+  {
+    id: 'modified-raglan',
+    label: 'Modified raglan, top-down',
+    short: 'Modified raglan',
+    description: 'The whole neck cast on and short rows raising the back (PetiteKnit style), then shoulder and sleeve-cap increases; body and sleeves continue from the yoke.',
+    group: { id: 'raglan', label: 'Raglan, top-down', choice: 'Modified' },
+  },
   { id: 'blank', label: 'Start from blank', short: 'Custom', description: 'No pieces yet: add and draw your own.' },
 ];
 
@@ -35,15 +58,26 @@ export const SLEEVES: { id: SleeveChoice; label: string }[] = [
   { id: 'drop', label: 'Drop shoulder' },
   { id: 'straight', label: 'Straight' },
   { id: 'contiguous', label: 'Contiguous (set-in look)' },
+  { id: 'raglan', label: 'Raglan' },
   { id: 'none', label: 'None (sleeveless)' },
 ];
 
 /** Sleeves each method can make. */
 export function sleevesFor(method: GarmentMethod | 'custom'): SleeveChoice[] {
-  if (method === 'contiguous') return ['contiguous'];
+  if (method === 'raglan') return ['raglan'];
+  if (isYokeMethod(method)) return ['contiguous'];
   if (method === 'blank') return [];
   return ['set-in', 'drop', 'straight', 'none'];
 }
+
+/** Necklines each method can make: the whole-neck start's short rows can't make a V's depth. */
+export function necklinesFor(method: GarmentMethod | 'custom'): NecklineShape[] {
+  const all = NECKLINES.map((n) => n.id);
+  return method === 'modified-raglan' ? all.filter((n) => n !== 'v') : all;
+}
+
+/** A neckline the method can make: `shape`, or round. */
+const necklineFor = (method: GarmentMethod | 'custom', shape: NecklineShape): NecklineShape => (necklinesFor(method).includes(shape) ? shape : 'round');
 
 export type EasePresetId = 'close' | 'standard' | 'relaxed' | 'oversized';
 
@@ -94,8 +128,9 @@ export const isGarmentPiece = (p: Panel) => isBodice(p) || isSleeve(p) || !!p.yo
 export function garmentChoice(p: Project): GarmentChoice {
   const opening = p.garment.opening;
   if (p.garment.construction === 'contiguous') {
-    const y = p.panels.find((x) => x.yoke);
-    return { method: 'contiguous', opening, neckline: y?.yoke!.neck.shape ?? 'round', sleeve: 'contiguous' };
+    const y = p.panels.find((x) => x.yoke)?.yoke;
+    const method: YokeMethod = y?.style === 'raglan' ? 'raglan' : y?.start === 'neck' ? 'modified-raglan' : 'contiguous';
+    return { method, opening, neckline: y?.neck.shape ?? 'round', sleeve: method === 'raglan' ? 'raglan' : 'contiguous' };
   }
   const bodices = p.panels.filter(isBodice);
   const front = bodices.find((x) => x.template === 'front' && x.neckline);
@@ -122,7 +157,7 @@ const side = (p: Panel, s: 'left' | 'right', from: string, to: string): EdgeRef 
 const seam = (name: string, edges: EdgeRef[], partner: EdgeRef[], note: string): Join => ({ id: newId('join'), name, tag: 'seam', edges, partner, ratio: null, note });
 
 function sleeveFor(choice: SleeveChoice, method: GarmentChoice['method']): Panel | null {
-  if (choice === 'none' || choice === 'contiguous') return null;
+  if (choice === 'none' || choice === 'contiguous' || choice === 'raglan') return null;
   return sleeve(choice, method === 'top-down' ? 'top-down' : 'bottom-up');
 }
 
@@ -155,9 +190,11 @@ function panelPieces(method: 'seamed' | 'top-down', neckline: NecklineShape, sle
 /** Add the pieces of `method` to the project (its opening and edge settings applied). */
 function addPieces(p: Project, method: GarmentMethod, neckline: NecklineShape, sleeveChoice: SleeveChoice, notes: string[]): Project {
   if (method === 'blank') return p;
-  if (method === 'contiguous') {
+  if (isYokeMethod(method)) {
     const q = ensureEstimates(p, TEMPLATE_MEASUREMENTS.yoke).project;
-    return generateBodyAndSleeves({ ...q, panels: [...q.panels, yokePanel(neckline)] }, notes);
+    const shape = necklineFor(method, neckline);
+    const yoke = method === 'raglan' ? raglanPanel(shape) : yokePanel(shape, method === 'modified-raglan' ? 'neck' : 'back');
+    return generateBodyAndSleeves({ ...q, panels: [...q.panels, yoke] }, notes);
   }
   const set = panelPieces(method, neckline, sleeveChoice);
   const q = ensureEstimates(p, [...new Set(set.templates.flatMap((t) => TEMPLATE_MEASUREMENTS[t]))]).project;
@@ -169,11 +206,20 @@ function addPieces(p: Project, method: GarmentMethod, neckline: NecklineShape, s
  * opening, ease preset and edge treatments set (the neckband and band strips made when the edges call for them).
  */
 export function buildGarment(base: Project, spec: GarmentSpec): Project {
-  const construction = spec.method === 'contiguous' ? 'contiguous' : 'panels';
+  const construction = isYokeMethod(spec.method) ? 'contiguous' : 'panels';
   let p: Project = setConstruction({ ...base, panels: [], joins: [], garment: { construction: base.garment.construction, opening: spec.opening } }, construction);
+  p = withMethodTags(p, spec.method);
   p = { ...p, ease: withEasePreset(p.ease, spec.ease), edges: spec.edges ? structuredClone(spec.edges) : undefined, cardigan: undefined };
   p = addPieces(p, spec.method, spec.neckline, spec.sleeve, []);
   return p.edges ? applyEdgeTreatments(p, [], { create: true }) : p;
+}
+
+/** Tags the method adds: "contiguous" for the contiguous yoke, "raglan" for both raglans (each removed again when
+ * switching away, as construction tags are). */
+function withMethodTags(p: Project, method: GarmentMethod): Project {
+  const tag = method === 'contiguous' ? CONTIGUOUS_TAG : method === 'raglan' || method === 'modified-raglan' ? RAGLAN_TAG : null;
+  const tags = p.tags.filter((t) => t !== CONTIGUOUS_TAG && t !== RAGLAN_TAG);
+  return { ...p, tags: tag ? [...tags, tag] : tags };
 }
 
 /**
@@ -188,8 +234,8 @@ export function changeMethod(p: Project, method: Exclude<GarmentMethod, 'blank'>
   let joins = p.joins ?? [];
   for (const x of old) joins = dropPanelFromJoins(joins, x.id);
   let q: Project = { ...p, panels: p.panels.filter((x) => !isGarmentPiece(x)), joins };
-  q = setConstruction(q, method === 'contiguous' ? 'contiguous' : 'panels');
-  const sleeveChoice = sleevesFor(method).includes(now.sleeve) ? now.sleeve : method === 'contiguous' ? 'contiguous' : 'set-in';
+  q = withMethodTags(setConstruction(q, isYokeMethod(method) ? 'contiguous' : 'panels'), method);
+  const sleeveChoice = sleevesFor(method).includes(now.sleeve) ? now.sleeve : isYokeMethod(method) ? sleevesFor(method)[0] : 'set-in';
   const added: string[] = [];
   q = addPieces(q, method, now.neckline, sleeveChoice, added);
   const fresh = q.panels.filter((x) => !p.panels.some((o) => o.id === x.id));
@@ -198,7 +244,9 @@ export function changeMethod(p: Project, method: Exclude<GarmentMethod, 'blank'>
   if (old.length) notes.push(`Replaces ${old.map((x) => x.name).join(', ')}.`);
   if (fresh.length) notes.push(`Adds ${fresh.map((x) => x.name).join(', ')}.`);
   if (kept.length) notes.push(`Keeps ${kept.map((x) => x.name).join(', ')}.`);
-  if (sleeveChoice !== now.sleeve && now.sleeve !== 'none') notes.push(`Sleeves become ${SLEEVES.find((s) => s.id === sleeveChoice)!.label.toLowerCase()}: this method has no ${SLEEVES.find((s) => s.id === now.sleeve)!.label.toLowerCase()}.`);
+  // Between yoke methods the sleeves are part of the method: no note.
+  if (sleeveChoice !== now.sleeve && now.sleeve !== 'none' && !isYokeMethod(now.method)) notes.push(`Sleeves become ${SLEEVES.find((s) => s.id === sleeveChoice)!.label.toLowerCase()}: this method has no ${SLEEVES.find((s) => s.id === now.sleeve)!.label.toLowerCase()}.`);
+  if (necklineFor(method, now.neckline) !== now.neckline) notes.push(`The neckline becomes round: this method has no ${NECKLINES.find((n) => n.id === now.neckline)!.label} neck.`);
   notes.push('Sizes, gauge, ease and edge settings stay. Undo goes back.');
   return q.edges ? applyEdgeTreatments(q) : q;
 }
@@ -208,8 +256,10 @@ export function changeMethod(p: Project, method: Exclude<GarmentMethod, 'blank'>
  * shape's default follows the new shape's default (settings you changed are kept).
  */
 function yokeWithNeck(yoke: YokeSpec, shape: NecklineShape): YokeSpec {
-  const before = defaultYoke(yoke.neck.shape) as unknown as Record<string, unknown>;
-  const after = defaultYoke(shape) as unknown as Record<string, unknown>;
+  // A raglan keeps its start (both make every shape); its defaults are the raglan's.
+  const base = (s: NecklineShape) => (yoke.style === 'raglan' ? defaultRaglan(s, yoke.start ?? 'back') : defaultYoke(s));
+  const before = base(yoke.neck.shape) as unknown as Record<string, unknown>;
+  const after = base(shape) as unknown as Record<string, unknown>;
   const next = { ...yoke } as unknown as Record<string, unknown>;
   for (const k of Object.keys(after)) if (JSON.stringify(next[k]) === JSON.stringify(before[k])) next[k] = after[k];
   return { ...(next as unknown as YokeSpec), neck: { ...yoke.neck, ...defaultYoke(shape).neck } };
@@ -229,7 +279,7 @@ export function setNeckline(p: Project, shape: NecklineShape): Project {
 /** Replace the sleeve panels (not a contiguous yoke's) with another type; 'none' removes them. */
 export function setSleeve(p: Project, choice: SleeveChoice, notes: string[] = []): Project {
   const c = garmentChoice(p);
-  if (c.method === 'contiguous' || choice === c.sleeve) return p;
+  if (isYokeMethod(c.method) || choice === c.sleeve) return p;
   const old = p.panels.filter((x) => isSleeve(x) && !x.fromYoke);
   // Joins made for the old sleeves (cap seams…) go with them.
   const joins = (p.joins ?? []).filter((j) => ![...j.edges, ...j.partner].some((r) => old.some((x) => x.id === r.panelId)));
@@ -246,6 +296,6 @@ export function setSleeve(p: Project, choice: SleeveChoice, notes: string[] = []
 
 /** Single pieces the Pieces tab offers for a method (whole-garment sets come from the method instead). */
 export function extraPieces(method: GarmentChoice['method']): TemplateId[] {
-  if (method === 'contiguous') return ['rectangle', 'neckband'];
+  if (isYokeMethod(method)) return ['rectangle', 'neckband'];
   return ['sleeve', 'back', 'front', 'rectangle', 'neckband'];
 }

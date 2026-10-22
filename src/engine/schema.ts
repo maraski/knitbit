@@ -210,6 +210,8 @@ const panel = obj({
   yoke: optional(
     nullable(
       obj({
+        style: optional(oneOf('contiguous', 'raglan')),
+        raglan: optional(obj({ sleeveTop: dimExpr })),
         start: optional(oneOf('back', 'neck')),
         shortRows: optional(obj({ frontCo: dimExpr, pairs: dimExpr, first: dimExpr, step: dimExpr })),
         increase: obj({ type: oneOf('kfb', 'm1', 'other'), symbol: str }),

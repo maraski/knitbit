@@ -17,14 +17,15 @@ The adapted table (`samples/sizing_table_ysolda_cm.csv`) is for personal use and
 neckline, sleeves, fit, edges, sizes and gauge in one screen. See *Starting a garment*.
 
 **Garment options** (Garment tab), combined freely: **Construction** *Panels* (the panels you draw) or
-*Contiguous, top-down* (a generator that makes a contiguous yoke and the body and sleeves that continue from it, all
-ordinary editable panels), and **Front opening** *Closed / pullover* or *Cardigan* (mirrored left/right fronts,
+*Contiguous, top-down* (a generator that makes a top-down yoke: contiguous, raglan or modified raglan, and the body
+and sleeves that continue from it, all ordinary editable panels), and **Front opening** *Closed / pullover* or *Cardigan* (mirrored left/right fronts,
 bands, buttons). Edge treatments (hem, cuff, neckband, front bands) are set once for the project. See *Garment
-options*, *Cardigan fronts*, *Edge treatments*, *Cardigan bands and buttons* and *Contiguous yoke*.
+options*, *Cardigan fronts*, *Edge treatments*, *Cardigan bands and buttons*, *Contiguous yoke* and *Raglan yoke*.
 
 **Contiguous method credit:** The contiguous construction follows the contiguous sleeve method developed by Susie
 Myers, SusieM on Ravelry (http://www.ravelry.com/people/SusieM). It is a method, not a pattern; Knitbit only models
-its phases. Projects that use it get the tag *contiguous*, and exports carry this line in their footer (Garment
+its phases. Contiguous projects get the tag *contiguous* (raglan and modified raglan get *raglan*), and the
+contiguous and modified raglan methods (both use its shoulder and sleeve-cap phases) carry this line in their footer (Garment
 tab → *Credit the construction method in export footers*, on by default): *"This garment is worked seamlessly
 from the top-down using the contiguous sleeve method developed by Susie Myers, SusieM on Ravelry
 (http://www.ravelry.com/people/SusieM)"*. (PDF/PNG export itself is not built yet; `exportFooter()` in
@@ -204,6 +205,8 @@ removed; delete them in the console if you want the space back.
   - `contiguous.ts`: the contiguous yoke generator (phases A–F, neck, row-by-row zones and increases) and `yoke.*` names.
   - `yokePanel.ts`, `yokeTop.ts`: the yoke as a panel and chart; its top-view geometry.
   - `contiguousGarment.ts`: body and sleeves from the yoke's held stitches. `contiguousChecks.ts`: their checks.
+  - `raglan.ts`: the raglan yoke generator (same rows and result as the contiguous yoke; its neck comes from
+    `generateYoke`). `generateYoke` hands a `style: 'raglan'` yoke to it.
   - `cloudSync.ts`: online sync decisions (upload, download, conflict) against a `ProjectRemote` interface, the sync
     marker, conflict resolution. `cloudProjects.ts`: Projects dialog operations. `testRemote.ts`: in-memory remote for tests.
 - `src/ui/`: React views. `src/ui/cloud/`: online saving (`config.ts` env check, `status.ts` status labels,
@@ -318,11 +321,12 @@ empty project. One screen, one undoable step (undo goes back to the project you 
 
 - **How it's built**: *Seamed panels, bottom-up* (back, front, sleeve; side and shoulder seams tagged),
   *Top-down, shoulders first* (back cast on at the shoulders, front picked up from it, underarms cast on half each,
-  in the round below; sleeves top-down), *Contiguous yoke, top-down* (yoke, then body and sleeves continuing from
-  it), or *Start from blank* (no pieces).
+  in the round below; sleeves top-down), *Contiguous yoke, top-down* (yoke from the back neck, then body and
+  sleeves continuing from it), *Raglan, top-down* with a *Classic* / *Modified* choice (one card; see *Raglan yoke*),
+  or *Start from blank* (no pieces).
 - **Front**: pullover or cardigan (fronts split into a mirrored pair, bands and buttons).
-- **Neckline** (round, V, square, boat) and **sleeves** (set-in cap, drop shoulder, straight or none; contiguous
-  yokes have their own set-in-look sleeves).
+- **Neckline** (round, V, square, boat; the modified raglan has no V, its short rows can't make one) and **sleeves**
+  (set-in cap, drop shoulder, straight or none; yokes have their own sleeves: set-in look, or raglan).
 - **Fit (ease)**: close (0 cm), standard (5), relaxed (10) or oversized (20) total ease, with bicep and wrist ease.
 - **Edges**: hem, cuff, neckband and (cardigans) front bands on or off and their stitch; the neckband and band strips
   are made with the garment. Depths and the rest are in the Garment tab afterwards.
@@ -343,7 +347,8 @@ The left sidebar has three tabs:
 
 Nothing new is saved for this: the method, neckline and sleeves are read from the pieces (`garmentChoice` in
 `src/engine/garmentSetup.ts`), so older projects show theirs without a migration: a contiguous construction reads as
-contiguous, top-down bodices as top-down, other bodices as seamed, and a project without bodices as *Custom*. The
+raglan when its yoke is a raglan (`yoke.style: 'raglan'`), modified raglan when the yoke starts with the whole neck
+(`yoke.start: 'neck'`, the default for contiguous yokes made before raglan existed), else contiguous; top-down bodices as top-down, other bodices as seamed, and a project without bodices as *Custom*. The
 method is shown by the project name, e.g. *Contiguous · cardigan*.
 
 ## Templates
@@ -711,9 +716,10 @@ Joins record it: *Body continues from the yoke* and *Left/Right sleeve continues
 the yoke's held edges: a new edge kind `{ "kind": "held", "part": "leftSleeve" | "body" | "rightSleeve" }`), and
 *Underarm cast-on*. Change the yoke and the body and sleeves follow in every size.
 
-**Start.** A yoke starts one of two ways (properties → *Start*):
+**Start.** A contiguous-shaped yoke starts one of two ways, and each is its own method (change it in the Garment tab;
+the yoke's properties say which it is):
 
-- **The whole neck, short rows raise the back** (the default for new yokes, except a V neck): cast on left front,
+- **The whole neck, short rows raise the back** = the **modified raglan** method (PetiteKnit style; no V neck): cast on left front,
   seam, back neck, seam, right front. The fronts are cast on as wide as the neck (*Front cast-on*, `neck_w` = the
   neck width; per size). German short rows raise the back above the front: *pairs* = (front neck depth −
   `back_neck_drop`) ÷ row height ÷ 2, the first turn *first* sts past each front shoulder marker, each next turn
@@ -725,7 +731,8 @@ the yoke's held edges: a new edge kind `{ "kind": "held", "part": "leftSleeve" |
   short-row row ends at the left front edge. The neck edge is the cast-on; a cardigan's front edges run from the
   short rows to the split. Without back neck increases the shoulder seam is a few rows longer to reach the cross
   back.
-- **The back neck only** (as the method's PDF, and every yoke saved before the choice existed): below.
+- **The back neck only** = the **contiguous** method (as the method's PDF, and every yoke saved before the choice
+  existed): below.
 
 **Front neck (back neck start).** The yoke's neck uses the neckline shapes (round, V, square, boat) worked top-down: increases at each
 front edge (inside the edge stitch), then a cast-on. The neck opening at the top is cast on across the back (the
@@ -774,6 +781,33 @@ Body increases bring the body at the underarm (cast-ons included) to `upper_ches
 cast-on is (body target − yoke body) / 2. The result lists every row's zone counts, increases (with positions and
 symbols), cast-ons and marker moves, a phase table, the held edges, and warnings (e.g. a sleeve that can't reach its
 width, a cap that is mostly rapid, a neck that closes below the split).
+
+
+## Raglan yoke (generator)
+
+*Raglan, top-down → Classic* (New garment, or the Garment tab's method) makes a yoke with `yoke.style: 'raglan'`,
+worked by `generateRaglan` in `src/engine/raglan.ts`. It gives the same rows and result as the contiguous yoke, so the
+top view, chart, body and sleeves from the held stitches (`yoke.*` names), joins and checks all work on it. Top-down
+only; a pullover joins in the round at the neck, a cardigan stays flat.
+
+| | Default | What happens |
+|---|---|---|
+| Cast-on | back neck (`back_neck_width`, or the neckline's width), each sleeve top `back_neck_width / 3` between its two raglan lines (2 sts each), 1 front st each side | row 1 (RS) places the four markers and makes the first increases |
+| Raglan lines | 2 sts (k2), M1R before / M1L after (or kfb, or any symbol, e.g. a yarn over) | the body increases just outside each line (fronts and back, 4 sts a row), the sleeves just inside (2 sts each a row) |
+| Front neck | as the contiguous yoke: increases at each front edge, then the centre cast-on (pullover: join in the round; cardigan: each front casts on at its edge). Or *the whole neck, short rows raise the back* (no V) | worked out by the contiguous generator, so both yokes shape the neck the same way |
+| Depth | `shoulder_drop + armhole_depth − back_neck_drop` (back length, neck to underarm) + extra (0 cm) | the split row |
+| Rates | body to `upper_chest + ease`, sleeve to `bicep + ease.bicep`, both less the underarm cast-on (`underarm_co`) | each side's increase rows: every other row (RS rows / every other round), spread from row 1 down to the split; where that isn't enough, the rows between are added, spread evenly; where even every row isn't, the underarm cast-on is raised (a note) |
+
+The properties show the rows for this size (body and sleeve increase rows, how many are extra), the cast-on
+breakdown, the split, the raglan line's length, and every size side by side. **Checks**: the body at the split
+against its target (more than 2 sts off is a warning), a split higher than `armhole_depth` below the shoulder (may
+bind), and as for every yoke: the sleeve against bicep + ease, and the body and sleeves starting with the held
+stitches plus the underarm cast-on. The contiguous checks for the cross back, cross front, scye and cap shape don't
+apply to a raglan.
+
+**Modified raglan** (*Raglan, top-down → Modified*) is the contiguous yoke with the whole-neck start: the whole neck
+cast on, German short rows raising the back, then the shoulder and sleeve-cap phases (see *Contiguous yoke*). Its
+yoke has no `style` and `start: 'neck'`; contiguous projects saved with that start open as modified raglan.
 
 ## Short-row segments
 

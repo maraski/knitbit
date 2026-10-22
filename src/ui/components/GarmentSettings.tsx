@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { CONTIGUOUS_CREDIT, OPENINGS, parseTags, setOpening } from '../../engine/garment';
-import { changeMethod, garmentChoice, METHODS, NECKLINES, setNeckline, setSleeve, SLEEVES, sleevesFor, type GarmentMethod, type SleeveChoice } from '../../engine/garmentSetup';
+import { changeMethod, garmentChoice, METHODS, NECKLINES, necklinesFor, setNeckline, setSleeve, SLEEVES, sleevesFor, type GarmentMethod, type SleeveChoice } from '../../engine/garmentSetup';
 import type { FrontOpening, Id, Project } from '../../engine/model';
 import { generateBodyAndSleeves, missingYokePanels } from '../../engine/contiguousGarment';
 import { EdgeSettings } from './EdgeSettings';
@@ -83,7 +83,7 @@ export function GarmentSettings({ project, update, sizeId }: Props & { sizeId: I
           <div className="field">
             <label>Neckline</label>
             <select value={choice.neckline} onChange={(e) => update((p) => setNeckline(p, e.target.value as typeof choice.neckline))} title="Sets the front neck to this shape’s defaults">
-              {NECKLINES.map((n) => <option key={n.id} value={n.id}>{n.label}</option>)}
+              {NECKLINES.filter((n) => n.id === choice.neckline || necklinesFor(choice.method).includes(n.id)).map((n) => <option key={n.id} value={n.id}>{n.label}</option>)}
             </select>
           </div>
           <div className="field">
@@ -101,7 +101,7 @@ export function GarmentSettings({ project, update, sizeId }: Props & { sizeId: I
         <input type="checkbox" checked={project.settings.exportCredit !== false} onChange={(e) => update((p) => ({ ...p, settings: { ...p.settings, exportCredit: e.target.checked } }))} />
         Credit the construction method in export footers
       </label>
-      {choice.method === 'contiguous' && <p className="hint credit">{CONTIGUOUS_CREDIT}</p>}
+      {(choice.method === 'contiguous' || choice.method === 'modified-raglan') && <p className="hint credit">{CONTIGUOUS_CREDIT}</p>}
     </>
   );
 }

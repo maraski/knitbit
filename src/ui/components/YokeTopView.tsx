@@ -316,12 +316,25 @@ export function YokeTopView({ project, panel, computed: c, view, mode, compare, 
       )}
       {mode === 'single' && (
         <div className="yoke-key">
-          <div>
-            Cast on <b>{y.castOn}</b> round the {y.shortRows ? 'whole' : 'back'} neck: front {y.castOnZones.leftFront} · seam {y.seamSts} · back neck {y.castOnZones.back} ({len(y.castOnZones.back / y.stitchesPerCm, units)}) · seam {y.seamSts} · front {y.castOnZones.rightFront}
-          </div>
-          <div>
-            Shoulder seam <b>{y.counts.A}</b> rows · {len(y.derived.seamCm, units)}
-          </div>
+          {y.raglan ? (
+            <>
+              <div>
+                Cast on <b>{y.castOn}</b> round the {y.shortRows ? 'whole' : 'back'} neck: front {y.castOnZones.leftFront} · sleeve {y.castOnZones.leftSleeve} · back neck {y.castOnZones.back} ({len(y.castOnZones.back / y.stitchesPerCm, units)}) · sleeve {y.castOnZones.rightSleeve} · front {y.castOnZones.rightFront}
+              </div>
+              <div>
+                Raglan lines {y.seamSts} sts · about {len(y.raglan.lineCm, units)} · increases to row {y.counts.total - y.counts.E}
+              </div>
+            </>
+          ) : (
+            <>
+              <div>
+                Cast on <b>{y.castOn}</b> round the {y.shortRows ? 'whole' : 'back'} neck: front {y.castOnZones.leftFront} · seam {y.seamSts} · back neck {y.castOnZones.back} ({len(y.castOnZones.back / y.stitchesPerCm, units)}) · seam {y.seamSts} · front {y.castOnZones.rightFront}
+              </div>
+              <div>
+                Shoulder seam <b>{y.counts.A}</b> rows · {len(y.derived.seamCm, units)}
+              </div>
+            </>
+          )}
           {y.counts.C + y.counts.D > 0 && (
             <div>
               Cap <b>{y.counts.C + y.counts.D}</b> rows · {len((y.counts.C + y.counts.D) / y.rowsPerCm, units)}
@@ -329,7 +342,7 @@ export function YokeTopView({ project, panel, computed: c, view, mode, compare, 
           )}
           <div className="key-rings">Dashed rings, from the neck out:</div>
           {y.phases
-            .filter((ph) => ph.id === 'A' || ph.id === 'C' || ph.id === 'D')
+            .filter((ph) => ph.id === 'A' || ph.id === 'C' || ph.id === 'D' || (ph.id === 'R' && y.counts.E > 0))
             .map((ph) => (
               <div key={ph.id}>
                 end of {ph.id} ({ph.label}) · row {ph.to} · {ph.stsAfter} sts
@@ -388,6 +401,8 @@ function TopSchematic({ y, g, P, labels, scale }: { y: YokeResult; g: TopGeometr
     void label;
     void k;
   };
+  // A raglan has no shoulder or cap phases: its ring marks the end of the raglan increases.
+  if (y.raglan) phaseRing(y.counts.total - y.counts.E, `end of the raglan increases · row ${y.counts.total - y.counts.E}`, 'r', 0);
   phaseRing(A, `end of A (shoulders) · row ${A}`, 'a', 0);
   if (C) phaseRing(A + C, `end of C (rapid cap) · row ${A + C}`, 'c', 1);
   if (D) phaseRing(A + C + D, `end of D (slow cap) · row ${A + C + D}`, 'd', 2);
