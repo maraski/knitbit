@@ -2,7 +2,7 @@
 // template (which tops up missing estimates) doesn't load the table-seeding code.
 
 import { fitAliases } from './fit';
-import { newMeasurement, type Measurement, type Project } from './model';
+import { newMeasurement, type BodyRegion, type Measurement, type Project } from './model';
 
 /**
  * Measurements the templates use that the sizing table derives rather than lists: seeded as editable expression
@@ -27,7 +27,7 @@ export function derivedMeasurement(name: string): Measurement {
  * so the UI can mark them for checking. Expressions refer to table columns. The new sizing table has most of these;
  * the estimates are only seeded for tables that lack them (e.g. older tables).
  */
-export const ESTIMATED_MEASUREMENTS: { name: string; label: string; expr: string; note: string }[] = [
+export const ESTIMATED_MEASUREMENTS: { name: string; label: string; expr: string; note: string; region?: BodyRegion }[] = [
   { name: 'back_shoulder_width', label: 'Back shoulder width', expr: 'round(cross_back + 3, 0.5)', note: 'Shoulder point to shoulder point across the back.' },
   { name: 'back_neck_width', label: 'Back neck width', expr: 'round(13 + upper_chest * 0.03, 0.5)', note: 'Width of the neck opening at the top of the back.' },
   { name: 'back_neck_drop', label: 'Back neck drop', expr: '2', note: 'Drop of the back neckline below the shoulder line.' },
@@ -37,6 +37,9 @@ export const ESTIMATED_MEASUREMENTS: { name: string; label: string; expr: string
   { name: 'apex_to_apex', label: 'Apex to apex', expr: 'round(14 + bust * 0.04, 0.5)', note: 'Horizontal distance between bust points.' },
   { name: 'cap_height', label: 'Sleeve cap height', expr: 'round(armhole_depth * 0.65, 0.5)', note: 'Set-in sleeve cap height (not used by the set-in template, which fits the cap to the armhole).' },
   { name: 'underarm_co', label: 'Underarm cast-on', expr: 'round(upper_chest * 0.05, 0.5)', note: 'Width cast on at each underarm to join front and back (cm, front and back together: half each). Top-down, shoulders-first tops.' },
+  { name: 'short_sleeve_length', label: 'Short sleeve length', expr: 'round(4 + bicep * 0.1, 0.5)', note: 'Underarm to the edge of a short sleeve, cuff band included.', region: 'sleeves' },
+  { name: 'elbow_length', label: 'Underarm to elbow', expr: 'round(arm_length * 0.42, 0.5)', note: 'Underarm to the edge of an elbow-length sleeve, cuff band included.', region: 'sleeves' },
+  { name: 'three_quarter_length', label: 'Three-quarter sleeve length', expr: 'round(arm_length * 0.7, 0.5)', note: 'Underarm to the edge of a three-quarter sleeve (mid forearm), cuff band included.', region: 'sleeves' },
   { name: 'cap_ease', label: 'Sleeve cap ease', expr: '1.5', note: 'How much longer the cap edge is than the armhole it is sewn into (cm, both sides together).' },
   {
     name: 'waist_shift',
@@ -52,6 +55,7 @@ export function estimatedMeasurements(): Measurement[] {
     rule: { type: 'expression', expr: e.expr },
     estimate: true,
     note: e.note,
+    ...(e.region ? { region: e.region } : {}),
   }));
 }
 

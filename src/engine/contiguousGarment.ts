@@ -5,9 +5,10 @@
 
 import { yokePanel } from './contiguous';
 import { conformToGarment } from './garment';
-import type { EdgeRef, Join, Panel, Project } from './model';
+import type { EdgeRef, Join, Panel, Project, SleeveLength } from './model';
 import { defaultAutoMethod, defaultBust, newId, newPanel, newSegment, newWaypoint } from './model';
 import { ensureEstimates } from './estimates';
+import { sleeveLengthNeeds, sleeveLengthOf, withSleeveLength } from './sleeveLength';
 
 export type YokeRole = NonNullable<Panel['fromYoke']>;
 export const YOKE_ROLES: YokeRole[] = ['back', 'front', 'leftSleeve', 'rightSleeve'];
@@ -75,8 +76,11 @@ function uniqueName(project: Project, name: string): string {
  * Add the yoke (if there is none) and the body and sleeve panels it lacks, with joins recording that they continue
  * from the held stitches and share the underarm cast-on. Cardigans get a mirrored Left / Right front pair.
  */
-export function generateBodyAndSleeves(project: Project, notes: string[] = []): Project {
-  let p = ensureEstimates(project, NEEDS).project;
+export function generateBodyAndSleeves(project: Project, notes: string[] = [], length?: SleeveLength): Project {
+  // New sleeves match the one already there (or `length`, else long).
+  const other = project.panels.find((x) => x.fromYoke === 'leftSleeve' || x.fromYoke === 'rightSleeve');
+  const len = length ?? (other ? sleeveLengthOf(other) : 'long');
+  let p = ensureEstimates(project, [...NEEDS, ...sleeveLengthNeeds(len)]).project;
   let yoke = p.panels.find((x) => x.yoke);
   if (!yoke) {
     yoke = { ...yokePanel(), name: uniqueName(p, 'Yoke') };
@@ -86,7 +90,7 @@ export function generateBodyAndSleeves(project: Project, notes: string[] = []): 
   const cardigan = p.garment.opening === 'cardigan';
   const made: Partial<Record<YokeRole, Panel>> = {};
   for (const role of missingYokePanels(p)) {
-    const panel = role === 'back' || role === 'front' ? body(role, cardigan) : sleevePanel(role, cardigan);
+    const panel = role === 'back' || role === 'front' ? body(role, cardigan) : withSleeveLength(sleevePanel(role, cardigan), len)!;
     panel.name = uniqueName(p, panel.name);
     made[role] = panel;
     p = { ...p, panels: [...p.panels, panel] };

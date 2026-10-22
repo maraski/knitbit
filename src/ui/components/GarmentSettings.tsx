@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { CONTIGUOUS_CREDIT, OPENINGS, parseTags, setOpening } from '../../engine/garment';
-import { changeMethod, garmentChoice, METHODS, NECKLINES, necklinesFor, setNeckline, setSleeve, SLEEVES, sleevesFor, type GarmentMethod, type SleeveChoice } from '../../engine/garmentSetup';
-import type { FrontOpening, Id, Project } from '../../engine/model';
+import { changeMethod, garmentChoice, lengthsFor, METHODS, NECKLINES, necklinesFor, setNeckline, setSleeve, setSleeveLength, SLEEVES, sleevesFor, type GarmentMethod, type SleeveChoice } from '../../engine/garmentSetup';
+import { SLEEVE_LENGTHS } from '../../engine/sleeveLength';
+import type { FrontOpening, Id, Project, SleeveLength } from '../../engine/model';
 import { generateBodyAndSleeves, missingYokePanels } from '../../engine/contiguousGarment';
 import { EdgeSettings } from './EdgeSettings';
 
@@ -35,6 +36,14 @@ export function GarmentSettings({ project, update, sizeId }: Props & { sizeId: I
     const notes: string[] = [];
     setSleeve(project, sl, notes);
     setPending({ title: `Change the sleeves to ${SLEEVES.find((x) => x.id === sl)!.label.toLowerCase()}?`, notes: [...notes, 'Undo goes back.'], apply: (p) => setSleeve(p, sl) });
+  };
+
+  const lengths = lengthsFor(choice.sleeve);
+  const askLength = (len: SleeveLength) => {
+    const notes: string[] = [];
+    setSleeveLength(project, len, notes);
+    const label = len === 'cap' ? 'cap sleeves' : SLEEVE_LENGTHS.find((x) => x.id === len)!.label.toLowerCase();
+    setPending({ title: `Make the sleeves ${label}?`, notes: [...notes, 'Undo goes back.'], apply: (p) => setSleeveLength(p, len) });
   };
 
   return (
@@ -90,6 +99,16 @@ export function GarmentSettings({ project, update, sizeId }: Props & { sizeId: I
             <label>Sleeves</label>
             <select value={choice.sleeve} onChange={(e) => askSleeve(e.target.value as SleeveChoice)} disabled={sleeves.length < 2}>
               {SLEEVES.filter((x) => x.id === choice.sleeve || sleeves.includes(x.id)).map((x) => <option key={x.id} value={x.id}>{x.label}</option>)}
+            </select>
+          </div>
+        </div>
+      )}
+      {choice.method !== 'custom' && lengths.length > 0 && (
+        <div className="row2">
+          <div className="field">
+            <label>Sleeve length</label>
+            <select value={choice.sleeveLength} onChange={(e) => askLength(e.target.value as SleeveLength)} title="Sets the underarm height and cuff width of every sleeve">
+              {SLEEVE_LENGTHS.filter((l) => l.id === choice.sleeveLength || lengths.includes(l.id)).reverse().map((l) => <option key={l.id} value={l.id}>{l.id === 'cap' ? 'Cap sleeve' : l.label}</option>)}
             </select>
           </div>
         </div>

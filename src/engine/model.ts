@@ -176,6 +176,8 @@ export interface Segment {
 }
 
 export type KnitDirection = 'bottom-up' | 'top-down' | 'side-to-side';
+/** How far a sleeve reaches below the underarm; absent on a panel = long. */
+export type SleeveLength = 'cap' | 'short' | 'elbow' | 'three-quarter' | 'long';
 export type PanelEdge = 'bottom' | 'top' | 'left' | 'right';
 
 export interface StitchPattern {
@@ -369,6 +371,8 @@ export interface Panel {
   band?: BandRole;
   /** Made from a contiguous yoke's held stitches (body and sleeves continue from the split). */
   fromYoke?: 'back' | 'front' | 'leftSleeve' | 'rightSleeve';
+  /** A sleeve made at this length (absent = long): the Garment tab reads it back and changes it. */
+  sleeveLength?: SleeveLength;
   /** A contiguous yoke: worked from these phases row by row, not from waypoints. */
   yoke?: YokeSpec | null;
   /** Cardigan front: this panel is one half of the front it describes. */
