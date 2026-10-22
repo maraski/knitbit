@@ -5,7 +5,7 @@
 import { attachOf, BAND_NAMES, bandRoles } from './bands';
 import { neckband } from './templates';
 import type { BandRole, EdgeRef, EdgeStitch, EdgeTreatment, EdgeTreatmentId, EdgeTreatments, Join, Panel, PatternSection, Project, StitchPattern } from './model';
-import { dim, newId, newPanel, newSegment, newWaypoint } from './model';
+import { dim, newId, newPanel, newSegment, newWaypoint, straightNeck } from './model';
 
 export const EDGE_STITCHES: Record<Exclude<EdgeStitch, 'custom'>, { label: string; pattern: StitchPattern }> = {
   rib1x1: { label: '1×1 rib', pattern: { name: '1x1 rib', multiple: 2, offset: 0 } },
@@ -127,7 +127,7 @@ export function applyEdgeTreatments(project: Project, notes: string[] = [], opts
     };
     panels = existing ? panels.map((p) => (p.id === existing.id ? strip : p)) : [...panels, strip];
     if (!existing) notes.push('Added a Neckband strip.');
-    const necks = panels.filter((p) => p.yoke || (isBodyPanel(p) && p.neckline)).map((p): EdgeRef => ({ panelId: p.id, edge: { kind: 'neck' } }));
+    const necks = panels.filter((p) => p.yoke || (isBodyPanel(p) && p.neckline) || straightNeck(p)).map((p): EdgeRef => ({ panelId: p.id, edge: { kind: 'neck' } }));
     if (necks.length) joins.push({ ...laterJoin('neckband', nb, necks, 'Neckband picked up'), partner: [{ panelId: strip.id, edge: { kind: 'bottom' } }] });
   }
   return applyFrontBands({ ...project, panels, joins }, notes, opts);

@@ -609,3 +609,7 @@ export function newProject(name = 'Untitled top'): Project {
     updatedAt: now,
   };
 }
+
+/** A top-down bodice without a neckline whose top is the neck (a straight back neck cast on across). */
+export const straightNeck = (p: Panel) =>
+  !p.neckline && (p.template === 'back' || p.template === 'front') && p.direction === 'top-down' && p.waypoints.some((w) => w.name === 'neck_side');

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { projectChecks } from './checks';
+import { joinReport } from './joins';
 import { defaultYoke, generateYoke } from './contiguous';
 import { defaultEdges } from './edgeTreatments';
 import { buildGarment, garmentChoice, setNeckline, type GarmentSpec } from './garmentSetup';
@@ -196,4 +197,40 @@ describe('boat neck: changing the neckline', () => {
     expect(again.neck.backDepth).toBeUndefined();
     expect(again.depth.backLength).toEqual(defaultYoke('round').depth.backLength);
   });
+});
+
+describe('join measures: shoulder seams and the straight back neck', () => {
+  const report = (p: Project, name: RegExp, size: string) => joinReport(p, (p.joins ?? []).find((j) => name.test(j.name))!, size);
+
+  for (const neckline of ['round', 'boat'] as const) {
+    for (const opening of ['closed', 'cardigan'] as const) {
+      it(`seamed ${opening}, ${neckline}: the shoulder seams count the bind-off steps and match the top-down pick-up`, () => {
+        const p = garment('seamed', opening, neckline);
+        const t = garment('top-down', opening, neckline);
+        for (const s of p.sizes) {
+          const r = report(p, /^Shoulder seams/, s.id);
+          expect(r.a.pickup, s.name).toBeGreaterThan(0);
+          // A cardigan's two half fronts may round a stitch differently from the back.
+          expect(Math.abs(r.a.pickup - r.b!.pickup)).toBeLessThanOrEqual(opening === 'cardigan' ? 2 : 0);
+          // Both shoulders, from the shoulder point to the neck: the same stitches the top-down front picks up.
+          const tsize = t.sizes.find((x) => x.name === s.name)!.id;
+          expect(Math.abs(r.a.pickup - report(t, /^Front shoulders/, tsize).a.pickup)).toBeLessThanOrEqual(2);
+        }
+      });
+
+      it(`top-down ${opening}, ${neckline}: the neckband picks up the straight back neck too`, () => {
+        const p = garment('top-down', opening, neckline);
+        const spc = stitchesPerCm(p.gauge);
+        const back = named(p, 'Back');
+        const nb = (p.joins ?? []).find((j) => j.name.startsWith('Neckband'))!;
+        expect(nb.edges.some((e) => e.panelId === back.id && e.edge.kind === 'neck')).toBe(true);
+        for (const s of p.sizes) {
+          const m = report(p, /^Neckband/, s.id).a.measures.find((x) => x.label.startsWith('Back'))!;
+          expect(m.ok, s.name).toBe(true);
+          const neckW = computePanel(p, back, s.id).waypoints.find((w) => w.key === 'neck_side')!.widthCm;
+          expect(Math.abs(m.stitches - neckW * spc)).toBeLessThanOrEqual(3); // the cast-on rounds to whole stitches
+        }
+      });
+    }
+  }
 });

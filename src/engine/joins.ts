@@ -2,7 +2,7 @@
 // Display only: nothing here changes a panel.
 
 import { sideEdgeLength } from './edges';
-import type { EdgeKey, EdgeRef, Id, Join, JoinTag, Project } from './model';
+import { straightNeck, type EdgeKey, type EdgeRef, type Id, type Join, type JoinTag, type Project } from './model';
 import { computePanel, type ComputedPanel } from './panel';
 import { roundNearest } from './rounding';
 
@@ -151,7 +151,13 @@ export function measureEdge(
     let sts = roundNearest(c.rightEdge[r] - c.leftEdge[r] + (c.topDown && e.kind === 'top' ? c.held[r] ?? 0 : 0));
     if (c.neckLeft[r] !== null) sts -= roundNearest(c.neckRight[r]! - c.neckLeft[r]!);
     sts = Math.max(0, sts);
-    return { ok: true, label, rows: 0, stitches: sts, lengthCm: sts / spc, pickup: sts, parts: [`${sts} sts`], rowRange: null };
+    // Bottom-up, the top segment's bind-off steps (a shoulder slope) are part of the top edge: by the last row
+    // most of each shoulder is already bound off.
+    const top = e.kind === 'top' && !c.topDown ? c.segments.find((g) => g.rowTo === c.totalRows) : undefined;
+    const steps = top ? [...top.left.events, ...top.right.events].filter((ev) => ev.kind === 'bindoff').reduce((a, ev) => a + Math.abs(ev.delta), 0) : 0;
+    const parts = steps ? [`${steps} sts bound off in steps`, `${sts} sts at the top`] : [`${sts} sts`];
+    sts += steps;
+    return { ok: true, label, rows: 0, stitches: sts, lengthCm: sts / spc, pickup: sts, parts, rowRange: null };
   }
 
   if (e.kind === 'held') {
@@ -175,6 +181,11 @@ export function measureEdge(
 
   // Neckline: centre stitches plus two slopes.
   const n = c.neck;
+  if (!n && straightNeck(panel) && c.topDown && (c.held[0] ?? 0) > 0) {
+    // A straight top-down back neck: the live part of the cast-on, between the short-row shoulders.
+    const sts = roundNearest(c.rightEdge[0] - c.leftEdge[0]);
+    return { ok: true, label, rows: 0, stitches: sts, lengthCm: sts / spc, pickup: sts, parts: [`${sts} sts cast on between the shoulders (straight back neck)`], rowRange: null };
+  }
   if (!n) return blankMeasure(label, 'This panel has no neckline.');
   const slopeRows = n.atStart ? n.splitRow - 1 : c.totalRows - n.splitRow;
   // A cardigan front has one neck slope: the edge on its own side (the other one is its straight front edge).
