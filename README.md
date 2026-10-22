@@ -278,6 +278,7 @@ Raw counts are rounded in this order, and each step is shown in the UI:
 4. Manual markers for a size replace the auto-suggestion for that edge. A mismatch with the target is flagged.
 5. The neckline is cut from the top: the centre stitches are bound off (or held) on a RS row, then each side decreases.
    Round, square and boat necks work half the decreases every row, then every other row. V necks spread them to the top.
+   A boat neck takes most of its width off at once and shapes only its corners (see *Boat neck* below).
    The last neck decrease falls one row before the top, because the final row of a flat panel works one side only.
 6. Every row's edge positions and live stitch count are recorded. The check list flags targets that are not reached,
    shaping that doesn't fit its rows, and a neck wider than the shoulders.
@@ -321,7 +322,7 @@ empty project. One screen, one undoable step (undo goes back to the project you 
   in the round below; sleeves top-down), *Contiguous yoke, top-down* (yoke, then body and sleeves continuing from
   it), or *Start from blank* (no pieces).
 - **Front**: pullover or cardigan (fronts split into a mirrored pair, bands and buttons).
-- **Neckline** (round, V, square, boat) and **sleeves** (set-in cap, drop shoulder, straight or none; contiguous
+- **Neckline** (round, V, square, boat; a boat neck sets the back's neck too) and **sleeves** (set-in cap, drop shoulder, straight or none; contiguous
   yokes have their own set-in-look sleeves).
 - **Fit (ease)**: close (0 cm), standard (5), relaxed (10) or oversized (20) total ease, with bicep and wrist ease.
 - **Edges**: hem, cuff, neckband and (cardigans) front bands on or off and their stitch; the neckband and band strips
@@ -354,13 +355,38 @@ duplicate (⧉) or delete (×) any panel there. Options: knitting direction, nec
 
 | Template | Waypoints (bottom to top) | Notes |
 |---|---|---|
-| **Back** | hem `hem_circ/2 + ease/2` at 0 → waist `waist/2 + ease/2 − waist_shift` at `hem_drop` → underarm `upper_chest/2 + ease/2` at `waist.height + waist_to_underarm` → armhole_bo at `underarm.height + 2 * row_h` (40 % of the armhole width change bound off in one go: the beginning of the next 2 rows) → armhole_end `cross_back_w + 1` at `armhole_depth × 0.45` → shoulder `shoulder_w` at `underarm.height + armhole_depth` (increases from armhole_end: the *widen to the shoulder width* option, on by default; off = straight up at the armhole_end width) → neck_side `back_neck_width` at `shoulder.height + shoulder_drop` (shoulder slope in bind-off steps) | Round back neck, `back_neck_drop`, centre `back_neck_width − 2` |
-| **Front** | as the back, waist `+ waist_shift`, underarm `+ bust_side_w`, armhole_end `cross_front + 1` (the same `shoulder_w` at the shoulder, so the shoulder seams match; without the widening the front ends at the back’s `cross_back_w + 1`) | Round: depth `front_neck_drop`, centre `back_neck_width × 0.4`. V: depth `front_neck_drop × 2`, no centre. Square: depth `front_neck_drop + 2`, whole width at once. Boat: `back_neck_width + 6` wide, `back_neck_drop + 1` deep |
+| **Back** | hem `hem_circ/2 + ease/2` at 0 → waist `waist/2 + ease/2 − waist_shift` at `hem_drop` → underarm `upper_chest/2 + ease/2` at `waist.height + waist_to_underarm` → armhole_bo at `underarm.height + 2 * row_h` (40 % of the armhole width change bound off in one go: the beginning of the next 2 rows) → armhole_end `cross_back_w + 1` at `armhole_depth × 0.45` → shoulder `shoulder_w` at `underarm.height + armhole_depth` (increases from armhole_end: the *widen to the shoulder width* option, on by default; off = straight up at the armhole_end width) → neck_side `back_neck_width` at `shoulder.height + shoulder_drop` (shoulder slope in bind-off steps) | Round back neck, `back_neck_drop`, centre `back_neck_width − 2`. With a boat neckline: the boat neck's width, 2 cm deep (see *Boat neck*) |
+| **Front** | as the back, waist `+ waist_shift`, underarm `+ bust_side_w`, armhole_end `cross_front + 1` (the same `shoulder_w` at the shoulder, so the shoulder seams match; without the widening the front ends at the back’s `cross_back_w + 1`) | Round: depth `front_neck_drop`, centre `back_neck_width × 0.4`. V: depth `front_neck_drop × 2`, no centre. Square: depth `front_neck_drop + 2`, whole width at once. Boat: `shoulder_w − 6` wide, 4 cm deep (see *Boat neck*) |
 | **Sleeve, set-in** | cuff `wrist + ease.wrist` → underarm `bicep + ease.bicep` at `arm_length` → cap_bo 2 rows up (bind-off matching the body's, in one go) → cap_low → cap_high → cap_top `max(8, bicep × 0.22)`, its height **fitted to the armhole** | Bell cap: fast, steady, fast; cap decreases may fall on any row. 2x2 rib cuff section (5 cm) |
 | **Sleeve, drop shoulder** | cuff → top `armhole_depth × 2` at `arm_length` | Ribbed cuff |
 | **Sleeve, straight** | cuff = top `bicep + ease.bicep` | Rounded to the rib multiple so the count stays constant |
 | **Plain rectangle** | bottom → top, 20 × 30 cm | |
-| **Neckband strip** | `back_neck_width × 2 + front_neck_drop × 2` long, 2.5 cm deep, 1x1 rib | Length is an estimate until the pick-up helper |
+| **Neckband strip** | `back_neck_width × 2 + front_neck_drop × 2` long (boat neck: `(shoulder_w − 6) × 2 + 6`), 2.5 cm deep, 1x1 rib | Length is an estimate until the pick-up helper |
+
+**Boat neck.** A true boat neck reaches nearly to the shoulder edges, front and back alike:
+
+- *Width* `shoulder_w − 6`: a 3 cm shoulder strap each side, graded with the shoulder width. Front and back have
+  the same width (and the same top, `neck_side`), so the shoulder seams match.
+- *Depth*, measured down from the top of the strap: front `4`, back `2` (cm). Each is an expression with per-size values
+  (the neckline properties of each panel; on a yoke, *Front depth* and *Back depth*).
+- *Shape*: gently curved. The centre `neck_w − 2 × min(3, neck_depth × 0.75)` is bound off (or held) at once and the
+  last 3 cm each side are shaped (half every row, then every other row); the shallow back shapes
+  `min(3, neck_depth × 0.5)` each side so its decreases fit its rows. `neck_w` and `neck_depth` are the opening's own
+  width and depth.
+- *Shoulder slope*: the strap slopes only its share of the shoulder drop, as the body's shoulder line does between the
+  shoulder point and the neck: `neck_side` sits `shoulder_drop × (shoulder.width − neck_side.width) / (shoulder_w −
+  back_neck_width)` above the shoulder line (about 1 cm for a 3 cm strap) instead of the whole `shoulder_drop`.
+- *Top-down, shoulders first*: the back stays straight (cast on across the shoulders and the wide neck); only the front
+  is shaped. A back (or top-down top) added in the Pieces tab with *Back neck: Shaped* and a boat neckline gets its
+  2 cm too.
+- *Contiguous yoke*: the wide neck is cast on across the back. The back depth replaces `back_neck_drop`: the
+  whole-neck start's short rows raise the back by front depth − back depth (`round(max(0, neck_depth − back_depth) /
+  row_h / 2)` pairs), and the back length from the neck to the underarm is `shoulder_drop × min(1, (shoulder_w −
+  neck_w) / (shoulder_w − back_neck_width)) + armhole_depth − back_depth`. The shoulder phase is short (about 3 cm of
+  seam), as a 3 cm strap is.
+- Choosing *Boat* in the Garment tab sets the fronts, the back (and both tops) or the yoke to these defaults;
+  choosing another shape puts the round back neck and the full shoulder slope back. Projects saved with the earlier,
+  narrower boat neck (`back_neck_width + 6`) keep it until you choose *Boat* again.
 
 **Set-in cap height follows the armhole.** `armhole_len` is the armhole the sleeve is sewn into, measured along the
 edges: the other side of a seam join that contains one of the sleeve's edges, or else the Front + Back panels' left
@@ -729,9 +755,10 @@ the yoke's held edges: a new edge kind `{ "kind": "held", "part": "leftSleeve" |
 
 **Front neck (back neck start).** The yoke's neck uses the neckline shapes (round, V, square, boat) worked top-down: increases at each
 front edge (inside the edge stitch), then a cast-on. The neck opening at the top is cast on across the back (the
-fronts begin at the neck points), so its *width* is the back neck: `back_neck_width`, or `back_neck_width + 6` for a
-boat neck (wider, so the shoulder seams are shorter). *Width*, *depth* and *centre* are expressions with per-size
-values; yokes saved before the width existed keep `back_neck_width`.
+fronts begin at the neck points), so its *width* is the back neck: `back_neck_width`, or `shoulder_w − 6` for a
+boat neck (out to a 3 cm strap, so the shoulder seams are short). *Width*, *depth* and *centre* are expressions with
+per-size values; yokes saved before the width existed keep `back_neck_width`. A boat neck also has a *back depth*
+(see *Boat neck*).
 The properties show the numbers, e.g. M, round: *Neck row R = depth × row gauge = 8.5 × 3 = 25.5 → 26 → row 27
 (a RS row)*; *increases at each front edge = (neck width − centre) / 2 = (33 − 13) / 2 = 10*; then
 

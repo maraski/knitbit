@@ -2,15 +2,15 @@
 // Garment tab), and the pieces, joins and edge defaults each choice makes. Nothing new is stored: the choices are
 // read back from the pieces (garmentChoice), so older projects show their method without a migration.
 
-import { defaultYoke, yokePanel } from './contiguous';
+import { yokePanel, yokeWithNeck } from './contiguous';
 import { generateBodyAndSleeves } from './contiguousGarment';
 import { applyEdgeTreatments } from './edgeTreatments';
 import { ensureEstimates } from './estimates';
 import { conformToGarment, setConstruction } from './garment';
 import { dropPanelFromJoins } from './joins';
-import type { EaseSettings, EdgeRef, EdgeTreatments, FrontOpening, Join, NecklineShape, Panel, Project, YokeSpec } from './model';
+import type { EaseSettings, EdgeRef, EdgeTreatments, FrontOpening, Join, NecklineShape, Panel, Project } from './model';
 import { dim, newId } from './model';
-import { bodice, FRONT_NECKS, sleeve, TEMPLATE_MEASUREMENTS, topDownTop, type SleeveType, type TemplateId } from './templates';
+import { backNeckFor, bodice, FRONT_NECKS, sleeve, TEMPLATE_MEASUREMENTS, topDownTop, type SleeveType, type TemplateId } from './templates';
 
 /** How the garment is built. 'blank' makes no pieces (drawn by hand); a project without bodices reads as 'custom'. */
 export type GarmentMethod = 'seamed' | 'top-down' | 'contiguous' | 'blank';
@@ -136,7 +136,7 @@ function panelPieces(method: 'seamed' | 'top-down', neckline: NecklineShape, sle
     [back, front] = top.panels;
     joins.push(...top.joins);
   } else {
-    back = bodice('back', { direction: 'bottom-up' });
+    back = bodice('back', { direction: 'bottom-up', neckline });
     front = bodice('front', { direction: 'bottom-up', neckline });
     joins.push(
       // One join per side (as worn): the front's left edge meets the back's right edge, seen from the RS.
@@ -204,24 +204,18 @@ export function changeMethod(p: Project, method: Exclude<GarmentMethod, 'blank'>
 }
 
 /**
- * A yoke with another neck shape: the neck takes the new shape's defaults, and any other setting still at the old
- * shape's default follows the new shape's default (settings you changed are kept).
+ * The neckline (fronts, backs and the yoke) set to a shape's defaults. The front takes the shape; the back takes
+ * its matching back neck (a boat neck's wide back, a round back neck otherwise; a straight back stays straight),
+ * and both tops follow the opening so the shoulder seams match.
  */
-function yokeWithNeck(yoke: YokeSpec, shape: NecklineShape): YokeSpec {
-  const before = defaultYoke(yoke.neck.shape) as unknown as Record<string, unknown>;
-  const after = defaultYoke(shape) as unknown as Record<string, unknown>;
-  const next = { ...yoke } as unknown as Record<string, unknown>;
-  for (const k of Object.keys(after)) if (JSON.stringify(next[k]) === JSON.stringify(before[k])) next[k] = after[k];
-  return { ...(next as unknown as YokeSpec), neck: { ...yoke.neck, ...defaultYoke(shape).neck } };
-}
-
-/** The front neckline (fronts and the yoke) set to a shape's defaults; the back is unchanged. */
 export function setNeckline(p: Project, shape: NecklineShape): Project {
-  const n = FRONT_NECKS[shape];
   const panels = p.panels.map((x): Panel => {
     if (x.yoke) return { ...x, yoke: yokeWithNeck(x.yoke, shape) };
-    if (x.template !== 'front' || !x.neckline) return x;
-    return { ...x, neckline: { ...x.neckline, shape, width: dim(n.width), depth: dim(n.depth), centreWidth: dim(n.centre) } };
+    if (!isBodice(x)) return x;
+    const n = x.template === 'front' ? { ...FRONT_NECKS[shape], shape } : backNeckFor(shape);
+    const neckline = x.neckline && { ...x.neckline, shape: n.shape, width: dim(n.width), depth: dim(n.depth), centreWidth: dim(n.centre) };
+    const waypoints = x.waypoints.map((w) => (w.name === 'neck_side' ? { ...w, height: dim(`shoulder.height + ${n.rise}`), width: dim(n.top) } : w));
+    return { ...x, neckline, waypoints };
   });
   return { ...p, panels };
 }

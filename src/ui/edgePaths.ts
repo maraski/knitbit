@@ -25,13 +25,21 @@ export function edgePaths(c: ComputedPanel, edge: EdgeKey): Point[][] {
   }
   if (edge.kind === 'bottom' || edge.kind === 'top') {
     const r = (edge.kind === 'bottom') === !c.topDown ? 0 : top;
+    // Bottom-up, the top edge includes the bind-off steps of the top segment (a shoulder slope), as the join counts them.
+    const seg = edge.kind === 'top' && !c.topDown ? c.segments.find((g) => g.rowTo === top) : undefined;
+    const steps = (side: 'left' | 'right') => {
+      const rows = seg ? seg[side].events.filter((ev) => ev.kind === 'bindoff').map((ev) => ev.row) : [];
+      return rows.length ? edgeRowsPath(side === 'left' ? c.leftEdge : c.rightEdge, Math.min(...rows), top) : [];
+    };
+    const left = steps('left');
+    const right = steps('right').reverse();
     if (c.neckLeft[r] !== null && c.neck) {
       return [
-        [{ x: c.leftEdge[r], y: r }, { x: c.neckLeft[r]!, y: r }],
-        [{ x: c.neckRight[r]!, y: r }, { x: c.rightEdge[r], y: r }],
+        [...left, { x: c.leftEdge[r], y: r }, { x: c.neckLeft[r]!, y: r }],
+        [{ x: c.neckRight[r]!, y: r }, { x: c.rightEdge[r], y: r }, ...right],
       ];
     }
-    return [[{ x: c.leftEdge[r], y: r }, { x: c.rightEdge[r], y: r }]];
+    return [[...left, { x: c.leftEdge[r], y: r }, { x: c.rightEdge[r], y: r }, ...right]];
   }
   if (edge.kind === 'held') {
     // The yoke's last row, by zone: the body is the two fronts and the back.
@@ -54,6 +62,8 @@ export function edgePaths(c: ComputedPanel, edge: EdgeKey): Point[][] {
     const [a, b] = c.topDown ? [top - rows, top] : [0, rows];
     return [[{ x: c.half.cfX, y: a }, { x: c.half.cfX, y: b }]];
   }
+  // A straight top-down back neck: the live part of the cast-on, between the held shoulders.
+  if (!c.neck && c.topDown && (c.held[0] ?? 0) > 0) return [[{ x: c.leftEdge[0], y: 0 }, { x: c.rightEdge[0], y: 0 }]];
   if (!c.neck) return [];
   const rows: number[] = [];
   for (let r = 0; r <= top; r++) if (c.neckLeft[r] !== null) rows.push(r);

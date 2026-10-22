@@ -7,6 +7,7 @@ import { addStrips, bandEdges, defaultEdges } from './edgeTreatments';
 import { setConstruction, setOpening } from './garment';
 import { measureEdge } from './joins';
 import type { CardiganOptions, NecklineShape, Project, YokeStart } from './model';
+import { buildScope } from './measurements';
 import { fixtureProject, sizeId } from './testFixtures';
 
 function contiguous(opening: 'closed' | 'cardigan', card: Partial<CardiganOptions> = {}, start: YokeStart = 'neck'): Project {
@@ -129,7 +130,8 @@ describe('neck shapes on a contiguous yoke', () => {
     const round = generateYoke(p, defaultYoke('round', 'back'), M);
     const boat = generateYoke(p, defaultYoke('boat', 'back'), M);
     const spc = boat.stitchesPerCm;
-    expect(boat.castOnZones.back).toBe(Math.round((round.params.neckWidth.value + 6) * spc));
+    // Out to a 3 cm strap each side of the shoulder width.
+    expect(boat.castOnZones.back).toBe(Math.round((buildScope(p, M).shoulder_w - 6) * spc));
     expect(boat.castOnZones.back - round.castOnZones.back).toBeGreaterThanOrEqual(Math.round(6 * spc) - 1);
     // Shorter shoulders: the back still reaches the same width after them.
     expect(boat.counts.A).toBeLessThan(round.counts.A);
