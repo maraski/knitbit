@@ -186,6 +186,7 @@ removed; delete them in the console if you want the space back.
   - `schema.ts`: JSON validation, migrations, load/save. `history.ts`: undo/redo. `autosave.ts`: localStorage safety net.
   - `panel.ts`: computes one panel in one size (rows, stitches, shaping events, neckline, outline, issues).
   - `templates.ts`: panel templates (back, front with 4 necklines, 3 sleeves, rectangle, neckband; bottom-up or top-down).
+  - `sleeveLength.ts`: sleeve lengths (long to cap) applied to any sleeve; `sleeveChecks.ts`: their checks.
   - `sizing.ts`: reading CSV/JSON sizing tables, column mapping, applying an import.
   - `grading.ts`: size and measurement operations (rename everywhere, increment rules, base size, zigzag check).
   - `symbols.ts`: the stitch symbol set and what each does as a shaping marker.
@@ -227,6 +228,7 @@ Waypoint dimensions and custom measurements are expressions. They evaluate to **
 | Operators | `+ - * / ^` and parentheses; `^` is right-associative; unary minus binds looser than `^` (`-2^2 = -4`) |
 | Functions | `min(a, b, …)`, `max(a, b, …)`, `abs(x)`, `sqrt(x)`, `round(x[, step])`, `floor(x[, step])`, `ceil(x[, step])`, `clamp(x, lo, hi)` |
 | Armhole | `armhole_len`: the armhole a sleeve is sewn into (see Templates) |
+| Cuff band | `cuff_depth`: the cuff rib knit with the sleeves (cm; 0 when it is picked up later or off); see Sleeve lengths |
 | Cardigan bands | `band_w` (front band width), `band_overlap`, `closing_r` (width taken off the whole front); 0 without bands (see Cardigan bands and buttons) |
 | Joined edges | `edge_len` (cm), `edge_rows`, `edge_pickup` (sts at the join's ratio): the edges a strip is joined to, e.g. a band's `edge_pickup * st_w` |
 | Contiguous yoke | `yoke.back_w`, `yoke.front_w`, `yoke.sleeve_w` (held stitches + underarm cast-on share, cm), `yoke.underarm_co` (cm), `yoke.depth` (neck to split, cm); see Contiguous yoke |
@@ -323,6 +325,8 @@ empty project. One screen, one undoable step (undo goes back to the project you 
 - **Front**: pullover or cardigan (fronts split into a mirrored pair, bands and buttons).
 - **Neckline** (round, V, square, boat) and **sleeves** (set-in cap, drop shoulder, straight or none; contiguous
   yokes have their own set-in-look sleeves).
+- **Sleeve length**: long, three-quarter, elbow, short or cap sleeve (cap: set-in and contiguous sleeves only). See
+  *Sleeve lengths*.
 - **Fit (ease)**: close (0 cm), standard (5), relaxed (10) or oversized (20) total ease, with bicep and wrist ease.
 - **Edges**: hem, cuff, neckband and (cardigans) front bands on or off and their stitch; the neckband and band strips
   are made with the garment. Depths and the rest are in the Garment tab afterwards.
@@ -334,14 +338,17 @@ The left sidebar has three tabs:
 
 - **Garment**: the same choices, editable later. Changing **how it's built** shows what it will replace, add and keep,
   and rebuilds the bodices, sleeves and yoke when you confirm (other pieces, sizes, gauge, ease and edges stay; one
-  undo step). Changing the **sleeves** replaces the sleeve panels the same way; the **neckline** resets the front neck
+  undo step). Changing the **sleeves** replaces the sleeve panels the same way (keeping their length where the new
+type has it; a cap becomes short on drop-shoulder and straight sleeves). Changing the **sleeve length** sets every
+sleeve's underarm height and cuff width in place (other edits kept; a contiguous yoke's sleeves too). The **neckline** resets the front neck
   (and a yoke's neck) to that shape's defaults in place. Also the edge treatments, tags and export credit.
 - **Pieces**: the piece list, *Add a piece* (single pieces that fit the method: sleeve, back, front, rectangle,
   neckband strip; a contiguous garment offers rectangles and strips), and the **Joins** section.
 - **Settings**: gauge, fit choices, region sizing, checks, ease (with the presets) and join settings (seam
   tolerance, pick-up ratio).
 
-Nothing new is saved for this: the method, neckline and sleeves are read from the pieces (`garmentChoice` in
+Nothing new is saved for this: the method, neckline and sleeves are read from the pieces (a sleeve's length is kept
+on the sleeve panel, `sleeveLength`; absent = long) (`garmentChoice` in
 `src/engine/garmentSetup.ts`), so older projects show theirs without a migration: a contiguous construction reads as
 contiguous, top-down bodices as top-down, other bodices as seamed, and a project without bodices as *Custom*. The
 method is shown by the project name, e.g. *Contiguous · cardigan*.
@@ -349,7 +356,7 @@ method is shown by the project name, e.g. *Contiguous · cardigan*.
 ## Templates
 
 Templates are starting points: everything they generate is an ordinary, editable panel. Add single pieces from the Pieces tab (it offers the pieces that fit the garment's method);
-duplicate (⧉) or delete (×) any panel there. Options: knitting direction, neckline, sleeve type, and for bodices
+duplicate (⧉) or delete (×) any panel there. Options: knitting direction, neckline, sleeve type and length, and for bodices
 "in the round below the underarm"; top-down bodices also have construction, shoulders and back neck.
 
 | Template | Waypoints (bottom to top) | Notes |
@@ -369,6 +376,30 @@ estimate from `armhole_depth`; noted in the checks). The
 cap top height solves `both cap edges ≈ armhole_len + cap_ease` (`cap_ease`, default 1.5 cm, is a graded measurement):
 `cap_bo.height + sqrt(((armhole_len + cap_ease)/2 × 0.966 − bind-off run)² − horizontal run²)`; 0.966 allows for the
 bell's curve. In the sample sizes the cap comes out 0.3–2.6 cm longer than the armhole; the seam check shows the exact figure.
+
+### Sleeve lengths
+
+Every sleeve that runs from a cuff to an underarm (set-in, drop shoulder, straight, a contiguous yoke's sleeves) can be
+made at five lengths (`src/engine/sleeveLength.ts`). The length moves the underarm (drop / straight: the top) to its
+height above the cuff, and sets the cuff's width on a straight taper from the underarm width to the long sleeve's cuff
+(`wrist + ease.wrist`) at that length: `underarm.width + (wrist + ease.wrist − underarm.width) × length / arm_length`.
+A straight sleeve keeps one width. The cap above the underarm is unchanged.
+
+| Length | Underarm above the cuff | Cuff width | Measurement (estimate if the table lacks it) |
+|---|---|---|---|
+| **Long** | `arm_length` | `wrist + ease.wrist` | from the sizing table |
+| **Three-quarter** | `three_quarter_length` | taper | `round(arm_length × 0.7, 0.5)` (mid forearm) |
+| **Elbow** | `elbow_length` | taper | `round(arm_length × 0.42, 0.5)` |
+| **Short** | `short_sleeve_length` | taper | `round(4 + bicep × 0.1, 0.5)` |
+| **Cap sleeve** | `max(cuff_depth, 2 × row_h)` | the underarm width | none |
+
+A **cap sleeve** is the full set-in cap with no underarm length: the cuff band, as wide as the underarm, then the cap
+(contiguous: the band worked on the held sleeve stitches plus the underarm cast-on). `cuff_depth` is the cuff band knit
+with the sleeves (Garment → Edges → Cuff ribbing; 0 when it is picked up later or off). Lengths include the cuff band.
+The estimates are in the *sleeves* region for region sizing, and are seeded only when a sleeve uses them. Checks
+(`sleeveChecks.ts`): a cuff band as long as the sleeve (warning) or more than half of it (note), shaping more often than
+every other row, and shaping rows that fall in the cuff rib (notes). A raglan sleeve can use the same list: it needs a
+`cuff` point under an `underarm` point (`withSleeveLength`).
 
 **Fit choices** (Settings tab → *Fit*) pick sizing-table columns for names the templates use. They behave like
 measurements with an expression rule (shown in the Measurements grid with a *fit* tag); a measurement of the same name

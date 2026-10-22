@@ -2,7 +2,8 @@
 // Widths use total circumference ease split front/back (ease/2 per body panel). Heights are measured up
 // from the garment's lower edge whatever the knitting direction.
 
-import { defaultAutoMethod, defaultBust, dim, newId, newPanel, newSegment, newWaypoint, type Join, type KnitDirection, type NecklineShape, type Panel } from './model';
+import { defaultAutoMethod, defaultBust, dim, newId, newPanel, newSegment, newWaypoint, type Join, type KnitDirection, type NecklineShape, type Panel, type SleeveLength } from './model';
+import { sleeveName, withSleeveLength } from './sleeveLength';
 
 export type TemplateId = 'top' | 'back' | 'front' | 'sleeve' | 'rectangle' | 'neckband' | 'yoke';
 export type SleeveType = 'set-in' | 'drop' | 'straight';
@@ -11,6 +12,7 @@ export interface TemplateOptions {
   direction?: KnitDirection;
   neckline?: NecklineShape;
   sleeve?: SleeveType;
+  sleeveLength?: SleeveLength; // sleeves: long (default), three-quarter, elbow, short or cap (set-in only)
   joinInRound?: boolean; // body: worked in the round up to the underarm
   /**
    * Top-down bodices. 'shoulders-first' (default): the back is cast on at the shoulders, the front shoulders are
@@ -35,7 +37,7 @@ export const TEMPLATES: { id: TemplateId; label: string; description: string; op
   },
   { id: 'back', label: 'Back bodice', description: 'Hem, waist, set-in armholes, shoulder slope and back neck.', options: ['direction', 'shoulderSlope', 'backNeck', 'shoulderFlare', 'joinInRound'] },
   { id: 'front', label: 'Front bodice', description: 'Like the back, with a front neckline.', options: ['direction', 'neckline', 'shoulderSlope', 'shoulderFlare', 'joinInRound'] },
-  { id: 'sleeve', label: 'Sleeve', description: 'Set-in cap, drop shoulder or straight, with a ribbed cuff.', options: ['direction', 'sleeve'] },
+  { id: 'sleeve', label: 'Sleeve', description: 'Set-in cap, drop shoulder or straight, long to short (or a cap sleeve), with a ribbed cuff.', options: ['direction', 'sleeve', 'sleeveLength'] },
   { id: 'rectangle', label: 'Plain rectangle', description: 'Two waypoints, no shaping.', options: ['direction'] },
   { id: 'neckband', label: 'Neckband strip', description: 'A ribbed strip; its length is a starting estimate.', options: [] },
   {
@@ -148,7 +150,12 @@ function cuffSection(p: Panel): void {
   p.sections = [{ id: newId('sec'), name: 'Cuff rib', fromHeight: dim(0), toHeight: dim(5), pattern: { name: '2x2 rib', multiple: 4, offset: 2 } }];
 }
 
-export function sleeve(type: SleeveType = 'set-in', direction: KnitDirection = 'bottom-up'): Panel {
+/** A cap sleeve is a set-in cap with no underarm length; drop and straight sleeves have no cap to keep. */
+export function sleeveLengthsFor(type: SleeveType): SleeveLength[] {
+  return type === 'set-in' ? ['long', 'three-quarter', 'elbow', 'short', 'cap'] : ['long', 'three-quarter', 'elbow', 'short'];
+}
+
+export function sleeve(type: SleeveType = 'set-in', direction: KnitDirection = 'bottom-up', length: SleeveLength = 'long'): Panel {
   const p = newPanel(type === 'set-in' ? 'Sleeve' : type === 'drop' ? 'Sleeve (drop shoulder)' : 'Sleeve (straight)');
   p.template = `sleeve-${type}`;
   p.direction = direction;
@@ -186,7 +193,8 @@ export function sleeve(type: SleeveType = 'set-in', direction: KnitDirection = '
     if (type === 'straight') p.pattern = { name: 'stockinette', multiple: 4, offset: 2 };
   }
   cuffSection(p);
-  return p;
+  if (length === 'long' || !sleeveLengthsFor(type).includes(length)) return p;
+  return { ...withSleeveLength(p, length)!, name: sleeveName(p.name, length) };
 }
 
 // ---------- others ----------
@@ -255,7 +263,7 @@ export function fromTemplate(id: TemplateId, opts: TemplateOptions = {}): Panel 
     case 'front':
       return bodice('front', opts);
     case 'sleeve':
-      return sleeve(opts.sleeve, opts.direction);
+      return sleeve(opts.sleeve, opts.direction, opts.sleeveLength);
     case 'neckband':
       return neckband();
     default:

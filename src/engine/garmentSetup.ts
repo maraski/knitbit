@@ -8,9 +8,10 @@ import { applyEdgeTreatments } from './edgeTreatments';
 import { ensureEstimates } from './estimates';
 import { conformToGarment, setConstruction } from './garment';
 import { dropPanelFromJoins } from './joins';
-import type { EaseSettings, EdgeRef, EdgeTreatments, FrontOpening, Join, NecklineShape, Panel, Project, YokeSpec } from './model';
+import type { EaseSettings, EdgeRef, EdgeTreatments, FrontOpening, Join, NecklineShape, Panel, Project, SleeveLength, YokeSpec } from './model';
 import { dim, newId } from './model';
-import { bodice, FRONT_NECKS, sleeve, TEMPLATE_MEASUREMENTS, topDownTop, type SleeveType, type TemplateId } from './templates';
+import { sleeveLengthNeeds, sleeveLengthOf, SLEEVE_LENGTHS, sleeveName, withSleeveLength } from './sleeveLength';
+import { bodice, FRONT_NECKS, sleeve, sleeveLengthsFor, TEMPLATE_MEASUREMENTS, topDownTop, type SleeveType, type TemplateId } from './templates';
 
 /** How the garment is built. 'blank' makes no pieces (drawn by hand); a project without bodices reads as 'custom'. */
 export type GarmentMethod = 'seamed' | 'top-down' | 'contiguous' | 'blank';
@@ -45,6 +46,18 @@ export function sleevesFor(method: GarmentMethod | 'custom'): SleeveChoice[] {
   return ['set-in', 'drop', 'straight', 'none'];
 }
 
+/** Lengths a sleeve type can be made in, longest first (a cap needs a cap: set-in or contiguous). */
+export function lengthsFor(sleeve: SleeveChoice): SleeveLength[] {
+  if (sleeve === 'none') return [];
+  return sleeve === 'contiguous' ? SLEEVE_LENGTHS.map((l) => l.id).reverse() : sleeveLengthsFor(sleeve);
+}
+
+/** `length` if the sleeve can have it; else the nearest it can (a cap becomes short), long without one. */
+export function lengthFor(sleeve: SleeveChoice, length: SleeveLength): SleeveLength {
+  const ok = lengthsFor(sleeve);
+  return ok.includes(length) ? length : length === 'cap' && ok.includes('short') ? 'short' : 'long';
+}
+
 export type EasePresetId = 'close' | 'standard' | 'relaxed' | 'oversized';
 
 /** Total circumference ease, plus bicep and wrist ease (the other `ease.*` names keep following the total). */
@@ -73,6 +86,8 @@ export interface GarmentSpec {
   opening: FrontOpening;
   neckline: NecklineShape;
   sleeve: SleeveChoice;
+  /** Absent = long. */
+  sleeveLength?: SleeveLength;
   ease: EasePresetId;
   /** Hem, cuff, neckband and front bands; absent = leave the project's settings (not applied yet). */
   edges?: EdgeTreatments;
@@ -83,6 +98,8 @@ export interface GarmentChoice {
   opening: FrontOpening;
   neckline: NecklineShape;
   sleeve: SleeveChoice;
+  /** The sleeves' length ('long' for old projects and without sleeves). */
+  sleeveLength: SleeveLength;
 }
 
 const isBodice = (p: Panel) => p.template === 'back' || p.template === 'front';
@@ -95,7 +112,8 @@ export function garmentChoice(p: Project): GarmentChoice {
   const opening = p.garment.opening;
   if (p.garment.construction === 'contiguous') {
     const y = p.panels.find((x) => x.yoke);
-    return { method: 'contiguous', opening, neckline: y?.yoke!.neck.shape ?? 'round', sleeve: 'contiguous' };
+    const ys = p.panels.find((x) => x.fromYoke === 'leftSleeve' || x.fromYoke === 'rightSleeve');
+    return { method: 'contiguous', opening, neckline: y?.yoke!.neck.shape ?? 'round', sleeve: 'contiguous', sleeveLength: ys ? sleeveLengthOf(ys) : 'long' };
   }
   const bodices = p.panels.filter(isBodice);
   const front = bodices.find((x) => x.template === 'front' && x.neckline);
@@ -106,6 +124,7 @@ export function garmentChoice(p: Project): GarmentChoice {
     opening,
     neckline: front?.neckline!.shape ?? 'round',
     sleeve: type === 'set-in' || type === 'drop' || type === 'straight' ? type : 'none',
+    sleeveLength: sl ? sleeveLengthOf(sl) : 'long',
   };
 }
 
@@ -121,13 +140,16 @@ const wp = (p: Panel, name: string) => p.waypoints.find((w) => w.name === name)!
 const side = (p: Panel, s: 'left' | 'right', from: string, to: string): EdgeRef => ({ panelId: p.id, edge: { kind: 'side', side: s, from: wp(p, from), to: wp(p, to) } });
 const seam = (name: string, edges: EdgeRef[], partner: EdgeRef[], note: string): Join => ({ id: newId('join'), name, tag: 'seam', edges, partner, ratio: null, note });
 
-function sleeveFor(choice: SleeveChoice, method: GarmentChoice['method']): Panel | null {
+function sleeveFor(choice: SleeveChoice, method: GarmentChoice['method'], length: SleeveLength): Panel | null {
   if (choice === 'none' || choice === 'contiguous') return null;
-  return sleeve(choice, method === 'top-down' ? 'top-down' : 'bottom-up');
+  return sleeve(choice, method === 'top-down' ? 'top-down' : 'bottom-up', lengthFor(choice, length));
 }
 
+/** Measurements the garment's sleeves need at `length` (template estimates plus the length's own). */
+const sleeveNeeds = (length: SleeveLength) => [...TEMPLATE_MEASUREMENTS.sleeve, ...sleeveLengthNeeds(length)];
+
 /** The pieces and joins a panel method makes (whole front; the opening is applied afterwards). */
-function panelPieces(method: 'seamed' | 'top-down', neckline: NecklineShape, sleeveChoice: SleeveChoice): { panels: Panel[]; joins: Join[]; templates: TemplateId[] } {
+function panelPieces(method: 'seamed' | 'top-down', neckline: NecklineShape, sleeveChoice: SleeveChoice, length: SleeveLength): { panels: Panel[]; joins: Join[]; templates: TemplateId[] } {
   let back: Panel;
   let front: Panel;
   const joins: Join[] = [];
@@ -147,20 +169,21 @@ function panelPieces(method: 'seamed' | 'top-down', neckline: NecklineShape, sle
   }
   const panels = [back, front];
   // No sleeve-cap seam: the cap is drafted with ease over the armhole, which a seam join would flag in every size.
-  const sl = sleeveFor(sleeveChoice, method);
+  const sl = sleeveFor(sleeveChoice, method, length);
   if (sl) panels.push(sl);
   return { panels, joins, templates: sl ? ['back', 'front', 'sleeve'] : ['back', 'front'] };
 }
 
 /** Add the pieces of `method` to the project (its opening and edge settings applied). */
-function addPieces(p: Project, method: GarmentMethod, neckline: NecklineShape, sleeveChoice: SleeveChoice, notes: string[]): Project {
+function addPieces(p: Project, method: GarmentMethod, neckline: NecklineShape, sleeveChoice: SleeveChoice, length: SleeveLength, notes: string[]): Project {
   if (method === 'blank') return p;
   if (method === 'contiguous') {
     const q = ensureEstimates(p, TEMPLATE_MEASUREMENTS.yoke).project;
-    return generateBodyAndSleeves({ ...q, panels: [...q.panels, yokePanel(neckline)] }, notes);
+    return generateBodyAndSleeves({ ...q, panels: [...q.panels, yokePanel(neckline)] }, notes, length);
   }
-  const set = panelPieces(method, neckline, sleeveChoice);
-  const q = ensureEstimates(p, [...new Set(set.templates.flatMap((t) => TEMPLATE_MEASUREMENTS[t]))]).project;
+  const set = panelPieces(method, neckline, sleeveChoice, length);
+  const names = set.templates.flatMap((t) => (t === 'sleeve' ? sleeveNeeds(length) : TEMPLATE_MEASUREMENTS[t]));
+  const q = ensureEstimates(p, [...new Set(names)]).project;
   return conformToGarment({ ...q, panels: [...q.panels, ...set.panels], joins: [...(q.joins ?? []), ...set.joins] }, notes);
 }
 
@@ -172,7 +195,7 @@ export function buildGarment(base: Project, spec: GarmentSpec): Project {
   const construction = spec.method === 'contiguous' ? 'contiguous' : 'panels';
   let p: Project = setConstruction({ ...base, panels: [], joins: [], garment: { construction: base.garment.construction, opening: spec.opening } }, construction);
   p = { ...p, ease: withEasePreset(p.ease, spec.ease), edges: spec.edges ? structuredClone(spec.edges) : undefined, cardigan: undefined };
-  p = addPieces(p, spec.method, spec.neckline, spec.sleeve, []);
+  p = addPieces(p, spec.method, spec.neckline, spec.sleeve, lengthFor(spec.sleeve, spec.sleeveLength ?? 'long'), []);
   return p.edges ? applyEdgeTreatments(p, [], { create: true }) : p;
 }
 
@@ -190,8 +213,9 @@ export function changeMethod(p: Project, method: Exclude<GarmentMethod, 'blank'>
   let q: Project = { ...p, panels: p.panels.filter((x) => !isGarmentPiece(x)), joins };
   q = setConstruction(q, method === 'contiguous' ? 'contiguous' : 'panels');
   const sleeveChoice = sleevesFor(method).includes(now.sleeve) ? now.sleeve : method === 'contiguous' ? 'contiguous' : 'set-in';
+  const length = lengthFor(sleeveChoice, now.sleeveLength);
   const added: string[] = [];
-  q = addPieces(q, method, now.neckline, sleeveChoice, added);
+  q = addPieces(q, method, now.neckline, sleeveChoice, length, added);
   const fresh = q.panels.filter((x) => !p.panels.some((o) => o.id === x.id));
   const kept = q.panels.filter((x) => p.panels.some((o) => o.id === x.id));
   q = { ...q, panels: [...fresh, ...kept] }; // the garment first, as a new garment lists it
@@ -199,6 +223,7 @@ export function changeMethod(p: Project, method: Exclude<GarmentMethod, 'blank'>
   if (fresh.length) notes.push(`Adds ${fresh.map((x) => x.name).join(', ')}.`);
   if (kept.length) notes.push(`Keeps ${kept.map((x) => x.name).join(', ')}.`);
   if (sleeveChoice !== now.sleeve && now.sleeve !== 'none') notes.push(`Sleeves become ${SLEEVES.find((s) => s.id === sleeveChoice)!.label.toLowerCase()}: this method has no ${SLEEVES.find((s) => s.id === now.sleeve)!.label.toLowerCase()}.`);
+  if (length !== now.sleeveLength && now.sleeve !== 'none') notes.push(`Sleeves become ${lengthLabel(length)}: these sleeves can’t be ${lengthLabel(now.sleeveLength)}.`);
   notes.push('Sizes, gauge, ease and edge settings stay. Undo goes back.');
   return q.edges ? applyEdgeTreatments(q) : q;
 }
@@ -234,14 +259,48 @@ export function setSleeve(p: Project, choice: SleeveChoice, notes: string[] = []
   // Joins made for the old sleeves (cap seams…) go with them.
   const joins = (p.joins ?? []).filter((j) => ![...j.edges, ...j.partner].some((r) => old.some((x) => x.id === r.panelId)));
   let q: Project = { ...p, panels: p.panels.filter((x) => !old.includes(x)), joins };
-  const sl = sleeveFor(choice, c.method);
+  const length = lengthFor(choice, c.sleeveLength);
+  const sl = sleeveFor(choice, c.method, length);
   if (sl) {
-    q = ensureEstimates(q, TEMPLATE_MEASUREMENTS.sleeve).project;
+    q = ensureEstimates(q, sleeveNeeds(length)).project;
     q = { ...q, panels: [...q.panels, sl] };
   }
   if (old.length) notes.push(`Replaces ${old.map((x) => x.name).join(', ')}.`);
   if (sl) notes.push(`Adds ${sl.name}.`);
+  if (sl && length !== c.sleeveLength && c.sleeve !== 'none') notes.push(`${SLEEVES.find((s) => s.id === choice)!.label} sleeves can’t be ${lengthLabel(c.sleeveLength)}: made ${lengthLabel(length)}.`);
   return conformToGarment(q);
+}
+
+/** The sleeve templates' long-sleeve names (a sleeve still called one of these, with its length, is renamed). */
+const SLEEVE_BASE_NAMES = ['Sleeve', 'Sleeve (drop shoulder)', 'Sleeve (straight)'];
+
+const lengthLabel = (l: SleeveLength) => (l === 'cap' ? 'cap sleeves' : SLEEVE_LENGTHS.find((x) => x.id === l)!.label.toLowerCase());
+
+/**
+ * All the garment's sleeves (a contiguous yoke's too) at another length: underarm height and cuff width set from
+ * it, everything else kept; a sleeve still named for its old length is renamed. Sleeves redrawn by hand are left.
+ */
+export function setSleeveLength(p: Project, length: SleeveLength, notes: string[] = []): Project {
+  const c = garmentChoice(p);
+  const to = lengthFor(c.sleeve, length);
+  if (c.sleeve === 'none' || to !== length) return p;
+  const skipped: string[] = [];
+  const changed: string[] = [];
+  const panels = p.panels.map((x) => {
+    if (!isSleeve(x) || sleeveLengthOf(x) === length) return x;
+    const next = withSleeveLength(x, length);
+    if (!next) {
+      skipped.push(x.name);
+      return x;
+    }
+    const base = x.name.replace(new RegExp(`^${SLEEVE_LENGTHS.find((l) => l.id === sleeveLengthOf(x))!.prefix} (.)`), (_, ch: string) => ch.toUpperCase());
+    const renamed = SLEEVE_BASE_NAMES.includes(base) && sleeveName(base, sleeveLengthOf(x)) === x.name ? sleeveName(base, length) : x.name;
+    changed.push(x.name);
+    return { ...next, name: renamed };
+  });
+  if (changed.length) notes.push(`Sets ${changed.join(', ')} to ${lengthLabel(length)}: the underarm height and the cuff width follow; other edits are kept.`);
+  if (skipped.length) notes.push(`Leaves ${skipped.join(', ')} as drawn (no cuff and underarm points to set).`);
+  return ensureEstimates({ ...p, panels }, sleeveLengthNeeds(length)).project;
 }
 
 /** Single pieces the Pieces tab offers for a method (whole-garment sets come from the method instead). */

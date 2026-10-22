@@ -5,9 +5,10 @@ import { ContiguousPanels, GarmentSettings } from './GarmentSettings';
 import { conformToGarment } from '../../engine/garment';
 import { EASE_PRESETS, easePresetOf, extraPieces, garmentChoice, withEasePreset, type EasePresetId } from '../../engine/garmentSetup';
 import { convertGauge, type GaugeBasis } from '../../engine/gauge';
-import { newId, type Id, type Project } from '../../engine/model';
+import { newId, type Id, type Project, type SleeveLength } from '../../engine/model';
 import { ensureEstimates } from '../../engine/estimates';
-import { fromTemplate, TEMPLATE_MEASUREMENTS, TEMPLATES, type TemplateId, type TemplateOptions } from '../../engine/templates';
+import { fromTemplate, sleeveLengthsFor, TEMPLATE_MEASUREMENTS, TEMPLATES, type TemplateId, type TemplateOptions } from '../../engine/templates';
+import { SLEEVE_LENGTHS, sleeveLengthNeeds } from '../../engine/sleeveLength';
 import { roundTo } from '../../engine/units';
 import { dropPanelFromJoins, JOIN_TAGS, joinReport, type PanelCache } from '../../engine/joins';
 import type { Join, JoinTag } from '../../engine/model';
@@ -102,7 +103,7 @@ function PanelList({ project, panelId, update, selectPanel }: Props) {
     }
     update((p) =>
       conformToGarment(
-        produce(ensureEstimates(p, TEMPLATE_MEASUREMENTS[tpl]).project, (d) => {
+        produce(ensureEstimates(p, [...TEMPLATE_MEASUREMENTS[tpl], ...(tpl === 'sleeve' ? sleeveLengthNeeds(opts.sleeveLength) : [])]).project, (d) => {
           d.panels.push(...set.panels);
           if (set.joins.length) d.joins = [...(d.joins ?? []), ...set.joins];
         }),
@@ -179,10 +180,17 @@ function PanelList({ project, panelId, update, selectPanel }: Props) {
         )}
         {def.options.includes('sleeve') && (
           <label className="opt">Type
-            <select value={opts.sleeve} onChange={(e) => setOpts({ ...chosen, sleeve: e.target.value as TemplateOptions['sleeve'] })}>
+            <select value={opts.sleeve} onChange={(e) => { const sleeve = e.target.value as NonNullable<TemplateOptions['sleeve']>; setOpts({ ...chosen, sleeve, sleeveLength: sleeve !== 'set-in' && chosen.sleeveLength === 'cap' ? 'short' : chosen.sleeveLength }); }}>
               <option value="set-in">Set-in cap</option>
               <option value="drop">Drop shoulder</option>
               <option value="straight">Straight</option>
+            </select>
+          </label>
+        )}
+        {def.options.includes('sleeveLength') && (
+          <label className="opt">Length
+            <select value={opts.sleeveLength ?? 'long'} onChange={(e) => setOpts({ ...chosen, sleeveLength: e.target.value as SleeveLength })}>
+              {SLEEVE_LENGTHS.filter((l) => sleeveLengthsFor(opts.sleeve ?? 'set-in').includes(l.id)).reverse().map((l) => <option key={l.id} value={l.id}>{l.id === 'cap' ? 'Cap sleeve' : l.label}</option>)}
             </select>
           </label>
         )}

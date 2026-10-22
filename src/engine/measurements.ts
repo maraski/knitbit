@@ -109,6 +109,10 @@ export function buildScope(project: Project, sizeId: Id): Record<string, number>
   scope.band_w = b.band_w;
   scope.band_overlap = b.band_overlap;
   scope.closing_r = b.closing_r;
+  // Cuff band knit with the sleeves (cm; 0 when picked up later or off). No edge settings yet = the templates' 5 cm rib.
+  const cuff = project.edges?.cuff;
+  const depth = cuff && cuff.enabled && cuff.method === 'with-panel' ? evaluateDim(cuff.depth, sizeId, scope) : null;
+  scope.cuff_depth = !cuff ? 5 : depth?.ok ? depth.value.value : 0;
   return scope;
 }
 

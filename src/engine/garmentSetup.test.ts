@@ -160,7 +160,7 @@ describe('Garment tab: changing the method', () => {
 describe('older projects: the method is read from their pieces', () => {
   it('the old sample (bottom-up back, front, set-in sleeve) reads as seamed', () => {
     const p = { ...base(), panels: [bodice('back'), bodice('front'), sleeve('set-in')] };
-    expect(garmentChoice(p)).toEqual({ method: 'seamed', opening: 'closed', neckline: 'round', sleeve: 'set-in' });
+    expect(garmentChoice(p)).toEqual({ method: 'seamed', opening: 'closed', neckline: 'round', sleeve: 'set-in', sleeveLength: 'long' });
     expect(garmentLabel(p)).toBe('Seamed panels · pullover');
   });
 
