@@ -262,8 +262,9 @@ export interface YokeSpec {
    * and the sts between turns. */
   shortRows?: { frontCo: DimExpr; pairs: DimExpr; first: DimExpr; step: DimExpr };
   /** Front neck, worked as increases at the front edges, then (pullover) a centre cast-on that joins the round.
-   * `width` is the neck opening, cast on across the back (absent in older files: back_neck_width). */
-  neck: { shape: NecklineShape; depth: DimExpr; centre: DimExpr; width?: DimExpr };
+   * `width` is the neck opening, cast on across the back (absent in older files: back_neck_width). `backDepth`: a
+   * boat neck's back depth below the strap top (absent: back_neck_drop), in the back length and the short rows. */
+  neck: { shape: NecklineShape; depth: DimExpr; centre: DimExpr; width?: DimExpr; backDepth?: DimExpr };
 }
 
 export type BustMethod = 'shortrows' | 'horizontal-dart' | 'vertical-dart' | 'none';

@@ -115,7 +115,8 @@ export function applyEdgeTreatments(project: Project, notes: string[] = [], opts
   // Neckband: a strip picked up around the neck edges of the body panels (made only when asked for).
   if (nb.enabled && (existing || opts.create)) {
     const pattern = edgePattern(nb);
-    const base = existing ?? { ...neckband(), name: 'Neckband' };
+    const shape = panels.find((x) => x.yoke)?.yoke!.neck.shape ?? panels.find((x) => x.template === 'front' && x.neckline)?.neckline!.shape;
+    const base = existing ?? { ...neckband(shape), name: 'Neckband' };
     const top = base.waypoints[base.waypoints.length - 1];
     const strip: Panel = {
       ...base,

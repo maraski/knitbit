@@ -82,7 +82,7 @@ export function GarmentSettings({ project, update, sizeId }: Props & { sizeId: I
         <div className="row2">
           <div className="field">
             <label>Neckline</label>
-            <select value={choice.neckline} onChange={(e) => update((p) => setNeckline(p, e.target.value as typeof choice.neckline))} title="Sets the front neck to this shape’s defaults">
+            <select value={choice.neckline} onChange={(e) => update((p) => setNeckline(p, e.target.value as typeof choice.neckline))} title="Sets the front and back necks (and the shoulder tops) to this shape’s defaults">
               {NECKLINES.map((n) => <option key={n.id} value={n.id}>{n.label}</option>)}
             </select>
           </div>

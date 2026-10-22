@@ -20,7 +20,7 @@ import { rowsPerCm, stitchesPerCm } from './gauge';
 import { buildScope } from './measurements';
 import type { DimExpr, Id, NecklineShape, Project, YokeSpec, YokeStart } from './model';
 import { dim, newPanel, type Panel } from './model';
-import { FRONT_NECKS } from './templates';
+import { backNeckFor, FRONT_NECKS } from './templates';
 
 export type Zone = 'leftFront' | 'leftSleeve' | 'back' | 'rightSleeve' | 'rightFront';
 export const ZONES: Zone[] = ['leftFront', 'leftSleeve', 'back', 'rightSleeve', 'rightFront'];
@@ -133,11 +133,11 @@ export interface YokeResult {
 export const SLOPED_SHOULDER = 'sqrt(((back_shoulder_width - back_neck_width) / 2) ^ 2 + shoulder_drop ^ 2)';
 
 /** Short-row defaults: the fronts cast on as wide as the neck; pairs from the height the back is raised (front neck
- * depth − back neck drop); turns from `first` sts past the shoulder marker, stepped evenly to the centre part. */
+ * depth − back neck depth); turns from `first` sts past the shoulder marker, stepped evenly to the centre part. */
 export function defaultShortRows(): NonNullable<YokeSpec['shortRows']> {
   return {
     frontCo: dim('neck_w'),
-    pairs: dim('round(max(0, neck_depth - back_neck_drop) / row_h / 2)'),
+    pairs: dim('round(max(0, neck_depth - back_depth) / row_h / 2)'),
     first: dim(3),
     step: dim('max(1, floor((front_side - centre_side - first_turn) / max(1, pairs - 1)))'),
   };
@@ -146,6 +146,7 @@ export function defaultShortRows(): NonNullable<YokeSpec['shortRows']> {
 /** New yokes start with the whole neck, except a V neck: its depth needs the neck increases of the method's start. */
 export function defaultYoke(shape: NecklineShape = 'round', start: YokeStart = shape === 'v' ? 'back' : 'neck'): YokeSpec {
   const n = FRONT_NECKS[shape];
+  const boat = shape === 'boat';
   return {
     start,
     shortRows: defaultShortRows(),
@@ -156,11 +157,28 @@ export function defaultYoke(shape: NecklineShape = 'round', start: YokeStart = s
     backNeck: { perRow: dim(start === 'neck' ? 0 : 2), rows: dim(8), manual: {} },
     cap: { topSts: dim(6), rapidRows: dim('armhole_depth / 6 / row_h'), solve: true },
     sleeveWidth: dim('bicep + ease.bicep'),
-    depth: { mode: 'back-length', backLength: dim('shoulder_drop + armhole_depth - back_neck_drop'), extra: dim(0), deepen: true, maxRapid: dim(0.5) },
+    // A boat neck starts down the shoulder line (the strap's share of the shoulder drop) and its own back depth below.
+    depth: { mode: 'back-length', backLength: dim(boat ? BOAT_BACK_LENGTH : 'shoulder_drop + armhole_depth - back_neck_drop'), extra: dim(0), deepen: true, maxRapid: dim(0.5) },
     body: { width: dim('upper_chest + ease'), increases: true, zone: dim(0.6) },
     underarm: { castOn: dim('underarm_co') },
-    neck: { shape, depth: dim(n.depth), centre: dim(n.centre), width: dim(n.width) },
+    neck: { shape, depth: dim(n.depth), centre: dim(n.centre), width: dim(n.width), ...(boat ? { backDepth: dim(backNeckFor('boat').depth) } : {}) },
   };
+}
+
+/** Back length, neck to underarm, of a boat neck: from the strap top (down the shoulder line) less the back depth. */
+const BOAT_BACK_LENGTH = 'shoulder_drop * min(1, (shoulder_w - neck_w) / max(1, shoulder_w - back_neck_width)) + armhole_depth - back_depth';
+
+/**
+ * A yoke with another neck shape: the neck takes the new shape's defaults, and any other setting still at the old
+ * shape's default follows the new shape's default (settings you changed are kept).
+ */
+export function yokeWithNeck(yoke: YokeSpec, shape: NecklineShape): YokeSpec {
+  const before = defaultYoke(yoke.neck.shape) as unknown as Record<string, unknown>;
+  const after = defaultYoke(shape) as unknown as Record<string, unknown>;
+  const next = { ...yoke } as unknown as Record<string, unknown>;
+  for (const k of Object.keys(after)) if (JSON.stringify(next[k]) === JSON.stringify(before[k])) next[k] = after[k];
+  // The whole neck is the new shape's (a boat neck's back depth goes with it).
+  return { ...(next as unknown as YokeSpec), neck: defaultYoke(shape).neck };
 }
 
 const sum = (z: ZoneCounts) => ZONES.reduce((a, k) => a + z[k], 0);
@@ -203,6 +221,8 @@ export function generateYoke(project: Project, spec: YokeSpec, sizeId: Id): Yoke
   const seam = Math.max(1, Math.round(val('seamSts', 'Seam stitches', spec.seamSts, 'sts')));
   // The neck opening is cast on across the back; a boat neck widens it (older files have no width: the back neck).
   const neckCm = spec.neck.width ? val('neckWidth', 'Neck width (cast on across the back)', spec.neck.width, 'cm') : scope.back_neck_width ?? 0;
+  // A boat neck's back depth (from the strap top); the other necks' back neck is back_neck_drop below the neck point.
+  const backDepthCm = spec.neck.backDepth ? val('neckBackDepth', 'Back neck depth', spec.neck.backDepth, 'cm') : scope.back_neck_drop ?? 0;
   const bn = sts(neckCm);
   if (!(bn > 0)) issues.push({ severity: 'error', message: 'The neck width gives no back neck stitches.' });
   const wholeNeck = spec.start === 'neck';
@@ -224,7 +244,7 @@ export function generateYoke(project: Project, spec: YokeSpec, sizeId: Id): Yoke
 
   // ---- front neck depth and centre (both starts) ----
   const depthCm = val('neckDepth', 'Front neck depth', spec.neck.depth, 'cm');
-  const centreCm = val('neckCentre', 'Front neck centre', spec.neck.centre, 'cm');
+  const centreCm = val('neckCentre', 'Front neck centre', spec.neck.centre, 'cm', { neck_w: neckCm, neck_depth: depthCm });
 
   // ---- whole neck: short rows ----
   const plain = new Set<number>();
@@ -234,7 +254,7 @@ export function generateYoke(project: Project, spec: YokeSpec, sizeId: Id): Yoke
     // The centre part (lowest, never turned in): half each side, from the front edge.
     const centreAll = spec.neck.shape === 'square' ? FL + FR : spec.neck.shape === 'v' ? 0 : Math.min(FL + FR, sts(centreCm));
     const cSide = Math.max(0, Math.floor(centreAll / 2) - (cardigan ? Math.round(closingSts / 2) : 0));
-    const pairs = Math.max(0, Math.round(val('srPairs', 'Short-row pairs', sr.pairs, '', { neck_depth: depthCm })));
+    const pairs = Math.max(0, Math.round(val('srPairs', 'Short-row pairs', sr.pairs, '', { neck_depth: depthCm, back_depth: backDepthCm })));
     const first = Math.max(1, Math.round(val('srFirst', 'First turn, sts past the shoulder marker', sr.first, 'sts')));
     const step = Math.max(1, Math.round(val('srStep', 'Sts between turns', sr.step, 'sts', { front_side: side, centre_side: cSide, first_turn: first, pairs })));
     const turns: number[] = [];
@@ -303,7 +323,7 @@ export function generateYoke(project: Project, spec: YokeSpec, sizeId: Id): Yoke
     Y0 = A + rowsOf(scope.armhole_depth ?? 0);
     params.backLength = { label: 'Armhole depth below the seam', expr: 'armhole_depth', plugged: String(scope.armhole_depth ?? 0), value: scope.armhole_depth ?? 0, overridden: false, unit: 'cm' };
   } else {
-    Y0 = rowsOf(val('backLength', 'Back length, neck to underarm', spec.depth.backLength, 'cm'));
+    Y0 = rowsOf(val('backLength', 'Back length, neck to underarm', spec.depth.backLength, 'cm', { neck_w: neckCm, back_depth: backDepthCm }));
   }
   Y0 += rowsOf(val('extraDepth', 'Extra yoke depth', spec.depth.extra, 'cm'));
 

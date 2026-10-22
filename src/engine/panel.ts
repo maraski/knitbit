@@ -1230,9 +1230,12 @@ function computeNeck(
     'neck.width': sizeId in nk.width.overrides ? String(nk.width.overrides[sizeId]) : nk.width.expr,
     'neck.depth': sizeId in nk.depth.overrides ? String(nk.depth.overrides[sizeId]) : nk.depth.expr,
     'neck.centre': sizeId in nk.centreWidth.overrides ? String(nk.centreWidth.overrides[sizeId]) : nk.centreWidth.expr,
+    // The yoke's names for them, so one centre expression (the boat neck's) works in both.
+    neck_w: 'neck.width',
+    neck_depth: 'neck.depth',
   };
   const r = resolveDefinitions(defs, scope);
-  for (const [k, e] of Object.entries(r.errors)) issues.push({ severity: 'error', message: `Neckline ${k.slice(5)}: ${e}`, ref });
+  for (const [k, e] of Object.entries(r.errors)) if (k.startsWith('neck.')) issues.push({ severity: 'error', message: `Neckline ${k.slice(5)}: ${e}`, ref });
   if (Object.keys(r.errors).length) return null;
 
   const T = g.totalRows;

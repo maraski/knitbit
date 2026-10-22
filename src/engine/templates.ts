@@ -33,7 +33,7 @@ export const TEMPLATES: { id: TemplateId; label: string; description: string; op
     description: 'Back cast on at the shoulders; front shoulders picked up from it; neck joined at the centre; underarms cast on half each, then in the round. Joins are tagged for you.',
     options: ['neckline', 'shoulderSlope', 'backNeck', 'shoulderFlare', 'joinInRound'],
   },
-  { id: 'back', label: 'Back bodice', description: 'Hem, waist, set-in armholes, shoulder slope and back neck.', options: ['direction', 'shoulderSlope', 'backNeck', 'shoulderFlare', 'joinInRound'] },
+  { id: 'back', label: 'Back bodice', description: 'Hem, waist, set-in armholes, shoulder slope and back neck (a boat neckline gives the matching wide back neck).', options: ['direction', 'neckline', 'shoulderSlope', 'backNeck', 'shoulderFlare', 'joinInRound'] },
   { id: 'front', label: 'Front bodice', description: 'Like the back, with a front neckline.', options: ['direction', 'neckline', 'shoulderSlope', 'shoulderFlare', 'joinInRound'] },
   { id: 'sleeve', label: 'Sleeve', description: 'Set-in cap, drop shoulder or straight, with a ribbed cuff.', options: ['direction', 'sleeve'] },
   { id: 'rectangle', label: 'Plain rectangle', description: 'Two waypoints, no shaping.', options: ['direction'] },
@@ -53,18 +53,40 @@ export const TEMPLATE_MEASUREMENTS: Record<TemplateId, string[]> = {
   front: ['back_shoulder_width', 'shoulder_drop', 'back_neck_width', 'front_neck_drop', 'back_neck_drop', 'waist_to_underarm', 'waist_shift', 'hps_to_apex', 'apex_to_apex', 'underarm_co'],
   sleeve: ['cap_height', 'cap_ease'],
   rectangle: [],
-  neckband: ['back_neck_width', 'front_neck_drop'],
+  neckband: ['back_neck_width', 'front_neck_drop', 'back_shoulder_width'],
   yoke: ['back_neck_width', 'back_shoulder_width', 'shoulder_drop', 'back_neck_drop', 'front_neck_drop', 'underarm_co'],
 };
 
 // ---------- bodices ----------
 
-export const FRONT_NECKS: Record<NecklineShape, { width: string; depth: string; centre: string; top: string }> = {
-  round: { width: 'back_neck_width', depth: 'front_neck_drop', centre: 'back_neck_width * 0.4', top: 'back_neck_width' },
-  v: { width: 'back_neck_width', depth: 'front_neck_drop * 2', centre: '0', top: 'back_neck_width' },
-  square: { width: 'back_neck_width', depth: 'front_neck_drop + 2', centre: 'back_neck_width', top: 'back_neck_width' },
-  boat: { width: 'back_neck_width + 6', depth: 'back_neck_drop + 1', centre: 'back_neck_width + 2', top: 'back_neck_width + 6' },
+/** A boat neck's shaped corners: the last 3 cm each side (less on a shallow neck), the rest bound off at once. */
+export const BOAT_CENTRE = 'neck_w - 2 * min(3, neck_depth * 0.75)';
+/** The shallow back's corners: half its depth each side, so the shaping fits its few rows. */
+const BOAT_BACK_CENTRE = 'neck_w - 2 * min(3, neck_depth * 0.5)';
+/** A boat neck leaves a 3 cm shoulder strap each side. */
+export const BOAT_WIDTH = 'shoulder_w - 6';
+/**
+ * Shoulder slope (neck_side height above the shoulder line). A boat neck's strap slopes only its share of the
+ * shoulder drop, as the body's shoulder line does between the shoulder point and the neck.
+ */
+export const BOAT_RISE = 'shoulder_drop * min(1, (shoulder.width - neck_side.width) / max(1, shoulder_w - back_neck_width))';
+
+type NeckDefaults = { width: string; depth: string; centre: string; top: string; rise: string };
+
+export const FRONT_NECKS: Record<NecklineShape, NeckDefaults> = {
+  round: { width: 'back_neck_width', depth: 'front_neck_drop', centre: 'back_neck_width * 0.4', top: 'back_neck_width', rise: 'shoulder_drop' },
+  v: { width: 'back_neck_width', depth: 'front_neck_drop * 2', centre: '0', top: 'back_neck_width', rise: 'shoulder_drop' },
+  square: { width: 'back_neck_width', depth: 'front_neck_drop + 2', centre: 'back_neck_width', top: 'back_neck_width', rise: 'shoulder_drop' },
+  // Out to a 3 cm strap at the shoulder, shallow (front 4 cm, back 2 cm from the top of the strap).
+  boat: { width: BOAT_WIDTH, depth: '4', centre: BOAT_CENTRE, top: BOAT_WIDTH, rise: BOAT_RISE },
 };
+
+const ROUND_BACK: NeckDefaults = { width: 'back_neck_width', depth: 'back_neck_drop', centre: 'back_neck_width - 2', top: 'back_neck_width', rise: 'shoulder_drop' };
+
+/** The back's neck for a front neckline shape: a boat neck's back is as wide, 2 cm deep; the others a round back neck. */
+export function backNeckFor(shape: NecklineShape): { shape: NecklineShape } & NeckDefaults {
+  return shape === 'boat' ? { ...FRONT_NECKS.boat, shape: 'boat', depth: '2', centre: BOAT_BACK_CENTRE } : { ...ROUND_BACK, shape: 'round' };
+}
 
 function shouldersFirstEarly(direction: KnitDirection, opts: TemplateOptions): boolean {
   return direction === 'top-down' && (opts.construction ?? 'shoulders-first') === 'shoulders-first';
@@ -78,7 +100,7 @@ function shouldersFirstEarly(direction: KnitDirection, opts: TemplateOptions): b
 export function bodice(kind: 'back' | 'front', opts: TemplateOptions = {}): Panel {
   const direction = opts.direction ?? 'bottom-up';
   const shape = opts.neckline ?? 'round';
-  const neck = kind === 'back' ? { width: 'back_neck_width', depth: 'back_neck_drop', centre: 'back_neck_width - 2', top: 'back_neck_width' } : FRONT_NECKS[shape];
+  const neck = kind === 'back' ? backNeckFor(shape) : { ...FRONT_NECKS[shape], shape };
   const p = newPanel(kind === 'back' ? 'Back' : 'Front');
   p.template = kind;
   p.direction = direction;
@@ -115,7 +137,7 @@ export function bodice(kind: 'back' | 'front', opts: TemplateOptions = {}): Pane
   // Straight shoulders (top-down option): the panel ends at the shoulder line, no slope.
   const sloped = direction !== 'top-down' || (opts.shoulderSlope ?? 'shortrows') === 'shortrows';
   if (sloped) {
-    const top = newWaypoint('neck_side', 'shoulder.height + shoulder_drop', neck.top);
+    const top = newWaypoint('neck_side', `shoulder.height + ${neck.rise}`, neck.top);
     p.waypoints.push(top);
     p.segments.push(
       newSegment(
@@ -126,7 +148,7 @@ export function bodice(kind: 'back' | 'front', opts: TemplateOptions = {}): Pane
   }
   if (kind === 'front') p.bust = defaultBust();
   const straightBack = kind === 'back' && direction === 'top-down' && (opts.backNeck ?? 'straight') === 'straight';
-  p.neckline = straightBack ? null : { shape: kind === 'back' ? 'round' : shape, width: dim(neck.width), depth: dim(neck.depth), centre: 'bindoff', centreWidth: dim(neck.centre), side: 'rs' };
+  p.neckline = straightBack ? null : { shape: neck.shape, width: dim(neck.width), depth: dim(neck.depth), centre: 'bindoff', centreWidth: dim(neck.centre), side: 'rs' };
   if (shouldersFirst && front) p.startFrom = 'pickup';
   if (opts.joinInRound) p.joinAt = underarm.id;
   if (shouldersFirst) {
@@ -201,10 +223,11 @@ export function rectangle(direction: KnitDirection = 'bottom-up'): Panel {
   return p;
 }
 
-export function neckband(): Panel {
+export function neckband(shape: NecklineShape = 'round'): Panel {
   const p = newPanel('Neckband');
   p.template = 'neckband';
-  const length = 'back_neck_width * 2 + front_neck_drop * 2';
+  // A boat neck: straight across front and back, plus the shaped corners (front 4 cm, back 2 cm deep).
+  const length = shape === 'boat' ? `(${BOAT_WIDTH}) * 2 + 6` : 'back_neck_width * 2 + front_neck_drop * 2';
   p.waypoints = [newWaypoint('pick_up', 0, length), newWaypoint('bind_off', 2.5, length)];
   p.segments = [newSegment(p.waypoints[0].id, { kind: 'straight' })];
   p.pattern = { name: '1x1 rib', multiple: 2, offset: 0 };
@@ -257,7 +280,7 @@ export function fromTemplate(id: TemplateId, opts: TemplateOptions = {}): Panel 
     case 'sleeve':
       return sleeve(opts.sleeve, opts.direction);
     case 'neckband':
-      return neckband();
+      return neckband(opts.neckline);
     default:
       return rectangle(opts.direction);
   }

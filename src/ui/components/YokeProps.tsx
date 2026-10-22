@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { backNeckPositions, defaultShortRows, defaultYoke, type YokeParam } from '../../engine/contiguous';
+import { backNeckPositions, defaultShortRows, yokeWithNeck, type YokeParam } from '../../engine/contiguous';
 import { generateBodyAndSleeves, missingYokePanels } from '../../engine/contiguousGarment';
 import { FRONT_NECKS } from '../../engine/templates';
 import { dim, type DimExpr, type NecklineShape, type YokeSpec, type YokeStart } from '../../engine/model';
@@ -18,8 +18,11 @@ export function YokeProps({ ctx }: { ctx: PropsContext }) {
   const spec = panel.yoke!;
   const y = c.yoke;
   const setYoke = (fn: (s: YokeSpec) => void, key: string | null = null) => update((p) => editPanel(p, panel.id, (pp) => fn(pp.yoke!)), key);
+  // The yoke's own names (the boat neck's centre and back length use them), as this size works them.
+  const local: Record<string, number> = y ? { neck_w: y.params.neckWidth?.value ?? ctx.scope.back_neck_width, neck_depth: y.params.neckDepth?.value ?? 0, back_depth: y.params.neckBackDepth?.value ?? ctx.scope.back_neck_drop } : {};
+  const scope = { ...ctx.scope, ...local };
   const cm = (label: string, get: (s: YokeSpec) => DimExpr, set: (s: YokeSpec, d: DimExpr) => void, key: string) => (
-    <ExprField label={label} value={get(spec)} sizeId={sizeId} sizeName={sizeName} scope={ctx.scope} units={ctx.units} fieldKey={`yoke.${key}`} onChange={(d, k) => setYoke((s) => set(s, d), `yoke.${panel.id}.${k}`)} />
+    <ExprField label={label} value={get(spec)} sizeId={sizeId} sizeName={sizeName} scope={scope} units={ctx.units} fieldKey={`yoke.${key}`} onChange={(d, k) => setYoke((s) => set(s, d), `yoke.${panel.id}.${k}`)} />
   );
   const num = (label: string, param: string, get: (s: YokeSpec) => DimExpr, set: (s: YokeSpec, d: DimExpr) => void) => (
     <ParamField label={label} value={get(spec)} param={y?.params[param]} sizeId={sizeId} sizeName={sizeName} onChange={(d, k) => setYoke((s) => set(s, d), `yoke.${panel.id}.${param}.${k}`)} />
@@ -157,9 +160,8 @@ export function YokeProps({ ctx }: { ctx: PropsContext }) {
           value={spec.neck.shape}
           onChange={(e) => {
             const shape = e.target.value as NecklineShape;
-            const d = defaultYoke(shape).neck;
             setYoke((s) => {
-              s.neck = d;
+              Object.assign(s, yokeWithNeck(s, shape));
               // Short rows can't make a V's depth: a V neck takes the method's start with its neck increases.
               if (shape === 'v' && s.start === 'neck') {
                 s.start = 'back';
@@ -172,7 +174,8 @@ export function YokeProps({ ctx }: { ctx: PropsContext }) {
         </select>
       </div>
       {cm('Neck width, cast on across the back (cm)', (s) => s.neck.width ?? dim('back_neck_width'), (s, d) => (s.neck.width = d), 'neckWidth')}
-      {cm('Depth below the neck point (cm)', (s) => s.neck.depth, (s, d) => (s.neck.depth = d), 'neckDepth')}
+      {cm(spec.neck.shape === 'boat' ? 'Front depth, from the strap top (cm)' : 'Depth below the neck point (cm)', (s) => s.neck.depth, (s, d) => (s.neck.depth = d), 'neckDepth')}
+      {spec.neck.shape === 'boat' && cm('Back depth, from the strap top (cm)', (s) => s.neck.backDepth ?? dim('back_neck_drop'), (s, d) => (s.neck.backDepth = d), 'neckBackDepth')}
       {spec.neck.shape !== 'v' && spec.neck.shape !== 'square' && cm('Centre (cm)', (s) => s.neck.centre, (s, d) => (s.neck.centre = d), 'neckCentre')}
       {y && !y.shortRows && <NeckWorked y={y} cardigan={project.garment.opening === 'cardigan'} rpc={y.rowsPerCm} />}
 
