@@ -43,6 +43,7 @@ export function edgePattern(t: EdgeTreatment): StitchPattern {
 }
 
 export function edgeStitchLabel(t: EdgeTreatment): string {
+  if (t.fold && t.method === 'with-panel') return `folded stockinette, ${t.fold.turn === 'picot' ? 'picot' : 'purl'} turning round`;
   const p = edgePattern(t);
   return t.stitch === 'custom' ? `custom (multiple of ${p.multiple}${p.offset ? ` + ${p.offset}` : ''})` : EDGE_STITCHES[t.stitch].label;
 }
@@ -55,6 +56,13 @@ export function neckbandWithPanelAllowed(project: Pick<Project, 'panels'>): bool
 /** Whether the treatment is worked as part of the panels it edges (a neckband: an off-shoulder band only). */
 export function knitWithPanel(id: EdgeTreatmentId, t: EdgeTreatment, project?: Pick<Project, 'panels'>): boolean {
   return t.method === 'with-panel' && (id !== 'neckband' || (!!project && neckbandWithPanelAllowed(project)));
+}
+
+type Fold = NonNullable<EdgeTreatment['fold']>;
+
+/** A folded band: a purl turning round, knit closed. */
+export function defaultFold(): Fold {
+  return { turn: 'purl', close: 'knit' };
 }
 
 /** An off-shoulder band as the Neckband: 4 cm of 1×1 rib, knit with the yoke. */

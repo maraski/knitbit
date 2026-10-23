@@ -71,8 +71,9 @@ export function contiguousChecks(project: Project, sizeId: Id, cache: PanelCache
       if (Math.abs(d) > Math.max(tol, 2 / y.stitchesPerCm + 1e-6)) push('warning', `The body at the underarm is ${cm(y.derived.bodyCm + closing)} (${y.held.body} + 2 × ${y.underarmCo} sts), ${d > 0 ? `${cm(d)} more` : `${cm(-d)} less`} than its target (${cm(body)}).`);
     }
     if (y.offShoulder) {
-      // The band's top edge is off_shoulder_drop below the shoulder point; the front works every row but the short rows.
-      const lower = (scope.off_shoulder_drop ?? 0) + y.offShoulder.frontRows / y.rowsPerCm;
+      // The band's top edge is off_shoulder_drop below the shoulder point; the front works every row but the short rows
+      // (and a folded band's facing and turning round, which fold inside).
+      const lower = (scope.off_shoulder_drop ?? 0) + (y.offShoulder.frontRows - (y.offShoulder.fold?.hiddenRows ?? 0)) / y.rowsPerCm;
       if (scope.armhole_depth !== undefined && lower < scope.armhole_depth - tol) push('warning', `The raglan splits ${cm(scope.armhole_depth - lower)} higher than the armhole depth (${cm(scope.armhole_depth)} below the shoulder): it may bind at the underarm. Deepen it.`);
       // It matters more here than most estimates: the band's and the ring's counts come from it.
       const est = project.measurements.find((m) => m.name === 'off_shoulder_circ')?.estimate;

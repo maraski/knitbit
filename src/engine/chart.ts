@@ -12,12 +12,12 @@ import { rowCentre, type ComputedPanel, type ComputedSegment, type Edge, type Sh
 import { defaultSymbol, symbolInfo, type SymbolInfo } from './symbols';
 import { buttonholeCells, buttonPlan } from './buttons';
 import { buildYokeChart } from './yokeChart';
-import { HELD, HOLD, PLAIN } from './cells';
+import { HELD, HOLD, JOIN, PLAIN } from './cells';
 
 /** '' = no stitch (outside the panel), 'k' = plain stitch, 'h' = held (live, not worked), else a symbol id. */
 export type Cell = string;
 
-export { HELD, HOLD, PLAIN };
+export { HELD, HOLD, JOIN, PLAIN };
 
 /** Which marker a symbol cell came from, for editing from the chart. */
 export interface CellRef {
@@ -89,6 +89,7 @@ const MIRROR: Record<string, string> = { ssk: 'k2tog', k2tog: 'ssk', m1l: 'm1r',
 const LEGEND_EXTRA: Record<string, SymbolInfo> = {
   [HELD]: { id: HELD, label: 'Held: live, not worked in this row', abbr: '', custom: false },
   [HOLD]: { id: HOLD, label: 'Place on hold', abbr: 'hold', custom: false },
+  [JOIN]: { id: JOIN, label: 'Knit together with its cast-on loop (closes the folded band)', abbr: 'k-CO', custom: false },
 };
 
 /** Legend entry for any cell value. */

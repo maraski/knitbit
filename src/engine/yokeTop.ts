@@ -34,7 +34,9 @@ export interface TopGeometry {
   rings: TopRing[]; // index = row
 }
 
-export function topGeometry(y: YokeResult): TopGeometry {
+/** `fold`: a folded band's facing and turning round get no width (the finished shape); otherwise every row is a ring
+ * (the stitch chart). */
+export function topGeometry(y: YokeResult, fold = true): TopGeometry {
   const spc = y.stitchesPerCm;
   const rowH = 1 / y.rowsPerCm;
   // The neck opening at the front is the back neck; neck increases and front cast-ons close it. A whole-neck start
@@ -50,6 +52,8 @@ export function topGeometry(y: YokeResult): TopGeometry {
   const unworked = (row: number) => (sr && sr.pairs && row >= from && row <= sr.endRow ? sr.turns[Math.min(sr.pairs, Math.max(1, Math.ceil((row - from + 1) / 2))) - 1] : 0);
   const u0 = unworked(1);
   const rings: TopRing[] = [{ row: 0, total: y.castOn, gap, lead, slots: y.castOn + gap, r0: neckR, r1: neckR, zones: { ...y.castOnZones }, edgeCo: [0, 0], lo: u0, hi: y.castOn - u0 }];
+  // A folded band's facing and turning round fold inside: drawn with no width, so the band starts at its fold.
+  let rad = neckR;
   for (const r of y.rows) {
     if (r.neck) {
       gap -= 2;
@@ -66,9 +70,10 @@ export function topGeometry(y: YokeResult): TopGeometry {
     }
     gap = Math.max(0, gap);
     lead = Math.min(gap, Math.max(0, lead - edgeCo[0]));
-    const r0 = neckR + (r.row - 1) * rowH;
+    const r0 = rad;
+    rad += fold && (r.bandPart === 'facing' || r.bandPart === 'turn') ? 0 : rowH;
     const u = unworked(r.row);
-    rings.push({ row: r.row, total: r.total, gap, lead, slots: r.total + gap, r0, r1: r0 + rowH, zones: { ...r.zones }, edgeCo, lo: u, hi: r.total - u });
+    rings.push({ row: r.row, total: r.total, gap, lead, slots: r.total + gap, r0, r1: rad, zones: { ...r.zones }, edgeCo, lo: u, hi: r.total - u });
   }
   return { neckR, outerR: rings[rings.length - 1].r1, rings };
 }

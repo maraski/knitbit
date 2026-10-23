@@ -3,7 +3,7 @@
 Goal: design an off-shoulder top (the opening sits below the shoulders and around the upper arms) in Knitbit, with
 the band, the yoke, the body and the sleeves all worked out per size.
 
-**Status: M1 (engine) and M2 (UI) built (2026-10-23); M3 to do.**
+**Status: M1 (engine), M2 (UI) and M3 (folded band) built (2026-10-23).**
 
 ## Your answers (2026-10-23)
 
@@ -81,9 +81,8 @@ Derived values (shown with formulas in the yoke's parameter table, like the othe
   another neckline goes back to the neckband defaults (a strip, picked up later).
 - The increase round (band count → ring count) is spread evenly ([distribute.ts](../src/engine/distribute.ts)) and
   shown in the chart and the phase table as its own row.
-- Later (M3): a **folded casing** for elastic. The band is worked twice as deep in stockinette, with a purl turning
-  round, then folded and sewn or knit together. Knitbit would suggest an elastic length, `off_shoulder_circ × 0.85`.
-  An **i-cord** edge might come with it.
+- M3 (built): a **folded band**, no elastic. The band is worked twice as deep in stockinette, with a purl or picot
+  turning round, then folded and knit together or sewn. An **i-cord** edge is left for later.
 
 ## Model and UI changes
 
@@ -216,13 +215,41 @@ section, and the schematic, chart and top view, with the checks showing in the p
 
 ### M3: band options
 Folded elastic casing as a neckband stitch/method for off-shoulder (double depth, turning round, elastic length
-shown), and possibly an i-cord edge.
+shown), and possibly an i-cord edge. *(Changed when asked: a folded band without elastic; see below.)*
 **Done when:**
 - Picking casing doubles the band rows in the chart and schematic.
 - The elastic length shows per size.
 - Tests cover the casing rows and the elastic length.
 
+**M3 answers (2026-10-23):** no separate elastic (no casing): a **folded band** that grips by its own band ease
+(stays −10 %). Turning round selectable, **purl** by default or picot; closing selectable, **knit closed** by default or
+sewn. I-cord **later**.
+
+**Built (M3):**
+- `EdgeTreatment.fold?: { turn: 'purl' | 'picot'; close: 'knit' | 'sewn' }` (optional, no schema bump), used only for a
+  neckband knit with the panels (an off-shoulder band); otherwise ignored. Another neckline puts the default neckband
+  back, so the fold goes too.
+- `offShoulderStart`: a folded band is stockinette (`foldedPattern`: multiple 2 for picot), depth = the Neckband depth
+  as the **finished** depth `D` rows; band rows = `2D + 1`: facing 1..D, turning round D+1, outside D+2..2D+1 (its last
+  row the joining round when knit closed). `YokeRow.bandPart` marks each, `offShoulder.fold` carries
+  `{ turn, close, depthRows, hiddenRows: D + 1 }`. The hidden rows are **added to the yoke's depth** (`Y += D + 1`) so
+  the finished depth, `derived.backLengthCm` and the split checks (contiguousChecks subtracts them) are as with the rib
+  band. The phase table splits the band into facing / turning round / outside.
+- Chart: plain facing and outside, the turning round in purls or `yo, k2tog`, the joining round in a new `join-co`
+  cell (*k-CO*, "knit together with its cast-on loop"), phases *Facing / Turn / Band*. Top view: `topGeometry(y, fold)`;
+  the schematic draws the facing and turning round with no width (the band starts at its fold), the chart view every
+  row. The flat panel's band section covers all `2D + 1` rows.
+- UI: `NeckbandFold` (lazy, 0.7 kB gzip) with *Band: Single / Folded*, *Turning round* and *Closed*, in the Garment
+  tab's Neckband (when knit with the yoke; the Stitch row hides when folded and the depth reads *finished*) and in the
+  yoke's Off-shoulder part; RaglanProps, the top view key and the dialog hint describe it.
+- Tests: `offShoulderFold.test.ts` (rows and parts in every size, knit closed and sewn, depth added, picot even count,
+  every size on target with no warnings for Classic and Modified × purl and picot, chart cells, top view, flat panel,
+  save/load, neckline change). The yoke regression snapshot is unchanged.
+- Main chunk 273.9 → 275.4 kB (88.6 → 89.1 kB gzip): the fold branch in raglan.ts and yokeTop.ts, the label, the
+  Edges hooks and the glyph.
+
 ### Later (not planned)
+- An i-cord edge for the off-shoulder band (asked about for M3, left for later).
 - Off-shoulder cardigan (flat, band running into the front bands).
 - A sweetheart or dipped front at the band (the front raised less than the back, or V-shaped).
 - Gathered or puff sleeve tops.

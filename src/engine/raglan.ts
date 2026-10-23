@@ -42,6 +42,18 @@ export const OFF_SHOULDER_DEPTH = 'armhole_depth - off_shoulder_drop + back_rais
 /** An off-shoulder band without a Neckband edge set to "knit with the panels": 4 cm of 1×1 rib. */
 export const OFF_SHOULDER_BAND = { depth: 4, pattern: { name: '1x1 rib', multiple: 2, offset: 0 } as StitchPattern };
 
+/** A folded band's stitch: stockinette; a picot turning round (yo, k2tog) needs an even count. */
+export function foldedPattern(turn: 'purl' | 'picot'): StitchPattern {
+  return { name: 'stockinette, folded', multiple: turn === 'picot' ? 2 : 1, offset: 0 };
+}
+
+/** Which part of a folded band row `r` (1-based) is: facing, turning round, outer half, or the outer half's last row
+ * when it joins the band to the cast-on. */
+export function foldPart(fold: { close: 'knit' | 'sewn'; depthRows: number }, r: number): 'facing' | 'turn' | 'outer' | 'join' {
+  const d = fold.depthRows;
+  return r <= d ? 'facing' : r === d + 1 ? 'turn' : r === 2 * d + 1 && fold.close === 'knit' ? 'join' : 'outer';
+}
+
 /** Off-shoulder settings: band −10 %, ring 0 %, each arm arc half the bicep; the back raised 2 cm (Modified) or level. */
 export function defaultOffShoulder(raised = false): NonNullable<YokeSpec['offShoulder']> {
   return { bandEase: dim(-0.1), ringEase: dim(0), armArc: dim('bicep * 0.5'), backRaise: dim(raised ? 2 : 0) };
@@ -174,6 +186,9 @@ export function generateRaglan(project: Project, spec: YokeSpec, sizeId: Id): Yo
     params.backLength = { label: 'Armhole depth', expr: 'armhole_depth', plugged: String(scope.armhole_depth ?? 0), value: scope.armhole_depth ?? 0, overridden: false, unit: 'cm' };
   } else Y = rowsOf(val('backLength', 'Back length, neck to underarm', spec.depth.backLength, 'cm', o ? { back_raise: o.backRaise } : {}));
   Y += rowsOf(val('extraDepth', 'Extra yoke depth', spec.depth.extra, 'cm'));
+  // A folded band's facing and turning round fold inside: they don't count towards the depth.
+  const hidden = o?.fold?.hiddenRows ?? 0;
+  Y += hidden;
   if (Y < 2) {
     issues.push({ severity: 'error', message: `The raglan is ${Y} rows deep: deepen it.` });
     Y = Math.max(Y, 1);
@@ -277,6 +292,7 @@ export function generateRaglan(project: Project, spec: YokeSpec, sizeId: Id): Yo
     }
     const row: YokeRow = { row: r, phase, backNeck: false, neck, round: isRound(r), rs: isRS(r), markersMoved: false, zones: { ...z }, total: sum(z), incs, castOns };
     if (band) row.band = true;
+    if (band && o?.fold) row.bandPart = foldPart(o.fold, r);
     if (shortRows && r >= srFrom && r <= shortRows.endRow) Object.assign(row, shortRowSpan(shortRows, r - srFrom + 1, row, cardigan), plain.has(r) ? { plain: true } : {});
     rows.push(row);
   }
@@ -294,7 +310,12 @@ export function generateRaglan(project: Project, spec: YokeSpec, sizeId: Id): Yo
     if (to >= from) phases.push({ id, label, from, to, stsBefore: stsAt(from - 1), stsAfter: stsAt(to), incsPerRow });
   };
   if (o) {
-    add('band', `Band, ${o.pattern.name}, in the round`, 1, Math.min(o.bandRows, Y), `${castOn} sts, no increases`);
+    if (o.fold) {
+      const d = o.fold.depthRows;
+      add('band', 'Band facing, stockinette, in the round', 1, Math.min(d, Y), `${castOn} sts, no increases`);
+      add('band', `Turning round, ${o.fold.turn === 'picot' ? 'picot (yo, k2tog)' : 'purl'}`, d + 1, Math.min(d + 1, Y), 'the fold');
+      add('band', 'Band outside, stockinette', d + 2, Math.min(o.bandRows, Y), o.fold.close === 'knit' ? `last round: each st knit together with its cast-on loop` : 'sew the facing down afterwards');
+    } else add('band', `Band, ${o.pattern.name}, in the round`, 1, Math.min(o.bandRows, Y), `${castOn} sts, no increases`);
     add('ring', 'Increase round', o.bandRows + 1, Math.min(o.bandRows + 1, Y), `${o.ringSts - castOn} sts spread evenly`);
     if (shortRows?.pairs) add('neck', 'Short rows (back raise)', srFrom, Math.min(shortRows.endRow, Y), `${shortRows.pairs} pairs, German short rows, then in the round`);
   } else if (shortRows) {
@@ -339,12 +360,12 @@ export function generateRaglan(project: Project, spec: YokeSpec, sizeId: Id): Yo
       sleeveCm: (held.leftSleeve + N) / spc,
       bodyCm: (held.body + 2 * N) / spc,
       armholeCm: 2 * lineCm + N / spc,
-      backLengthCm: Y / rpc,
+      backLengthCm: (Y - hidden) / rpc,
     },
     stitchesPerCm: spc,
     rowsPerCm: rpc,
     raglan: { sleeveTopSts: top, bodyRows, sleeveRows, bodyFast, sleeveFast, lineCm },
-    ...(o ? { offShoulder: { bandSts: castOn, bandRows: o.bandRows, bandCm: o.bandCm, pattern: o.pattern, ringSts: o.ringSts, ringZones, incRow: o.bandRows + 1, armSts: o.armSts, backRaiseCm: o.backRaise, frontRows: o.frontRows } } : {}),
+    ...(o ? { offShoulder: { bandSts: castOn, bandRows: o.bandRows, bandCm: o.bandCm, pattern: o.pattern, ringSts: o.ringSts, ringZones, incRow: o.bandRows + 1, armSts: o.armSts, backRaiseCm: o.backRaise, frontRows: o.frontRows, ...(o.fold ? { fold: o.fold } : {}) } } : {}),
   };
 }
 
@@ -382,9 +403,13 @@ function offShoulderStart(project: Project, spec: YokeSpec, scope: Record<string
   // The band: from the Neckband edge when it is knit with the panels, else 4 cm of 1×1 rib.
   const nbEdge = edgesOf(project).neckband;
   const withPanel = nbEdge.enabled && nbEdge.method === 'with-panel';
-  const pattern = withPanel ? edgePattern(nbEdge) : OFF_SHOULDER_BAND.pattern;
-  const bandCm = withPanel ? val('bandDepth', 'Band depth (Neckband edge)', nbEdge.depth, 'cm') : OFF_SHOULDER_BAND.depth;
-  const bandRows = Math.max(1, rowsOf(bandCm));
+  // A folded band: stockinette, its finished depth knit twice with a turning round between (picot pairs its stitches).
+  const f0 = withPanel ? nbEdge.fold : undefined;
+  const pattern = f0 ? foldedPattern(f0.turn) : withPanel ? edgePattern(nbEdge) : OFF_SHOULDER_BAND.pattern;
+  const bandCm = withPanel ? val('bandDepth', f0 ? 'Band depth, finished (Neckband edge)' : 'Band depth (Neckband edge)', nbEdge.depth, 'cm') : OFF_SHOULDER_BAND.depth;
+  const depthRows = Math.max(1, rowsOf(bandCm));
+  const bandRows = f0 ? 2 * depthRows + 1 : depthRows;
+  const fold = f0 ? { turn: f0.turn, close: f0.close, depthRows, hiddenRows: depthRows + 1 } : undefined;
   const m = Math.max(1, pattern.multiple);
   const bandSts = Math.max(m, Math.round(sts(c * (1 + bandEase)) / m) * m);
   if (bandSts > ringSts) issues.push({ severity: 'error', message: `The band (${bandSts} sts) is wider than the ring (${ringSts} sts): its ease must be below the ring's.` });
@@ -418,5 +443,5 @@ function offShoulderStart(project: Project, spec: YokeSpec, scope: Record<string
   const shortRows: NonNullable<YokeResult['shortRows']> = { pairs, first: firstTurn, step, turns: turns.map((u) => Math.max(1, u)), endRow, frontSts: ring.leftFront + ring.rightFront, fromRow };
   const R = pairs > 0 ? endRow : bandRows + 1;
   const neck: YokeResult['neck'] = { depthRows: 0, row: R, perSide: 0, backNeck: back, centre: 0, closingSts: 0, frontEdgeCo: 0 };
-  return { ring, band, bandRows, bandCm, pattern, ringSts, armSts, seam, backRaise, shortRows, plain, neck, frontRows: 0 };
+  return { ring, band, bandRows, bandCm, pattern, fold, ringSts, armSts, seam, backRaise, shortRows, plain, neck, frontRows: 0 };
 }

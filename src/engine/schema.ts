@@ -124,7 +124,7 @@ const intList = nullable(arr(num));
 const align = oneOf('end', 'start', 'center');
 const edgeId = oneOf('hem', 'cuff', 'neckband', 'frontBands');
 const bandAttach = oneOf('pickup', 'sideways', 'integrated');
-const edgeTreatment = obj({ enabled: bool, depth: dimExpr, stitch: oneOf('rib1x1', 'rib2x2', 'garter', 'seed', 'custom'), custom: stitchPattern, method: oneOf('with-panel', 'later') });
+const edgeTreatment = obj({ enabled: bool, depth: dimExpr, stitch: oneOf('rib1x1', 'rib2x2', 'garter', 'seed', 'custom'), custom: stitchPattern, method: oneOf('with-panel', 'later'), fold: optional(obj({ turn: oneOf('purl', 'picot'), close: oneOf('knit', 'sewn') })) });
 const segmentMethod = tagged('kind', {
   auto: {
     side: oneOf('any', 'rs', 'ws'),

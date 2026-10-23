@@ -55,6 +55,9 @@ export interface YokeRow {
   plain?: boolean;
   /** An off-shoulder raglan's band row (rib, in the round, no increases). */
   band?: boolean;
+  /** A folded band's row: the facing (folded inside), the turning round (the fold), the outer half, or its last row,
+   * where a knit-closed band is joined to the cast-on. */
+  bandPart?: 'facing' | 'turn' | 'outer' | 'join';
   phase: YokePhase;
   /** Phase B (back neck increases) is worked on this row too. */
   backNeck: boolean;
@@ -138,8 +141,22 @@ export interface YokeResult {
   raglan?: { sleeveTopSts: number; bodyRows: number[]; sleeveRows: number[]; bodyFast: number; sleeveFast: number; lineCm: number };
   /** An off-shoulder raglan: the band (its count is the cast-on, rows 1..bandRows, in `pattern`), the ring after the
    * increase round (row `incRow`), the arm arc (sts between the raglan lines), the back raise (cm) and how many rows
-   * the centre front works (all but the short rows). */
-  offShoulder?: { bandSts: number; bandRows: number; bandCm: number; pattern: StitchPattern; ringSts: number; ringZones: ZoneCounts; incRow: number; armSts: number; backRaiseCm: number; frontRows: number };
+   * the centre front works (all but the short rows). A folded band (`fold`): `bandCm` is its finished depth, worked
+   * as `depthRows` of facing, the turning round and `depthRows` outside (bandRows = 2 × depthRows + 1); the facing and
+   * the turning round (`hiddenRows`) fold inside, so they're added to the yoke's depth. */
+  offShoulder?: {
+    bandSts: number;
+    bandRows: number;
+    bandCm: number;
+    pattern: StitchPattern;
+    ringSts: number;
+    ringZones: ZoneCounts;
+    incRow: number;
+    armSts: number;
+    backRaiseCm: number;
+    frontRows: number;
+    fold?: { turn: 'purl' | 'picot'; close: 'knit' | 'sewn'; depthRows: number; hiddenRows: number };
+  };
 }
 
 // ---------- defaults ----------
