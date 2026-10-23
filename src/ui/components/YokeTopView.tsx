@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { buildChart, PLAIN } from '../../engine/chart';
 import { ZONES, zoneName, type YokeResult } from '../../engine/contiguous';
+import { buildScope } from '../../engine/measurements';
 import type { CustomSymbol, Id, Panel, Project } from '../../engine/model';
 import type { ComputedPanel } from '../../engine/panel';
 import type { Units } from '../../engine/units';
@@ -299,7 +300,7 @@ export function YokeTopView({ project, panel, computed: c, view, mode, compare, 
             );
           })
         ) : view === 'schematic' ? (
-          <TopSchematic y={y} g={geo} P={P} labels scale={v.scale} />
+          <TopSchematic y={y} g={geo} P={P} labels scale={v.scale} units={units} />
         ) : (
           <TopChart y={y} g={geo} P={P} scale={v.scale} chart={chart} custom={project.symbols ?? []} size={size} />
         )}
@@ -316,7 +317,19 @@ export function YokeTopView({ project, panel, computed: c, view, mode, compare, 
       )}
       {mode === 'single' && (
         <div className="yoke-key">
-          {y.raglan ? (
+          {y.offShoulder ? (
+            <>
+              <div>
+                Band: cast on <b>{y.offShoulder.bandSts}</b> all round ({len(y.offShoulder.bandSts / y.stitchesPerCm, units)}) · {y.offShoulder.pattern.name} · rows 1–{y.offShoulder.bandRows} ({len(y.offShoulder.bandCm, units)})
+              </div>
+              <div>
+                Increase round, row {y.offShoulder.incRow}: to the ring, <b>{y.offShoulder.ringSts}</b> ({len(y.offShoulder.ringSts / y.stitchesPerCm, units)}): front {y.offShoulder.ringZones.leftFront} · sleeve {y.offShoulder.ringZones.leftSleeve} · back {y.offShoulder.ringZones.back} · sleeve {y.offShoulder.ringZones.rightSleeve} · front {y.offShoulder.ringZones.rightFront}
+              </div>
+              <div>
+                Band’s top edge {len(buildScope(project, c.sizeId).off_shoulder_drop ?? 0, units)} below the shoulder point · raglan lines {y.seamSts} sts · about {len(y.raglan!.lineCm, units)} · increases to row {y.counts.total - y.counts.E}
+              </div>
+            </>
+          ) : y.raglan ? (
             <>
               <div>
                 Cast on <b>{y.castOn}</b> round the {y.shortRows ? 'whole' : 'back'} neck: front {y.castOnZones.leftFront} · sleeve {y.castOnZones.leftSleeve} · back neck {y.castOnZones.back} ({len(y.castOnZones.back / y.stitchesPerCm, units)}) · sleeve {y.castOnZones.rightSleeve} · front {y.castOnZones.rightFront}
@@ -340,7 +353,8 @@ export function YokeTopView({ project, panel, computed: c, view, mode, compare, 
               Cap <b>{y.counts.C + y.counts.D}</b> rows · {len((y.counts.C + y.counts.D) / y.rowsPerCm, units)}
             </div>
           )}
-          <div className="key-rings">Dashed rings, from the neck out:</div>
+          <div className="key-rings">Dashed rings, from the {y.offShoulder ? 'band' : 'neck'} out:</div>
+          {y.offShoulder && <div>end of the band · row {y.offShoulder.bandRows}; the increase round · row {y.offShoulder.incRow} · {y.offShoulder.ringSts} sts</div>}
           {y.phases
             .filter((ph) => ph.id === 'A' || ph.id === 'C' || ph.id === 'D' || (ph.id === 'R' && y.counts.E > 0))
             .map((ph) => (
@@ -348,10 +362,10 @@ export function YokeTopView({ project, panel, computed: c, view, mode, compare, 
                 end of {ph.id} ({ph.label}) · row {ph.to} · {ph.stsAfter} sts
               </div>
             ))}
-          {y.counts.neckRow !== null && y.counts.neckRow <= y.counts.total && (
+          {y.counts.neckRow !== null && y.counts.neckRow <= y.counts.total && (!y.offShoulder || !!y.shortRows?.pairs) && (
             <div>
               {y.shortRows
-                ? `short rows: rows 1–${y.counts.neckRow}${y.counts.joinRow !== null ? ', then rounds (start at the left back marker)' : ''}`
+                ? `short rows${y.offShoulder ? ' (back raise)' : ''}: rows ${y.shortRows.fromRow ?? 1}–${y.counts.neckRow}${y.counts.joinRow !== null ? ', then rounds (start at the left back marker)' : ''}`
                 : `${y.counts.joinRow ? 'neck joined in the round' : 'neck cast on at the front edges'} · row ${y.counts.neckRow}`}
             </div>
           )}
@@ -375,7 +389,7 @@ export function YokeTopView({ project, panel, computed: c, view, mode, compare, 
         </div>
       )}
       <div className="canvas-hint">
-        Seen from above: back at the top, fronts at the bottom, the left sleeve on the right · rings = rows, knitted outward from the cast-on round the back neck · {touchUi ? 'pinch to zoom · drag to pan · tap a stitch for its count' : 'scroll to zoom · drag to pan · F to fit'}
+        Seen from above: back at the top, fronts at the bottom, the left sleeve on the right · rings = rows, knitted outward from the cast-on {y.offShoulder ? 'band below the shoulders' : 'round the back neck'} · {touchUi ? 'pinch to zoom · drag to pan · tap a stitch for its count' : 'scroll to zoom · drag to pan · F to fit'}
       </div>
     </div>
   );
@@ -383,9 +397,29 @@ export function YokeTopView({ project, panel, computed: c, view, mode, compare, 
 
 // ---------- schematic: zones, phases, labels ----------
 
-function TopSchematic({ y, g, P, labels, scale }: { y: YokeResult; g: TopGeometry; P: (x: number, y: number) => { x: number; y: number }; labels: boolean; scale?: number }) {
+function TopSchematic({ y, g, P, labels, scale, units }: { y: YokeResult; g: TopGeometry; P: (x: number, y: number) => { x: number; y: number }; labels: boolean; scale?: number; units?: Units }) {
   const parts: React.ReactNode[] = [];
   ZONES.forEach((_, zi) => parts.push(<path key={`z${zi}`} d={zoneShape(g, zi, P)} className={`yz yz-${zi}`} />));
+  const os = y.offShoulder;
+  if (os) {
+    // The band (knit first, in rib) as a hatched ring, and the ring after its increase round as a solid line.
+    const band = g.rings[Math.min(os.bandRows, g.rings.length - 1)];
+    const c0 = P(0, 0);
+    const R0 = g.rings[0].r0 * (P(1, 0).x - c0.x);
+    const R1 = band.r1 * (P(1, 0).x - c0.x);
+    const circle = (R: number) => `M${(c0.x - R).toFixed(1)},${c0.y.toFixed(1)}a${R.toFixed(1)},${R.toFixed(1)} 0 1 0 ${(2 * R).toFixed(1)},0a${R.toFixed(1)},${R.toFixed(1)} 0 1 0 ${(-2 * R).toFixed(1)},0`;
+    parts.push(<path key="band" d={`${circle(R1)}${circle(R0)}`} fillRule="evenodd" className="yoke-band" />);
+    const ring = g.rings[os.incRow];
+    // (Not on the small grid cards, drawn in cm, where it would be as heavy as the band.)
+    if (ring && labels) parts.push(<path key="ring" d={ringArc(ring, ring.r1, P)} className="yoke-ring-line" />);
+    if (labels && units && ring) {
+      const at = (r: number) => P(0, -r);
+      const q = at((g.rings[0].r0 + band.r1) / 2);
+      parts.push(<text key="bandt" x={q.x} y={q.y + 4} textAnchor="middle" className="yoke-held">band {os.bandSts} sts · {os.pattern.name}</text>);
+      const qr = at(ring.r1);
+      parts.push(<text key="ringt" x={qr.x} y={qr.y - 4} textAnchor="middle" className="yoke-held">ring {os.ringSts} sts · {len(os.ringSts / y.stitchesPerCm, units)}</text>);
+    }
+  }
   const last = g.rings[g.rings.length - 1];
   parts.push(<path key="outer" d={ringArc(last, last.r1, P)} className="yoke-edge" />);
   parts.push(<path key="neck" d={ringArc(g.rings[0], g.rings[0].r0, P)} className="yoke-edge" />);
@@ -406,7 +440,8 @@ function TopSchematic({ y, g, P, labels, scale }: { y: YokeResult; g: TopGeometr
   phaseRing(A, `end of A (shoulders) · row ${A}`, 'a', 0);
   if (C) phaseRing(A + C, `end of C (rapid cap) · row ${A + C}`, 'c', 1);
   if (D) phaseRing(A + C + D, `end of D (slow cap) · row ${A + C + D}`, 'd', 2);
-  if (neckRow && neckRow <= y.counts.total) phaseRing(neckRow, `${joinRow ? 'neck joined in the round' : 'neck cast on'} · row ${neckRow}`, 'n', 3);
+  if (os) phaseRing(os.bandRows, `end of the band · row ${os.bandRows}`, 'b', 0);
+  if (neckRow && neckRow <= y.counts.total && (!os || !!y.shortRows?.pairs)) phaseRing(neckRow, `${joinRow ? 'neck joined in the round' : 'neck cast on'} · row ${neckRow}`, 'n', 3);
 
   if (labels) {
     const at = (r: number, a: number, dy = 0) => {
@@ -420,7 +455,8 @@ function TopSchematic({ y, g, P, labels, scale }: { y: YokeResult; g: TopGeometr
     const t = (key: string, p: { x: number; y: number }, text: string, anchor: 'start' | 'middle' | 'end' = 'middle', cls = 'yoke-held') =>
       parts.push(<text key={key} x={p.x} y={p.y} textAnchor={anchor} className={cls}>{text}</text>);
     // Sleeve labels inside the sleeves (the sides are where the pane runs out of room).
-    const inner = (g.rings[y.counts.A]?.r1 ?? out * 0.6) * 0.5 + out * 0.5;
+    // Off-shoulder: outside the ring and its label.
+    const inner = (g.rings[os ? os.incRow : y.counts.A]?.r1 ?? out * 0.6) * 0.5 + out * 0.5;
     t('ls', at(inner, mid(1), -2), 'left sleeve');
     t('ls2', at(inner, mid(1), 11), `${y.held.leftSleeve} sts · hold`);
     t('rs', at(inner, mid(3), -2), 'right sleeve');
@@ -477,9 +513,10 @@ function NeckNotes({ y, g, P, scale }: { y: YokeResult; g: TopGeometry; P: (x: n
   const sr = y.shortRows;
   if (words && sr && sr.pairs && sr.endRow < y.counts.total) {
     // Halfway down the short rows, where the opening is still wide enough for the words.
-    const ring = g.rings[Math.ceil(sr.endRow / 2)];
+    const from = sr.fromRow ?? 1;
+    const ring = g.rings[Math.ceil((from - 1 + sr.endRow) / 2)];
     const q = at(ring.r0, Math.PI);
-    const lines = [`rows 1–${sr.endRow}: short rows`, ...(joinRow !== null ? [`rounds from row ${sr.endRow + 1}`] : [])];
+    const lines = [`rows ${from}–${sr.endRow}: short rows${y.offShoulder ? ' (back raise)' : ''}`, ...(joinRow !== null ? [`rounds from row ${sr.endRow + 1}`] : [])];
     lines.forEach((line, i) =>
       parts.push(<text key={`sr${i}`} x={q.x} y={q.y - 8 - 12 * (lines.length - 1 - i)} textAnchor="middle" className="yoke-note">{line}</text>),
     );

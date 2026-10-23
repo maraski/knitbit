@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { EDGE_STITCHES, EDGE_TREATMENTS, edgesOf } from '../../engine/edgeTreatments';
+import { EDGE_STITCHES, EDGE_TREATMENTS, edgesForNeckline, edgesOf } from '../../engine/edgeTreatments';
 import { OPENINGS } from '../../engine/garment';
-import { buildGarment, EASE_PRESETS, easePresetOf, garmentChoice, isYokeMethod, lengthFor, lengthsFor, METHODS, NECKLINES, necklinesFor, SLEEVES, sleevesFor, type GarmentMethod, type GarmentSpec, type SleeveChoice } from '../../engine/garmentSetup';
+import { buildGarment, EASE_PRESETS, easePresetOf, garmentChoice, isYokeMethod, lengthFor, lengthsFor, METHODS, NECKLINES, necklinesFor, offShoulderNote, SLEEVES, sleevesFor, type GarmentMethod, type GarmentSpec, type SleeveChoice } from '../../engine/garmentSetup';
 import { SLEEVE_LENGTHS } from '../../engine/sleeveLength';
 import type { Gauge } from '../../engine/gauge';
 import type { EdgeStitch, EdgeTreatmentId, EdgeTreatments, Project } from '../../engine/model';
@@ -38,8 +38,10 @@ export function NewGarmentDialog({ project, firstRun, onCancel, onCreate, onSamp
   const lengths = lengthsFor(sleeveChoice);
   const sleeveLength = lengthFor(sleeveChoice, length);
   const blank = method === 'blank';
-  const necks = necklinesFor(method);
+  const necks = necklinesFor(method, opening);
   const neck = necks.includes(neckline) ? neckline : 'round';
+  // Off-shoulder is a pullover only for now.
+  const offShoulder = neck === 'off-shoulder';
   // One card per method, except a group (raglan): one card, with its choice below the cards.
   const cards = METHODS.filter((m, i) => !m.group || METHODS.findIndex((x) => x.group?.id === m.group!.id) === i);
   const group = METHODS.find((m) => m.id === method)?.group;
@@ -48,7 +50,7 @@ export function NewGarmentDialog({ project, firstRun, onCancel, onCreate, onSamp
   const create = async () => {
     setBusy(true);
     const base = sizes === 'keep' ? project : { ...(await loadSample()).sampleTable(), name: project.name };
-    const spec: GarmentSpec = { method, opening, neckline: neck, sleeve: sleeveChoice, sleeveLength, ease, edges: blank ? undefined : edges };
+    const spec: GarmentSpec = { method, opening, neckline: neck, sleeve: sleeveChoice, sleeveLength, ease, edges: blank ? undefined : edgesForNeckline(edges, neck, neck) };
     const name = firstRun || sizes !== 'keep' ? (opening === 'cardigan' ? 'My cardigan' : 'My top') : project.name;
     onCreate(buildGarment({ ...base, name, gauge }, spec), sizes === 'import');
   };
@@ -81,7 +83,7 @@ export function NewGarmentDialog({ project, firstRun, onCancel, onCreate, onSamp
                   <button key={m.id} role="radio" aria-checked={method === m.id} className={method === m.id ? 'active' : ''} onClick={() => setMethod(m.id)}>{m.group!.choice}</button>
                 ))}
               </div>
-              <div className="hint">{METHODS.find((m) => m.id === method)!.description}</div>
+              <div className="hint">{offShoulder ? offShoulderNote(method) : METHODS.find((m) => m.id === method)!.description}</div>
             </div>
           )}
           {isYokeMethod(method) && <p className="hint">The yoke’s {method === 'raglan' ? 'raglan lines, neck and depth' : 'neck and phases'} are set in its properties after it is made.</p>}
@@ -92,7 +94,9 @@ export function NewGarmentDialog({ project, firstRun, onCancel, onCreate, onSamp
                 <label>Front</label>
                 <div className="segmented">
                   {OPENINGS.map((o) => (
-                    <button key={o.id} className={opening === o.id ? 'active' : ''} onClick={() => setOpening(o.id)}>{o.id === 'closed' ? 'Pullover' : 'Cardigan'}</button>
+                    <button key={o.id} className={opening === o.id ? 'active' : ''} onClick={() => setOpening(o.id)} disabled={offShoulder && o.id === 'cardigan'} title={offShoulder && o.id === 'cardigan' ? 'An off-shoulder neckline is pullover only for now' : undefined}>
+                      {o.id === 'closed' ? 'Pullover' : 'Cardigan'}
+                    </button>
                   ))}
                 </div>
               </div>
@@ -101,7 +105,15 @@ export function NewGarmentDialog({ project, firstRun, onCancel, onCreate, onSamp
                   <div className="row2">
                     <div className="field">
                       <label>Neckline</label>
-                      <select value={neck} onChange={(e) => setNeckline(e.target.value as typeof neckline)}>
+                      <select
+                        value={neck}
+                        onChange={(e) => {
+                          const next = e.target.value as typeof neckline;
+                          // Off-shoulder knits its band first with the yoke: the neckband is pre-set to it (and back).
+                          setEdges(edgesForNeckline(edges, next, neck));
+                          setNeckline(next);
+                        }}
+                      >
                         {NECKLINES.filter((n) => necks.includes(n.id)).map((n) => <option key={n.id} value={n.id}>{n.label}</option>)}
                       </select>
                     </div>
@@ -140,7 +152,9 @@ export function NewGarmentDialog({ project, firstRun, onCancel, onCreate, onSamp
                       </select>
                     </div>
                   ))}
-                  <p className="hint">Depths, methods and buttons are in the Garment tab afterwards.</p>
+                  <p className="hint">
+                    {offShoulder ? 'The neckband is the off-shoulder band: 1×1 rib, 4 cm, knit first with the yoke. ' : ''}Depths, methods and buttons are in the Garment tab afterwards.
+                  </p>
                 </>
               )}
             </div>

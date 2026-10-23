@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { buildChart } from './chart';
 import { defaultYoke, generateYoke, yokeNames, yokeWithNeck, ZONES, type YokeResult } from './contiguous';
 import { contiguousChecks } from './contiguousChecks';
-import { defaultEdges } from './edgeTreatments';
+import { defaultEdges, edgesForNeckline, knitWithPanel, missingStrips, offShoulderNeckband, staleStrips } from './edgeTreatments';
 import { setOpening } from './garment';
-import { buildGarment, changeMethod, garmentChoice, necklinesFor, setNeckline, type GarmentSpec } from './garmentSetup';
+import { buildGarment, changeMethod, garmentChoice, NECKLINES, necklinesFor, setNeckline, type GarmentSpec } from './garmentSetup';
 import { buildScope } from './measurements';
 import { dim, type Project, type SleeveLength, type YokeSpec } from './model';
 import { computePanel } from './panel';
@@ -12,6 +12,7 @@ import { defaultOffShoulder, defaultRaglan } from './raglan';
 import { loadProject } from './schema';
 import { fixtureProject, sizeId } from './testFixtures';
 import { topGeometry } from './yokeTop';
+import { bandPurl } from './yokeChart';
 
 const base = () => ({ ...fixtureProject(), panels: [], joins: [] });
 const spec = (s: Partial<GarmentSpec>): GarmentSpec => ({ method: 'raglan', opening: 'closed', neckline: 'off-shoulder', sleeve: 'raglan', ease: 'standard', ...s });
@@ -302,5 +303,114 @@ describe('off-shoulder: neckline changes', () => {
     const mod = setNeckline(buildGarment(base(), spec({ method: 'modified-raglan', sleeve: 'contiguous', neckline: 'round' })), 'off-shoulder');
     expect(garmentChoice(mod)).toMatchObject({ method: 'modified-raglan', neckline: 'off-shoulder' });
     expect(garmentChoice(setNeckline(mod, 'round'))).toMatchObject({ method: 'modified-raglan', neckline: 'round' });
+  });
+});
+
+describe('off-shoulder: the neckband is the band (M2)', () => {
+  const withEdges = (s: Partial<GarmentSpec>) => buildGarment(base(), spec({ edges: defaultEdges(), ...s }));
+  const strips = (p: Project) => p.panels.filter((x) => x.edge === 'neckband' || x.template === 'neckband');
+  const neckJoins = (p: Project) => (p.joins ?? []).filter((j) => j.edge === 'neckband');
+
+  it('the neckline list has it, offered for the raglans only', () => {
+    expect(NECKLINES.map((n) => n.id)).toContain('off-shoulder');
+    expect(necklinesFor('contiguous')).not.toContain('off-shoulder');
+    expect(necklinesFor('top-down')).not.toContain('off-shoulder');
+  });
+
+  it('a new off-shoulder garment pre-sets the neckband to 4 cm of 1×1 rib knit with the yoke: no strip, no pick-up', () => {
+    for (const p of [withEdges({}), withEdges({ method: 'modified-raglan', sleeve: 'contiguous' })]) {
+      expect(p.edges!.neckband).toEqual(offShoulderNeckband());
+      expect(knitWithPanel('neckband', p.edges!.neckband, p)).toBe(true);
+      expect(strips(p)).toEqual([]);
+      expect(neckJoins(p)).toEqual([]);
+      expect(missingStrips(p)).toEqual([]);
+      const y = computePanel(p, p.panels.find((x) => x.yoke)!, sizeId(p, 'M')).yoke!;
+      expect(y.offShoulder!.bandCm).toBe(4);
+    }
+  });
+
+  it('a stitch chosen in the dialog stays; a with-panel neckband on another neckline goes back to the strip', () => {
+    const rib2 = withEdges({ edges: { ...defaultEdges(), neckband: { ...offShoulderNeckband(), stitch: 'rib2x2' } } });
+    expect(computePanel(rib2, rib2.panels.find((x) => x.yoke)!, sizeId(rib2, 'M')).yoke!.offShoulder!.pattern.name).toBe('2x2 rib');
+    const round = withEdges({ neckline: 'round', edges: { ...defaultEdges(), neckband: offShoulderNeckband() } });
+    expect(round.edges!.neckband).toEqual(defaultEdges().neckband);
+    expect(strips(round)).toHaveLength(1);
+    expect(edgesForNeckline(defaultEdges(), 'off-shoulder', 'round').neckband).toEqual(offShoulderNeckband());
+  });
+
+  it('round → off-shoulder → round: the strip goes and comes back, with the default neckband', () => {
+    const round = withEdges({ neckline: 'round' });
+    expect(strips(round)).toHaveLength(1);
+    expect(neckJoins(round)).toHaveLength(1);
+    const os = setNeckline(round, 'off-shoulder');
+    expect(os.edges!.neckband).toEqual(offShoulderNeckband());
+    expect(strips(os)).toEqual([]);
+    expect(neckJoins(os)).toEqual([]);
+    expect(staleStrips(os)).toEqual([]);
+    const back = setNeckline(os, 'round');
+    expect(garmentChoice(back)).toMatchObject({ method: 'raglan', neckline: 'round' });
+    expect(back.edges!.neckband).toEqual(defaultEdges().neckband);
+    expect(strips(back)).toHaveLength(1);
+    expect(neckJoins(back)).toHaveLength(1);
+  });
+
+  it('a method without off-shoulder takes the neckband back to the strip', () => {
+    const p = changeMethod(withEdges({}), 'contiguous');
+    expect(garmentChoice(p).neckline).toBe('round');
+    expect(p.edges!.neckband).toEqual(defaultEdges().neckband);
+  });
+});
+
+describe('off-shoulder: chart, top view and panel (M2)', () => {
+  const p = buildGarment(base(), spec({ edges: defaultEdges(), method: 'modified-raglan', sleeve: 'contiguous' }));
+  const panel = p.panels.find((x) => x.yoke)!;
+  const c = computePanel(p, panel, sizeId(p, 'M'));
+  const y = c.yoke!;
+  const o = y.offShoulder!;
+
+  it('the chart shows the rib band (k1, p1), its repeat, the increase round and the raglan phases', () => {
+    const chart = buildChart(p, panel, c);
+    for (const row of chart.rows.slice(0, o.bandRows)) {
+      const st = row.cells.filter((v) => v);
+      expect(st).toHaveLength(o.bandSts);
+      expect(st.every((v, i) => v === (i % 2 ? 'purl' : 'k'))).toBe(true);
+    }
+    expect(chart.rows[o.bandRows].cells.filter((v) => v === 'm1l')).toHaveLength(o.ringSts - o.bandSts);
+    expect(chart.rows[o.bandRows + 1].cells.includes('purl')).toBe(false);
+    expect(chart.repeats).toEqual([expect.objectContaining({ name: 'Band: 1x1 rib', fromRow: 1, toRow: o.bandRows, multiple: 2 })]);
+    expect(chart.phases!.map((x) => x.label)).toEqual(['Band', 'Inc', 'R · Raglan', ...(y.counts.E ? ['E · Straight to the split'] : [])]);
+    expect(bandPurl({ name: '2x2 rib', multiple: 4, offset: 2 }, 2, 1)).toBe(true);
+  });
+
+  it('the top view starts with the band ring, widens at the increase round, and turns the back raise after it', () => {
+    const g = topGeometry(y);
+    expect(g.rings[0]).toMatchObject({ total: o.bandSts, gap: 0, lo: 0, hi: o.bandSts });
+    expect(g.rings[o.bandRows].total).toBe(o.bandSts);
+    expect(g.rings[o.incRow].total).toBe(o.ringSts);
+    // No short rows on the band or the increase round; the first pair turns in the fronts after it.
+    for (const ring of g.rings.slice(1, o.incRow + 1)) expect([ring.lo, ring.total - ring.hi]).toEqual([0, 0]);
+    const sr = y.shortRows!;
+    expect(sr.pairs).toBeGreaterThan(0);
+    expect(g.rings[sr.fromRow!].lo).toBe(sr.turns[0]);
+    expect(g.rings[sr.endRow + 1].lo).toBe(0);
+  });
+
+  it('the flat panel marks the band as a section and the ring as a landmark', () => {
+    expect(c.sections).toEqual([expect.objectContaining({ name: 'Band', fromRow: 1, toRow: o.bandRows, patternName: '1x1 rib' })]);
+    expect(c.waypoints.map((w) => w.name)).toEqual(['neck', 'ring', 'underarm']);
+    expect(c.waypoints[1]).toMatchObject({ row: o.incRow, stitches: o.ringSts });
+  });
+
+  it('every size and every sleeve length makes the drawing without errors', () => {
+    for (const len of ['long', 'three-quarter', 'elbow', 'short', 'cap'] as SleeveLength[]) {
+      const q = buildGarment(base(), spec({ edges: defaultEdges(), sleeveLength: len }));
+      const yp = q.panels.find((x) => x.yoke)!;
+      for (const s of q.sizes) {
+        const cc = computePanel(q, yp, s.id);
+        expect(cc.ok, `${len} ${s.name}`).toBe(true);
+        topGeometry(cc.yoke!);
+        buildChart(q, yp, cc);
+      }
+    }
   });
 });

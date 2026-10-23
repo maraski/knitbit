@@ -4,7 +4,7 @@
 
 import { attachOf, BAND_NAMES, bandRoles } from './bands';
 import { neckband } from './templates';
-import type { BandRole, EdgeRef, EdgeStitch, EdgeTreatment, EdgeTreatmentId, EdgeTreatments, Join, Panel, PatternSection, Project, StitchPattern } from './model';
+import type { BandRole, EdgeRef, EdgeStitch, EdgeTreatment, EdgeTreatmentId, EdgeTreatments, Join, NecklineShape, Panel, PatternSection, Project, StitchPattern } from './model';
 import { dim, newId, newPanel, newSegment, newWaypoint, straightNeck } from './model';
 
 export const EDGE_STITCHES: Record<Exclude<EdgeStitch, 'custom'>, { label: string; pattern: StitchPattern }> = {
@@ -17,7 +17,7 @@ export const EDGE_STITCHES: Record<Exclude<EdgeStitch, 'custom'>, { label: strin
 export const EDGE_TREATMENTS: { id: EdgeTreatmentId; label: string; depthLabel: string; withPanel: string; later: string }[] = [
   { id: 'hem', label: 'Hem ribbing', depthLabel: 'Height', withPanel: 'Knit with the body panels (a pattern section at the lower edge)', later: 'Picked up from the lower edge and worked later' },
   { id: 'cuff', label: 'Cuff ribbing', depthLabel: 'Height', withPanel: 'Knit with the sleeves (a pattern section at the cuff)', later: 'Picked up from the cuff edge and worked later' },
-  { id: 'neckband', label: 'Neckband', depthLabel: 'Depth', withPanel: 'Knit with the panels (not available for necklines yet)', later: 'A strip picked up around the neckline' },
+  { id: 'neckband', label: 'Neckband', depthLabel: 'Depth', withPanel: 'Knit with the panels (an off-shoulder band only)', later: 'A strip picked up around the neckline' },
   { id: 'frontBands', label: 'Front bands', depthLabel: 'Width', withPanel: 'Integrated: extra stitches at the front edges', later: 'Added later: picked up, or knit sideways and sewn on' },
 ];
 
@@ -47,9 +47,28 @@ export function edgeStitchLabel(t: EdgeTreatment): string {
   return t.stitch === 'custom' ? `custom (multiple of ${p.multiple}${p.offset ? ` + ${p.offset}` : ''})` : EDGE_STITCHES[t.stitch].label;
 }
 
-/** Whether the treatment is worked as part of the panels it edges. Neckbands are always added later for now. */
-export function knitWithPanel(id: EdgeTreatmentId, t: EdgeTreatment): boolean {
-  return t.method === 'with-panel' && id !== 'neckband';
+/** A neckband can be knit with the panels only as an off-shoulder yoke's band (knit first, raglan.ts). */
+export function neckbandWithPanelAllowed(project: Pick<Project, 'panels'>): boolean {
+  return project.panels.some((p) => p.yoke?.neck.shape === 'off-shoulder');
+}
+
+/** Whether the treatment is worked as part of the panels it edges (a neckband: an off-shoulder band only). */
+export function knitWithPanel(id: EdgeTreatmentId, t: EdgeTreatment, project?: Pick<Project, 'panels'>): boolean {
+  return t.method === 'with-panel' && (id !== 'neckband' || (!!project && neckbandWithPanelAllowed(project)));
+}
+
+/** An off-shoulder band as the Neckband: 4 cm of 1×1 rib, knit with the yoke. */
+export function offShoulderNeckband(): EdgeTreatment {
+  return { enabled: true, depth: dim(4), stitch: 'rib1x1', custom: custom(), method: 'with-panel' };
+}
+
+/**
+ * The edges for a neckline changed from `from` to `shape`: choosing off-shoulder pre-sets its band; any other
+ * neckline can't knit the neckband with the panels, so a with-panel neckband goes back to the default strip.
+ */
+export function edgesForNeckline(edges: EdgeTreatments, shape: NecklineShape, from: NecklineShape): EdgeTreatments {
+  if (shape === 'off-shoulder') return from === 'off-shoulder' ? edges : { ...edges, neckband: offShoulderNeckband() };
+  return edges.neckband.method === 'with-panel' ? { ...edges, neckband: defaultEdges().neckband } : edges;
 }
 
 export const isBodyPanel = (p: Panel) => p.template === 'back' || p.template === 'front';
@@ -101,6 +120,8 @@ export function applyEdgeTreatments(project: Project, notes: string[] = [], opts
   });
   const existing = panels.find((p) => p.edge === 'neckband') ?? panels.find((p) => p.template === 'neckband');
   const nb = e.neckband;
+  // An off-shoulder band is knit with the yoke: no strip, no pick-up.
+  const asStrip = nb.enabled && !knitWithPanel('neckband', nb, project);
   // A neckband that is switched off keeps its strip and pick-up join as they are (the knitter deletes them).
   const keepNeckJoin = !nb.enabled && !!existing;
   let joins = (project.joins ?? []).filter((j) => j.edge !== 'hem' && j.edge !== 'cuff' && (j.edge !== 'neckband' || keepNeckJoin));
@@ -113,7 +134,7 @@ export function applyEdgeTreatments(project: Project, notes: string[] = [], opts
   }
 
   // Neckband: a strip picked up around the neck edges of the body panels (made only when asked for).
-  if (nb.enabled && (existing || opts.create)) {
+  if (asStrip && (existing || opts.create)) {
     const pattern = edgePattern(nb);
     const shape = panels.find((x) => x.yoke)?.yoke!.neck.shape ?? panels.find((x) => x.template === 'front' && x.neckline)?.neckline!.shape;
     const base = existing ?? { ...neckband(shape), name: 'Neckband' };
@@ -137,7 +158,7 @@ export function applyEdgeTreatments(project: Project, notes: string[] = [], opts
 export function missingStrips(project: Project): string[] {
   const out: string[] = [];
   const e = edgesOf(project);
-  if (project.edges && e.neckband.enabled && !project.panels.some((p) => p.edge === 'neckband' || p.template === 'neckband')) out.push('Neckband');
+  if (project.edges && e.neckband.enabled && !knitWithPanel('neckband', e.neckband, project) && !project.panels.some((p) => p.edge === 'neckband' || p.template === 'neckband')) out.push('Neckband');
   for (const role of bandRoles(project)) {
     if (attachOf(project, role) === 'integrated') continue;
     if (!project.panels.some((p) => p.edge === 'frontBands' && p.band === role)) out.push(BAND_NAMES[role]);
@@ -145,11 +166,13 @@ export function missingStrips(project: Project): string[] {
   return out;
 }
 
-/** Strips left from earlier settings: a neckband that is switched off, bands the settings no longer call for. */
+/** Strips left from earlier settings: a neckband that is switched off (or knit with the panels), bands the settings
+ * no longer call for. */
 export function staleStrips(project: Project): Panel[] {
   const e = edgesOf(project);
   const roles = bandRoles(project).filter((r) => attachOf(project, r) !== 'integrated');
-  return project.panels.filter((p) => (p.edge === 'neckband' && !e.neckband.enabled) || (p.edge === 'frontBands' && (!p.band || !roles.includes(p.band))));
+  const noStrip = !e.neckband.enabled || knitWithPanel('neckband', e.neckband, project);
+  return project.panels.filter((p) => (p.edge === 'neckband' && noStrip) || (p.edge === 'frontBands' && (!p.band || !roles.includes(p.band))));
 }
 
 /** Make the strips the settings call for (the knitter asked for them). */

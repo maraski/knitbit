@@ -5,7 +5,7 @@
 import { yokePanel, yokeWithNeck } from './contiguous';
 import { OFF_SHOULDER_NEEDS, offShoulderRaised, raglanPanel } from './raglan';
 import { generateBodyAndSleeves } from './contiguousGarment';
-import { applyEdgeTreatments } from './edgeTreatments';
+import { applyEdgeTreatments, edgesForNeckline } from './edgeTreatments';
 import { ensureEstimates } from './estimates';
 import { conformToGarment, CONTIGUOUS_TAG, RAGLAN_TAG, setConstruction } from './garment';
 import { dropPanelFromJoins } from './joins';
@@ -52,10 +52,18 @@ export const NECKLINES: { id: NecklineShape; label: string }[] = [
   { id: 'v', label: 'V' },
   { id: 'square', label: 'Square' },
   { id: 'boat', label: 'Boat' },
+  // The raglans' only (necklinesFor): the selects filter the list by method and front.
+  { id: 'off-shoulder', label: 'Off-shoulder' },
 ];
 
-/** A neckline's name; off-shoulder (a raglan's, offered through necklinesFor) isn't in the list the selects show yet. */
-export const necklineLabel = (shape: NecklineShape) => NECKLINES.find((n) => n.id === shape)?.label ?? (shape === 'off-shoulder' ? 'Off-shoulder' : shape);
+export const necklineLabel = (shape: NecklineShape) => NECKLINES.find((n) => n.id === shape)?.label ?? shape;
+
+/** What the raglan methods do with an off-shoulder neckline (their descriptions are about the neck). */
+export function offShoulderNote(method: GarmentMethod | 'custom'): string {
+  if (method === 'raglan') return 'Off-shoulder: raglan lines from a rib band below the shoulders, the band level all round.';
+  if (method === 'modified-raglan') return 'Off-shoulder: raglan lines from a rib band below the shoulders, the back raised with short rows.';
+  return '';
+}
 
 export const SLEEVES: { id: SleeveChoice; label: string }[] = [
   { id: 'set-in', label: 'Set-in cap' },
@@ -79,7 +87,7 @@ export function sleevesFor(method: GarmentMethod | 'custom'): SleeveChoice[] {
  * raglans' only (a pullover only, for now).
  */
 export function necklinesFor(method: GarmentMethod | 'custom', opening: FrontOpening = 'closed'): NecklineShape[] {
-  const all = NECKLINES.map((n) => n.id);
+  const all = NECKLINES.map((n) => n.id).filter((n) => n !== 'off-shoulder');
   const os: NecklineShape[] = (method === 'raglan' || method === 'modified-raglan') && opening !== 'cardigan' ? ['off-shoulder'] : [];
   return [...(method === 'modified-raglan' ? all.filter((n) => n !== 'v') : all), ...os];
 }
@@ -244,6 +252,13 @@ export function buildGarment(base: Project, spec: GarmentSpec): Project {
   p = withMethodTags(p, spec.method);
   p = { ...p, ease: withEasePreset(p.ease, spec.ease), edges: spec.edges ? structuredClone(spec.edges) : undefined, cardigan: undefined };
   p = addPieces(p, spec.method, spec.neckline, spec.sleeve, lengthFor(spec.sleeve, spec.sleeveLength ?? 'long'), []);
+  // Only an off-shoulder band is knit with the panel: another neckline (the method's fallback too) takes the strip,
+  // and an off-shoulder one with a neckband still picked up later gets its band pre-set (the dialog has done it).
+  const shape = garmentChoice(p).neckline;
+  if (p.edges) {
+    const nb = p.edges.neckband;
+    p = { ...p, edges: edgesForNeckline(p.edges, shape, shape === 'off-shoulder' && nb.enabled && nb.method !== 'with-panel' ? 'round' : shape) };
+  }
   return p.edges ? applyEdgeTreatments(p, [], { create: true }) : p;
 }
 
@@ -281,7 +296,10 @@ export function changeMethod(p: Project, method: Exclude<GarmentMethod, 'blank'>
   // Between yoke methods the sleeves are part of the method: no note.
   if (sleeveChoice !== now.sleeve && now.sleeve !== 'none' && !isYokeMethod(now.method)) notes.push(`Sleeves become ${SLEEVES.find((s) => s.id === sleeveChoice)!.label.toLowerCase()}: this method has no ${SLEEVES.find((s) => s.id === now.sleeve)!.label.toLowerCase()}.`);
   if (length !== now.sleeveLength && now.sleeve !== 'none') notes.push(`Sleeves become ${lengthLabel(length)}: these sleeves can’t be ${lengthLabel(now.sleeveLength)}.`);
-  if (necklineFor(method, now.neckline, q.garment.opening) !== now.neckline) notes.push(`The neckline becomes round: this method has no ${necklineLabel(now.neckline)} neck.`);
+  if (necklineFor(method, now.neckline, q.garment.opening) !== now.neckline) {
+    notes.push(`The neckline becomes round: this method has no ${necklineLabel(now.neckline)} neck.`);
+    if (q.edges) q = { ...q, edges: edgesForNeckline(q.edges, 'round', now.neckline) };
+  }
   notes.push('Sizes, gauge, ease and edge settings stay. Undo goes back.');
   return q.edges ? applyEdgeTreatments(q) : q;
 }
@@ -292,6 +310,7 @@ export function changeMethod(p: Project, method: Exclude<GarmentMethod, 'blank'>
  * and both tops follow the opening so the shoulder seams match.
  */
 export function setNeckline(p: Project, shape: NecklineShape): Project {
+  const from = garmentChoice(p).neckline;
   if (shape === 'off-shoulder' && p.panels.some((x) => x.yoke)) p = ensureEstimates(p, OFF_SHOULDER_NEEDS).project;
   const panels = p.panels.map((x): Panel => {
     if (x.yoke) return { ...x, yoke: yokeWithNeck(x.yoke, shape) };
@@ -301,7 +320,16 @@ export function setNeckline(p: Project, shape: NecklineShape): Project {
     const waypoints = x.waypoints.map((w) => (w.name === 'neck_side' ? { ...w, height: dim(`shoulder.height + ${n.rise}`), width: dim(n.top) } : w));
     return { ...x, neckline, waypoints };
   });
-  return { ...p, panels };
+  const q: Project = { ...p, panels };
+  const os = (s: NecklineShape) => s === 'off-shoulder';
+  if (!q.edges || os(shape) === os(from)) return q;
+  // An off-shoulder band is knit first with the yoke: the neckband strip goes (with its joins). Back to another
+  // neckline, the default neckband strip is made again.
+  const strips = os(shape) ? q.panels.filter((x) => x.edge === 'neckband') : [];
+  let joins = q.joins ?? [];
+  for (const x of strips) joins = dropPanelFromJoins(joins, x.id);
+  const r: Project = { ...q, panels: q.panels.filter((x) => !strips.includes(x)), joins, edges: edgesForNeckline(q.edges, shape, from) };
+  return applyEdgeTreatments(r, [], { create: !os(shape) });
 }
 
 /** Replace the sleeve panels (not a contiguous yoke's) with another type; 'none' removes them. */

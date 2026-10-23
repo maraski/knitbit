@@ -45,7 +45,9 @@ export function topGeometry(y: YokeResult): TopGeometry {
   // Short rows: drawn symmetrically, each pair between its two turns (the half rows at the start and end of a
   // pullover's section stand for one row each side); the stitches outside are worked first further out.
   const sr = y.shortRows;
-  const unworked = (row: number) => (sr && sr.pairs && row <= sr.endRow ? sr.turns[Math.min(sr.pairs, Math.max(1, Math.ceil(row / 2))) - 1] : 0);
+  // The section's first row (an off-shoulder raglan's back raise starts after its band and increase round).
+  const from = sr?.fromRow ?? 1;
+  const unworked = (row: number) => (sr && sr.pairs && row >= from && row <= sr.endRow ? sr.turns[Math.min(sr.pairs, Math.max(1, Math.ceil((row - from + 1) / 2))) - 1] : 0);
   const u0 = unworked(1);
   const rings: TopRing[] = [{ row: 0, total: y.castOn, gap, lead, slots: y.castOn + gap, r0: neckR, r1: neckR, zones: { ...y.castOnZones }, edgeCo: [0, 0], lo: u0, hi: y.castOn - u0 }];
   for (const r of y.rows) {

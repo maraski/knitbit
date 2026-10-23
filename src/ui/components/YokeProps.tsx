@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { backNeckPositions, defaultShortRows, yokeWithNeck, type YokeParam } from '../../engine/contiguous';
 import { generateBodyAndSleeves, missingYokePanels } from '../../engine/contiguousGarment';
-import { FRONT_NECKS } from '../../engine/templates';
+import { NECKLINES, necklinesFor, setNeckline } from '../../engine/garmentSetup';
 import { dim, type DimExpr, type NecklineShape, type YokeSpec } from '../../engine/model';
 import { computePanel } from '../../engine/panel';
 import { SYMBOLS } from '../../engine/symbols';
@@ -148,6 +148,8 @@ export function YokeProps({ ctx }: { ctx: PropsContext }) {
           value={spec.neck.shape}
           onChange={(e) => {
             const shape = e.target.value as NecklineShape;
+            // Off-shoulder makes a raglan yoke (the back raised) with its measurements and band: the garment's neckline.
+            if (shape === 'off-shoulder') return update((p) => setNeckline(p, shape));
             setYoke((s) => {
               Object.assign(s, yokeWithNeck(s, shape));
               // Short rows can't make a V's depth: a V neck takes the back start with its neck increases (only a
@@ -159,8 +161,8 @@ export function YokeProps({ ctx }: { ctx: PropsContext }) {
             });
           }}
         >
-          {/* Short rows can't make a V's depth: the modified raglan has no V. */}
-          {(Object.keys(FRONT_NECKS) as NecklineShape[]).filter((k) => !modified || k !== 'v' || spec.neck.shape === 'v').map((k) => <option key={k} value={k}>{k}</option>)}
+          {/* Short rows can't make a V's depth: the modified raglan has no V. Off-shoulder: the modified raglan's, a pullover's. */}
+          {NECKLINES.filter((n) => n.id === spec.neck.shape || necklinesFor(modified ? 'modified-raglan' : 'contiguous', project.garment.opening).includes(n.id)).map((n) => <option key={n.id} value={n.id}>{n.label}</option>)}
         </select>
       </div>
       {cm('Neck width, cast on across the back (cm)', (s) => s.neck.width ?? dim('back_neck_width'), (s, d) => (s.neck.width = d), 'neckWidth')}
@@ -231,23 +233,25 @@ export function YokeProps({ ctx }: { ctx: PropsContext }) {
   );
 }
 
-/** How the whole-neck start is worked in this size: the cast-on, the short rows and where the rounds begin. */
+/** How the whole-neck start is worked in this size: the cast-on, the short rows and where the rounds begin (an
+ * off-shoulder yoke's back raise: the short rows after its band and increase round). */
 export function ShortRowsWorked({ y, cardigan }: { y: NonNullable<PropsContext['computed']['yoke']>; cardigan: boolean }) {
   const sr = y.shortRows!;
   const z = y.castOnZones;
+  const from = sr.fromRow ?? 1;
   return (
     <div className="formula">
-      <div>
+      {!y.offShoulder && <div>
         Cast on <b>{y.castOn}</b>: left front {z.leftFront} · seam {z.leftSleeve} · back {z.back} · seam {z.rightSleeve} · right front {z.rightFront}
         {cardigan ? ', worked flat.' : ', join in the round; the round starts at the left back shoulder marker (between the back and the left seam).'}
-      </div>
+      </div>}
       {sr.pairs > 0 ? (
         <div>
           {cardigan
-            ? `Row 1 (RS): from the right front edge to ${sr.turns[0]} sts before the left front edge, turn. `
-            : `Row 1 (RS): from the marker to ${sr.turns[0]} sts before centre front, turn (no increases). `}
+            ? `Row ${from} (RS): from the right front edge to ${sr.turns[0]} sts before the left front edge, turn. `
+            : `Row ${from} (RS): from the marker to ${sr.turns[0]} sts before centre front, turn (no increases). `}
           Then German short rows, each turn {sr.step} st{sr.step === 1 ? '' : 's'} nearer centre front: turns at {sr.turns.join(', ')} sts from
-          {cardigan ? ' each front edge' : ' centre front'} ({sr.pairs} pairs, rows 1–{sr.endRow - 1}).{' '}
+          {cardigan ? ' each front edge' : ' centre front'} ({sr.pairs} pairs, rows {from}–{sr.endRow - 1}).{' '}
           {cardigan
             ? `Row ${sr.endRow} (RS): to the left front edge; then every row across.`
             : `Row ${sr.endRow} (RS): from the last turn back to the marker (no increases); then rounds.`}

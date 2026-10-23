@@ -329,7 +329,7 @@ empty project. One screen, one undoable step (undo goes back to the project you 
   or *Start from blank* (no pieces).
 - **Front**: pullover or cardigan (fronts split into a mirrored pair, bands and buttons).
 - **Neckline** (round, V, square, boat; a boat neck sets the back's neck too; the modified raglan has no V, its short
-  rows can't make one) and **sleeves** (set-in cap, drop shoulder, straight or none; yokes have their own sleeves:
+  rows can't make one; *Off-shoulder* for the raglans, pullover only, see *Off-shoulder* below) and **sleeves** (set-in cap, drop shoulder, straight or none; yokes have their own sleeves:
   set-in look, or raglan).
 - **Sleeve length**: long, three-quarter, elbow, short or cap sleeve (cap: set-in sleeves and a yoke's sleeves only).
   See *Sleeve lengths*.
@@ -647,7 +647,7 @@ a stitch (1×1 rib = 2n, 2×2 rib = 4n + 2, garter, seed = 2n + 1, or a custom m
 |---|---|---|
 | Hem | a *Hem rib* pattern section at the lower edge of the back and fronts | a pick-up join on their lower edges |
 | Cuff | a *Cuff rib* section on the sleeves | a pick-up join on the sleeves' lower edges |
-| Neckband | (not available for necklines yet) | a *Neckband* strip, picked up from every neckline |
+| Neckband | an off-shoulder neckline only: the band, knit first with the yoke (see *Off-shoulder*) | a *Neckband* strip, picked up from every neckline |
 | Front bands | integrated: extra stitches at each front edge | picked up, or knit sideways and sewn on (per band, see below) |
 
 Changing any setting applies them to the panels you have; things made by a treatment are marked (`edge`) and
@@ -867,6 +867,36 @@ apply to a raglan.
 **Modified raglan** (*Raglan, top-down → Modified*) is the contiguous yoke with the whole-neck start: the whole neck
 cast on, German short rows raising the back, then the shoulder and sleeve-cap phases (see *Contiguous yoke*). Its
 yoke has no `style` and `start: 'neck'`; contiguous projects saved with that start open as modified raglan.
+
+### Off-shoulder
+
+*Off-shoulder* is a neckline of the raglans (New garment, the Garment tab, or the yoke's *Neck → Shape*), pullover
+only for now (the cardigan front is disabled while it is chosen). The opening sits below the shoulders and around the
+upper arms: a rib band is cast on all round and knit first, an increase round takes it up to the ring, and four raglan
+lines run from there to the underarms. Under both cards it is a raglan-line yoke (`yoke.style: 'raglan'`,
+`neck.shape: 'off-shoulder'`, settings in `yoke.offShoulder`): *Classic* keeps the band level, *Modified* raises the
+back 2 cm with German short rows after the increase round. Nothing else is stored: a back raise other than 0 reads
+back as Modified, 0 as Classic (the same garment either way).
+
+| | Default | What happens |
+|---|---|---|
+| Measurements | `off_shoulder_circ` = `round(upper_chest + bicep × 0.6, 0.5)`, `off_shoulder_drop` = 5 cm (estimates, added when you choose it) | arms down, around both upper arms and the torso at band height; the shoulder point down to the band's top edge. Measure the circumference: the band and ring come from it (an info check says so while it is an estimate) |
+| Band | the **Neckband** edge, set to *knit with the panels*, 1×1 rib, 4 cm when you choose off-shoulder; `bandEase` −10 % | `off_shoulder_circ × (1 + bandEase)` sts (a multiple of the stitch), rows 1 to the band's depth, in the round, no increases |
+| Increase round | `ringEase` 0 % | the row after the band: up to `off_shoulder_circ × (1 + ringEase)`, spread evenly in each zone |
+| Ring | `armArc` = `bicep × 0.5` per sleeve | each sleeve zone is the arm arc plus its two raglan lines; the rest is half front, half back |
+| Back raise | 0 (Classic) / 2 cm (Modified) | short-row pairs from the back raise (editable: pairs, first turn, step), turning in the fronts |
+| Depth | `armhole_depth − off_shoulder_drop + back_raise` (band top to underarm at the back) | the band and the increase round count inside it; the rates are solved as for the classic raglan |
+
+Choosing off-shoulder pre-sets the neckband and removes a neckband strip (and its pick-up join); choosing another
+neckline goes back to the default neckband and makes the strip again. The yoke's properties have an *Off-shoulder*
+part (the two measurements with a link to them, band ease, ring ease, arm arc, back raise and the short rows), and the
+rows table lists the band, the increase round and the raglan. The top view draws the band as a tinted ring and the
+ring after the increase round as a solid line (*ring … sts*); the chart shows the band's rib (k1, p1 for 1×1 rib, its
+repeat in the gutter), the increase round (*Inc*) and the raglan rows; the flat panel marks the band as a section and
+the ring as a landmark. **Checks**: band ease above −5 % (may slide down) or below −20 % (too tight over the arms), a
+band wider than the ring, body zones at or below 0 (arm arc too big), less than 4 cm between the band and the underarm
+at the front, a cardigan (errors), and the raglan's split higher than `armhole_depth` measured from the band. Every
+sleeve length works, cap to long. Later (planned): a folded casing for elastic. See `docs/off-shoulder-plan.md`.
 
 ## Short-row segments
 

@@ -3,7 +3,7 @@
 Goal: design an off-shoulder top (the opening sits below the shoulders and around the upper arms) in Knitbit, with
 the band, the yoke, the body and the sleeves all worked out per size.
 
-**Status: M1 (engine) built (2026-10-23); M2 and M3 to do.**
+**Status: M1 (engine) and M2 (UI) built (2026-10-23); M3 to do.**
 
 ## Your answers (2026-10-23)
 
@@ -189,6 +189,30 @@ section, and the schematic, chart and top view, with the checks showing in the p
 - The top view shows the ring.
 - Changing the drop or band ease updates everything.
 - The README describes it.
+
+**Built (M2):**
+- `NECKLINES` has Off-shoulder; the dialog, the Garment tab and the yoke's *Neck → Shape* (raglan and modified raglan
+  props) offer it through `necklinesFor(method, opening)`. The cardigan front is disabled while it's chosen, and the
+  Classic / Modified descriptions say what each does with it (`offShoulderNote`). The yoke's shape select goes
+  through `setNeckline`, so the measurements, settings and band come and go as in the Garment tab.
+- Neckband: `edgesForNeckline` pre-sets 1×1 rib, 4 cm, with the panel (`offShoulderNeckband`) when off-shoulder is
+  chosen, and puts a with-panel neckband back to the default strip for any other neckline (`buildGarment`,
+  `setNeckline`, `changeMethod`). `knitWithPanel('neckband', …, project)` is true only on an off-shoulder yoke, so no
+  strip or pick-up join is made; `setNeckline` removes an existing strip going to off-shoulder and makes it again
+  coming back. Edge settings offer *knit with the panels* for the neckband only then.
+- Yoke properties (RaglanProps, still lazy): an off-shoulder heading and hint, the band / increase round / ring
+  breakdown, the two measurements with a link that opens them in Measurements (`knitbit:measurement` event),
+  band and ring ease (with %), arm arc, back raise (with the Classic/Modified note), and the short-row settings
+  when the back is raised. Start, neck width/depth/centre and sleeve top are hidden. `ShortRowsWorked` and the top
+  view count the short rows from `shortRows.fromRow`. All sizes shows band / ring counts.
+- Drawing: the yoke chart fills the band rows with the rib's purls (1×1, 2×2, seed, garter; a custom stitch shows
+  only its repeat), adds a band repeat bracket and labels the phases *Band* / *Inc*. The top view tints the band,
+  draws the ring line (single view only) with *band* / *ring* labels, and its key gives the band, increase round,
+  drop and short rows. The flat yoke panel has a *Band* section and a `ring` landmark.
+- Main chunk 272.3 → 273.9 kB (88.1 → 88.6 kB gzip): the engine side (neckline list, neckband pre-set) and the
+  measurement link in App.
+- Left as is: the yoke panel's `roundRows` still covers every row (the back-raise short rows are flat), and a Modified
+  off-shoulder's sleeves are still listed as "Contiguous (set-in look)" in the dialog (they are raglan sleeves).
 
 ### M3: band options
 Folded elastic casing as a neckband stitch/method for off-shoulder (double depth, turning round, elastic length

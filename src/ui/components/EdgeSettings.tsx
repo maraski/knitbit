@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react';
-import { addStrips, applyEdgeTreatments, EDGE_STITCHES, EDGE_TREATMENTS, edgePattern, edgesOf, missingStrips } from '../../engine/edgeTreatments';
+import { addStrips, applyEdgeTreatments, EDGE_STITCHES, EDGE_TREATMENTS, edgePattern, edgesOf, missingStrips, neckbandWithPanelAllowed } from '../../engine/edgeTreatments';
 import { buildScope } from '../../engine/measurements';
 import type { EdgeStitch, EdgeTreatment, EdgeTreatmentId, Id, Project } from '../../engine/model';
 import { ExprField } from './ExprField';
@@ -23,6 +23,8 @@ export function EdgeSettings({ project, sizeId, update }: Props) {
     update((p) => applyEdgeTreatments({ ...p, edges: { ...edgesOf(p), [id]: t } }), key);
   const missing = missingStrips({ ...project, edges: edges });
   const shown = EDGE_TREATMENTS.filter((d) => d.id !== 'frontBands' || project.garment.opening === 'cardigan');
+  // Only an off-shoulder band can be knit with the panels (first, with the yoke).
+  const nbWithPanel = neckbandWithPanelAllowed(project);
 
   return (
     <>
@@ -86,8 +88,8 @@ export function EdgeSettings({ project, sizeId, update }: Props) {
                 ) : (
                 <div className="field">
                   <label>Worked</label>
-                  <select value={d.id === 'neckband' ? 'later' : t.method} onChange={(e) => set(d.id, { ...t, method: e.target.value as EdgeTreatment['method'] })}>
-                    <option value="with-panel" disabled={d.id === 'neckband'}>{d.withPanel}</option>
+                  <select value={d.id === 'neckband' && !nbWithPanel ? 'later' : t.method} onChange={(e) => set(d.id, { ...t, method: e.target.value as EdgeTreatment['method'] })}>
+                    <option value="with-panel" disabled={d.id === 'neckband' && !nbWithPanel}>{d.withPanel}</option>
                     <option value="later">{d.later}</option>
                   </select>
                 </div>
