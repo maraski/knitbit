@@ -143,5 +143,7 @@ describe('an old project, end to end', () => {
     // Saves and loads as schema 3 with nothing to migrate.
     const again = loadProject(serializeProject(p));
     expect(again.ok && again.migratedFrom).toBeNull();
-  });
+    // About 2 s alone (every panel computed and charted in every size): more than the default 5 s under the full
+    // parallel run.
+  }, 20_000);
 });
