@@ -13,7 +13,7 @@ footer is already in place: `exportFooter()` in [garment.ts](../src/engine/garme
 |---|---|
 | Who it's for | **A working copy to knit from.** No cover page, branding or copyright block. The contiguous credit goes in the footer when the project uses that method. A "pattern to share" layout can come later. |
 | Written instructions | **Visual only**, as Knitbit is today: schematics, tables, charts, joins. The only text is short facts the engine already works out (cast-on, stitch counts at waypoints, rows). No row-by-row prose. |
-| v1 sections, in order | **Header** (name, gauge, units, sizes, date) → **size table** → **schematic per piece** → **stitch chart per piece with a symbol key**. |
+| v1 sections, in order | **Header** (name, gauge, units, sizes, date) → **size tables** (body measurements, and finished measurements in a separate table) → **schematic per piece** → **stitch chart per piece with a symbol key**. |
 | Where it happens | **In the browser: jsPDF + svg2pdf.js**, loaded only when you export (already allowed in HANDOFF §3). Not the print dialog. |
 | Sizes | **Pick sizes, one PDF.** The dialog ticks the current size; tick more to add them. |
 | Paper | **A4 portrait by default, A4 / US Letter choice in the dialog** (remembered). A page turns landscape when its content fits better that way. |
@@ -33,9 +33,32 @@ Defaults chosen without asking (say if any is wrong):
   `<project name>-<view>-<size>.png` for a PNG. Characters that aren't allowed in file names become `-`.
 - **Chart cell size** 4.5 mm (about 6 rows to the inch), smallest allowed 3.5 mm. The collapse-plain-middle option
   from the Chart tab applies to the export too when it is on, so wide plain pieces take fewer tiles.
-- **Size table v1** = the body measurements per size (as on the Measurements tab, read-only, without rules or
-  estimates marks) plus a key-numbers table per piece: cast-on, stitches at each waypoint, total rows, length. Finished
-  garment circumferences (chest, hip, upper arm summed over the pieces) are an open question below.
+- **Size tables v1** (answered 2026-10-23: finished measurements get **their own table**):
+  1. **Body measurements** per size, as on the Measurements tab (read-only, without rules or estimate marks).
+  2. **Finished garment measurements** per size, worked out from the knitted pieces (see below).
+  3. **Key numbers per piece**: cast-on, total rows, length.
+
+### Finished garment measurements
+
+What the garment measures once knitted, from the computed stitch and row counts divided by the gauge (so after
+rounding to whole stitches, not the target numbers). Rows, each shown only when the project has the pieces for it:
+
+| Row | Worked out from |
+|---|---|
+| Bust / chest circumference | sum of the body pieces' widths at the widest row between the bust and the underarm |
+| Waist circumference | sum of widths at the waist waypoint (only if the body is shaped there) |
+| Hem circumference | sum of the body pieces' hem widths (after the hem band, if any) |
+| Body length | back from the shoulder (or the back neck, for a yoke) to the hem |
+| Upper arm circumference | sleeve width at the underarm |
+| Cuff circumference | sleeve width at the cuff |
+| Sleeve length | underarm to cuff |
+| Neck opening | circumference of the neck edge (from the neck edges' lengths) |
+| Yoke depth (contiguous, raglan) | cast-on to the underarm join |
+| Ease at bust | finished bust − body bust measurement, with + or − |
+
+Cardigans add the front band width and overlap once (from `cardigan` options). The calculation is a pure engine
+function, `finishedMeasurements(project, sizeId)` in `src/engine/finished.ts`, tested on the sample project and on
+contiguous and cardigan fixtures. It's built with E1 and could later be shown in the app too.
 
 ## What gets exported: page by page
 
@@ -71,6 +94,14 @@ A4 portrait is 210 × 297 mm. Margins 12 mm; header band 10 mm; footer band 10 m
 │ Waist                      80      90         │
 │ …                                             │
 │ * base size                                   │
+│                                               │
+│ Finished measurements      M       L          │
+│ ─────────────────────────────────────────     │
+│ Bust                      101     111         │
+│ Ease at bust               +5      +5         │
+│ Hem                        98     108         │
+│ Upper arm                  32      35         │
+│ …                                             │
 │                                               │
 │ Pieces       Cast on   Rows   Length          │
 │ Back         M 106     L 118  …               │
@@ -194,10 +225,25 @@ src/ui/components/ExportDialog.tsx   lazy, like NewGarmentDialog: sizes, paper, 
 
 ### Fonts and characters
 
-jsPDF's built-in fonts only cover WinAnsi (Latin-1 plus a few). The app's text uses `×`, `−` (minus sign), `–`, `·`,
-`≈`, `→`, `½`, and project names may contain anything. Choice for E1: embed **one open font** (for example Inter or
-Noto Sans, regular + bold, subset to Latin + the symbols above, about 60–90 kB, loaded with the export chunk) so the
-PDF matches the app. Fallback if that's too heavy: map the few symbols to ASCII (`x`, `-`, `->`) in `pdf.ts`.
+**The knitting symbols need no font.** Every built-in symbol in `ui/glyphs.tsx` (knit, purl, yo, k2tog, ssk, sk2p,
+s2kp, M1L, M1R, kfb, slip, no stitch, turns, BO, CO, hold, buttonhole, marker, C4F, C4B) is already drawn as SVG
+lines and shapes. svg2pdf turns them into PDF vector paths, so they print sharp at any size, exactly as on screen.
+Only a **custom symbol** is drawn as text (its abbreviation, for example "MB"), and a symbol id without a drawing
+falls back to its first letters as text.
+
+**Fonts matter only for words and numbers**: titles, labels, tables, and custom-symbol abbreviations. A PDF has to
+say which font draws each letter. jsPDF has the 14 standard PDF fonts built in (Helvetica, Times, Courier), which
+cost nothing to include, but they only cover the Windows Latin-1 character set: all accented Latin letters, `×`,
+`·`, `½`, `–`, `—`, `…` are fine. A few characters the app uses aren't in that set and would print as garbage: the
+minus sign `−` (from `signed()` in `format.ts`), arrows `→ ← ↑ ↓`, and `≈`. A project name or custom abbreviation in
+another script (Greek, Cyrillic, Japanese) or with an emoji wouldn't print either.
+
+Choice for E1 (revised 2026-10-23): **built-in Helvetica, no embedded font.** `pdf.ts` swaps the few missing
+characters before writing text: `−` → `-` (hyphen), `≈` → `~`, and arrows are drawn as small SVG arrows instead of
+characters (like the symbols). The export dialog warns, before exporting, if the project name, a piece name or a
+custom abbreviation still has characters Helvetica can't draw. Only if that turns out to matter would an open font
+(Noto Sans subset, about 60–90 kB, loaded with the export chunk) be embedded. PNG export isn't affected: the browser
+draws its text with the screen's fonts.
 
 ## Milestones
 
@@ -207,11 +253,13 @@ HANDOFF updated. E2 and E3 touch different files and can be built at the same ti
 
 **E1: export foundations and page 1.** `jspdf` and `svg2pdf.js` pinned to exact versions; `src/export/` with
 `plan.ts`, `tables.ts`, `fileName.ts`, `pdf.ts` (page frame, header band, footer with `exportFooter()` and "Made with
-Knitbit", page numbers "p. N of M", A4/Letter, portrait/landscape) and the embedded font; `downloadBlob`;
-`ExportDialog` (sizes with the current one ticked, paper size remembered in localStorage, section checkboxes for the
-ones that exist so far); Export… toolbar button. *Done when:* exporting gives a PDF with the header and size table for
-the ticked sizes, tables flow across pages, the contiguous credit is in the footer only when it should be, and the
-build shows jsPDF in its own chunk and the main chunk unchanged.
+Knitbit", page numbers "p. N of M", A4/Letter, portrait/landscape, the character swaps for Helvetica);
+`engine/finished.ts` (`finishedMeasurements`, tested); `downloadBlob`; `ExportDialog` (sizes with the current one
+ticked, paper size remembered in localStorage, section checkboxes for the ones that exist so far, the
+unprintable-characters warning); Export… toolbar button. *Done when:* exporting gives a PDF with the header and the
+three tables (body, finished, key numbers) for the ticked sizes, tables flow across pages, a minus sign prints as a
+minus, the contiguous credit is in the footer only when it should be, and the build shows jsPDF in its own chunk and
+the main chunk unchanged.
 
 **E2: schematics.** `exportMode` on Schematic; `render.tsx` (off-screen render + inlined styles); one page per piece
 per size, fit to page with the scale noted, the waypoint table under it; cardigan pairs and sleeves printed once
@@ -235,16 +283,17 @@ PDF lists every join with stitch counts, and notes appear on page 1 and round-tr
 
 ## Open questions and risks
 
-- **Finished measurements.** Should the size table also show finished garment measurements (chest, waist, hip, upper
-  arm, length, summed from the pieces at the right waypoints)? Useful, but the engine has no such summary yet;
-  recommend adding it to E1's tables only if the waypoint names are reliable enough (to be checked), otherwise later.
+- **Finished measurements: finding the right rows.** Pieces are user-editable, so a waypoint called "bust" or
+  "waist" may be missing or renamed. `finishedMeasurements` should go by the panel's role (`panelRole`) and the
+  measurement each waypoint's expression refers to, fall back to the widest/narrowest row, and leave a cell as "—"
+  rather than guess. Check on real projects in E1.
 - **svg2pdf coverage.** It handles paths, text, patterns and clip paths, but not CSS (hence the inlining step), and
   `<pattern>` grids can be slow on huge charts. ChartView draws plain stitches as runs over an SVG grid pattern; the
   export renderer may draw grid lines directly instead. Try both in E3 and keep the faster.
 - **Big PDFs.** 11 sizes × 6 pieces of charts could be hundreds of pages and take a while; the dialog shows a progress
   count and builds pages one at a time (yielding to the browser) so the tab doesn't freeze.
-- **Text width.** Schematic labels are placed with an estimated `textWidth()`; with an embedded font the printed text
-  may be slightly wider or narrower than on screen. Check label collisions in E2.
+- **Text width.** Schematic labels are placed with an estimated `textWidth()` for the screen's font; Helvetica in
+  the PDF is slightly wider or narrower. Check label collisions in E2.
 - **iPad.** Downloads from Safari on iPad open in a viewer; that's fine but untested.
 - **Pattern-to-share layout** (cover, photo, materials, copyright) and written instructions are out of scope; the
   page planner (`plan.ts`) keeps sections as a list so they can be added later without rework.
