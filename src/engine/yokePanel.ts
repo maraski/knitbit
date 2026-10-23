@@ -8,7 +8,7 @@ import type { ComputedPanel, ComputedWaypoint, Issue, Point } from './panel';
 import { roundRows } from './rounding';
 
 /** Names of the yoke's landmark rows (used like waypoints: alignment, labels, joins). */
-export const YOKE_WAYPOINTS = { neck: 'neck', shoulder: 'shoulder', capRapid: 'cap_rapid', capSlow: 'cap_slow', underarm: 'underarm' } as const;
+export const YOKE_WAYPOINTS = { neck: 'neck', ring: 'ring', shoulder: 'shoulder', capRapid: 'cap_rapid', capSlow: 'cap_slow', underarm: 'underarm' } as const;
 
 function landmark(id: string, name: string, row: number, sts: number, spc: number, rpc: number): ComputedWaypoint {
   const r = roundRows(row);
@@ -44,8 +44,11 @@ export function computeYokePanel(project: Project, panel: Panel, sizeId: Id): Co
   const rightEdge = counts.map((n) => n / 2);
   const issues: Issue[] = y.issues.map((i) => ({ severity: i.severity, message: i.message, ref: { kind: 'panel' } }));
   const { A, C, D } = y.counts;
+  const os = y.offShoulder;
   const wps: ComputedWaypoint[] = [
     landmark(`${panel.id}:neck`, YOKE_WAYPOINTS.neck, 0, counts[0], spc, rpc),
+    // Off-shoulder: the ring after the band's increase round.
+    ...(os && os.incRow < T ? [landmark(`${panel.id}:ring`, YOKE_WAYPOINTS.ring, os.incRow, counts[os.incRow] ?? 0, spc, rpc)] : []),
     landmark(`${panel.id}:shoulder`, YOKE_WAYPOINTS.shoulder, A, counts[A] ?? 0, spc, rpc),
     ...(C > 0 ? [landmark(`${panel.id}:cap_rapid`, YOKE_WAYPOINTS.capRapid, A + C, counts[A + C] ?? 0, spc, rpc)] : []),
     ...(D > 0 ? [landmark(`${panel.id}:cap_slow`, YOKE_WAYPOINTS.capSlow, A + C + D, counts[A + C + D] ?? 0, spc, rpc)] : []),
@@ -68,7 +71,8 @@ export function computeYokePanel(project: Project, panel: Panel, sizeId: Id): Co
     totalRows: T,
     roundRows: join !== null && join < T ? { from: join + 1, to: T } : null,
     firstFlatRow: 1,
-    sections: [],
+    // Off-shoulder: the band, knit first.
+    sections: os ? [{ id: `${panel.id}:band`, name: 'Band', fromRow: 1, toRow: Math.min(os.bandRows, T), multiple: os.pattern.multiple, offset: os.pattern.offset, patternName: os.pattern.name }] : [],
     bust: null,
     lines: [],
     princess: null,

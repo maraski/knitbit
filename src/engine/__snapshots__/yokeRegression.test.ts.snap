@@ -1,0 +1,737 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`yoke regression (before off-shoulder) > contiguous, back start × boat × cardigan 1`] = `
+{
+  "1X": "6e85c88c21067b63",
+  "2X": "50c1ce8daa4daaf7",
+  "2XS": "64f561e786bc53d7",
+  "3X": "d866537997d2ddf7",
+  "3XS": "537984adee1ca6c2",
+  "4X": "e59dea83b21c7fd3",
+  "4XS": "2c21cdbf180237c6",
+  "L": "b4b84fa60edfd105",
+  "M": "e7668bc5afc1f57b",
+  "S": "143b153ab7577ad9",
+  "XS": "31bc67daefd9e75b",
+}
+`;
+
+exports[`yoke regression (before off-shoulder) > contiguous, back start × boat × closed 1`] = `
+{
+  "1X": "abaeded1b44d5215",
+  "2X": "67a3f681af43fde7",
+  "2XS": "adf419f85c325ff6",
+  "3X": "faaa0634b2706a7c",
+  "3XS": "1e8142b5c3331b0e",
+  "4X": "591ab9cc7aa5d9a5",
+  "4XS": "0d2dfb67f1ef540c",
+  "L": "fc664908c7eba806",
+  "M": "da7a2c3b47e5f190",
+  "S": "b7c4c4b3c2314797",
+  "XS": "10063f0583878e1c",
+}
+`;
+
+exports[`yoke regression (before off-shoulder) > contiguous, back start × round × cardigan 1`] = `
+{
+  "1X": "e7b37ce826d87468",
+  "2X": "8025f66454ada097",
+  "2XS": "bb399d45b90bc5ff",
+  "3X": "64940f946e73c522",
+  "3XS": "5b54a0df97c97a4e",
+  "4X": "f64f3a1ee8361151",
+  "4XS": "161fcaf44ab37007",
+  "L": "951d6fca01b0f592",
+  "M": "19af5df504f41402",
+  "S": "6b6bceaab52a4ad7",
+  "XS": "7be739e1c6c877b3",
+}
+`;
+
+exports[`yoke regression (before off-shoulder) > contiguous, back start × round × closed 1`] = `
+{
+  "1X": "de60c3910e455f60",
+  "2X": "d8c512dd487c528a",
+  "2XS": "7c36a254cb2c5850",
+  "3X": "bf5ac4500e7c381c",
+  "3XS": "29e55f4ddf736c90",
+  "4X": "baa2c801017f8959",
+  "4XS": "e7b0a4cc483b6069",
+  "L": "07d696dc50c01b3d",
+  "M": "a6f6f6c59d3bc89e",
+  "S": "db2ecefda4679b48",
+  "XS": "2e4be3473192f6c2",
+}
+`;
+
+exports[`yoke regression (before off-shoulder) > contiguous, back start × square × cardigan 1`] = `
+{
+  "1X": "f501c5749770046e",
+  "2X": "5aefeeaf53dde436",
+  "2XS": "f90ff5fc68d7362b",
+  "3X": "ee7a4ab00922487e",
+  "3XS": "0fbf409b3abe9867",
+  "4X": "eb696e369ba2abae",
+  "4XS": "83549dfb71656332",
+  "L": "d874ac78f43a4627",
+  "M": "9dd7d190035965f6",
+  "S": "777063376e407948",
+  "XS": "398c22a0a6d31766",
+}
+`;
+
+exports[`yoke regression (before off-shoulder) > contiguous, back start × square × closed 1`] = `
+{
+  "1X": "1e09303686a375de",
+  "2X": "03d9ffcd84aeb995",
+  "2XS": "d51c3a9a2302ddfe",
+  "3X": "d79641ea639cd391",
+  "3XS": "ed59399b1ae60ed1",
+  "4X": "53e6d48f3b12c0ef",
+  "4XS": "7f9646371f613930",
+  "L": "101ce2c07ade79a3",
+  "M": "56f2de3aceadfa3e",
+  "S": "9d696886396c0731",
+  "XS": "52a7d59e5a0a120f",
+}
+`;
+
+exports[`yoke regression (before off-shoulder) > contiguous, back start × v × cardigan 1`] = `
+{
+  "1X": "1c5a96f0f02dac00",
+  "2X": "e00d08c9a2318f70",
+  "2XS": "47ff69af20eb6e46",
+  "3X": "c110b2fa5c476563",
+  "3XS": "a320b5daca0c9fca",
+  "4X": "c55f1933816345b2",
+  "4XS": "ab9292253b466798",
+  "L": "7ac31568190786c0",
+  "M": "121ba0e12a50b408",
+  "S": "420addf925e6c62c",
+  "XS": "aaf33c443e3439b1",
+}
+`;
+
+exports[`yoke regression (before off-shoulder) > contiguous, back start × v × closed 1`] = `
+{
+  "1X": "55a07876ab27ff2b",
+  "2X": "1a04d0e989274baf",
+  "2XS": "081a45b129e6771a",
+  "3X": "3a69733620b431cf",
+  "3XS": "e95d4b9247eab79c",
+  "4X": "a4c7a42640ca597c",
+  "4XS": "83d920b31ca39785",
+  "L": "15c84a79a021db12",
+  "M": "5edb072531769346",
+  "S": "0a3e0d52dd67907f",
+  "XS": "830bb303aea68371",
+}
+`;
+
+exports[`yoke regression (before off-shoulder) > contiguous, whole neck (modified raglan) × boat × cardigan 1`] = `
+{
+  "1X": "53bfff34ba974067",
+  "2X": "f6ab2d306a64f9eb",
+  "2XS": "8cdd87a09e0f0131",
+  "3X": "1bd8fa38316f7b87",
+  "3XS": "e38ce7b771205cfd",
+  "4X": "1d463da6ffe777f7",
+  "4XS": "034c3e2013a371ef",
+  "L": "db62d233801504ba",
+  "M": "2e2ef322aa95276d",
+  "S": "e0ad7cd57c3d9ef7",
+  "XS": "8b8af13ef36c8e94",
+}
+`;
+
+exports[`yoke regression (before off-shoulder) > contiguous, whole neck (modified raglan) × boat × closed 1`] = `
+{
+  "1X": "c047beb96cfed883",
+  "2X": "3f4ef12897ac3fa0",
+  "2XS": "d3c2922cda4f92d5",
+  "3X": "832fcbe9199b5c00",
+  "3XS": "a7fd36388a321c2b",
+  "4X": "8a5165f85136dc2b",
+  "4XS": "01d935fce726ae2c",
+  "L": "b26549a4332efa09",
+  "M": "e2e9782f1bebda62",
+  "S": "1e18d91fc730a235",
+  "XS": "e49912d1b232e7d7",
+}
+`;
+
+exports[`yoke regression (before off-shoulder) > contiguous, whole neck (modified raglan) × round × cardigan 1`] = `
+{
+  "1X": "b15373021ad64560",
+  "2X": "5be51b52da89f509",
+  "2XS": "811656e6e43f4492",
+  "3X": "93859d62b329b86f",
+  "3XS": "038b8aa547b26aa3",
+  "4X": "25e3043d47abc2d6",
+  "4XS": "d5b9fd57f907f36c",
+  "L": "47522a0bfe2a1d93",
+  "M": "7fb76382ee804a6b",
+  "S": "1226b0d4e798aa23",
+  "XS": "2c1c7ec6401de73f",
+}
+`;
+
+exports[`yoke regression (before off-shoulder) > contiguous, whole neck (modified raglan) × round × closed 1`] = `
+{
+  "1X": "8968663fe8ca8c0b",
+  "2X": "ffd172faf72aed62",
+  "2XS": "631c81d61a6eae72",
+  "3X": "604438ce657dec3b",
+  "3XS": "50cd590fb4116748",
+  "4X": "77d8c83832cdcbbb",
+  "4XS": "e0a8f6bcf76c9efc",
+  "L": "1661bd1dde1f54d3",
+  "M": "00e8392ee3ff47cd",
+  "S": "19eeb3716876e6b5",
+  "XS": "b2fa63b5ed0a05f0",
+}
+`;
+
+exports[`yoke regression (before off-shoulder) > contiguous, whole neck (modified raglan) × square × cardigan 1`] = `
+{
+  "1X": "0429582263b6b48c",
+  "2X": "5b6512fa82744ef4",
+  "2XS": "14ef8a9153444e2d",
+  "3X": "bf810379388adc1a",
+  "3XS": "73d048608d72a80a",
+  "4X": "9fc11b6f8eba06ff",
+  "4XS": "b1428eeda98ab237",
+  "L": "11283648bbcf8165",
+  "M": "ae9f46cd32b5c906",
+  "S": "9749878dbae7f176",
+  "XS": "b25b2644ebcf19a5",
+}
+`;
+
+exports[`yoke regression (before off-shoulder) > contiguous, whole neck (modified raglan) × square × closed 1`] = `
+{
+  "1X": "29a4c751b9c3b04e",
+  "2X": "4187271d43199a3c",
+  "2XS": "dfd8d22550e0f416",
+  "3X": "a8ff855343100fcc",
+  "3XS": "2e60e8e21379aa5c",
+  "4X": "3643fd5366f29263",
+  "4XS": "7e8c7726c1f68af4",
+  "L": "51bb268705deb476",
+  "M": "7978294e67c3276d",
+  "S": "cf8285314b5e0567",
+  "XS": "c67262339ae154f6",
+}
+`;
+
+exports[`yoke regression (before off-shoulder) > garment contiguous × cardigan × cap: every piece in every size 1`] = `
+{
+  "1X": "9fc1cd7b92e963a7",
+  "2X": "b08b48990ed66876",
+  "2XS": "c2127fa1272c4231",
+  "3X": "864776b6ccfddae7",
+  "3XS": "692348ce725ab147",
+  "4X": "5606b8bbf7e5f6f7",
+  "4XS": "47df0bf4f433bfcf",
+  "L": "134115f13c39b3e6",
+  "M": "54871bd29e235db5",
+  "S": "6dcd118f07f0204e",
+  "XS": "0442a273ec3e42fd",
+}
+`;
+
+exports[`yoke regression (before off-shoulder) > garment contiguous × cardigan × long: every piece in every size 1`] = `
+{
+  "1X": "400fd3562a7cbd1a",
+  "2X": "a20b2fbc1e0172d3",
+  "2XS": "a3d2920cb3f3048c",
+  "3X": "248593442ef8f193",
+  "3XS": "360f2d8918d537e8",
+  "4X": "9d14502f801daaeb",
+  "4XS": "23d16b2faa7bb538",
+  "L": "271ef304e86f0f89",
+  "M": "2a5ae021ebb75fd2",
+  "S": "ed8b107652396b3a",
+  "XS": "2e2375cc366b75ef",
+}
+`;
+
+exports[`yoke regression (before off-shoulder) > garment contiguous × cardigan × short: every piece in every size 1`] = `
+{
+  "1X": "9ce53e18c238a3d7",
+  "2X": "c5087a43992e5c05",
+  "2XS": "831914effd582a18",
+  "3X": "7fb6b06e0a91a32a",
+  "3XS": "c28c514698cdc49c",
+  "4X": "bf710e1c4cc0949f",
+  "4XS": "4af8d12bd37fcae4",
+  "L": "736f82f92d4f98b8",
+  "M": "9ef6d12634ab060b",
+  "S": "bc33d61783270590",
+  "XS": "fb9b5bf6e255f215",
+}
+`;
+
+exports[`yoke regression (before off-shoulder) > garment contiguous × closed × cap: every piece in every size 1`] = `
+{
+  "1X": "aba8304c5a80127d",
+  "2X": "f47e7545b269dfdb",
+  "2XS": "5133a987308ed557",
+  "3X": "503b85fca6d2506e",
+  "3XS": "d98f85a0593938ad",
+  "4X": "2f30514088d717ba",
+  "4XS": "4be05881cc3a585d",
+  "L": "22ab4b1f37e084f7",
+  "M": "daf4140f42fef7b6",
+  "S": "6f0d544291efb36e",
+  "XS": "efd9f66bb27aeb10",
+}
+`;
+
+exports[`yoke regression (before off-shoulder) > garment contiguous × closed × long: every piece in every size 1`] = `
+{
+  "1X": "e51454711fa97cb4",
+  "2X": "40c4e437f17895fa",
+  "2XS": "9fcbe21be0c8aac7",
+  "3X": "3f02b6637ed102da",
+  "3XS": "4678cb2d579ebc8f",
+  "4X": "519054dd91c12dd8",
+  "4XS": "fc6d57e2c19d0e81",
+  "L": "058613e0faa1b39e",
+  "M": "25c02e6e55b7ce74",
+  "S": "966a85e0f6e7ec52",
+  "XS": "ef89db4355b02de6",
+}
+`;
+
+exports[`yoke regression (before off-shoulder) > garment contiguous × closed × short: every piece in every size 1`] = `
+{
+  "1X": "fd52bf9f9f33cc33",
+  "2X": "c5fba8ff4e17bd29",
+  "2XS": "0da234693a8f3bb3",
+  "3X": "98c8de9c494b444c",
+  "3XS": "a2c052d9b478757c",
+  "4X": "a5a59cb933aa59ba",
+  "4XS": "3d413a2f2bc4ab71",
+  "L": "a51c7d954ab83f1a",
+  "M": "b55dea4e8adf101f",
+  "S": "1b45c9f723ee1604",
+  "XS": "596790f56d757478",
+}
+`;
+
+exports[`yoke regression (before off-shoulder) > garment modified-raglan × cardigan × cap: every piece in every size 1`] = `
+{
+  "1X": "46090cf4d847b0ca",
+  "2X": "9e46dd737d25ce8d",
+  "2XS": "0cc5dc552a1df97d",
+  "3X": "98c8e004d7b3b0df",
+  "3XS": "0f9736a6b785da81",
+  "4X": "5e7739dcc3b7e3ec",
+  "4XS": "9c8fa7326c36885e",
+  "L": "a4fc70c36dfaf339",
+  "M": "bb62f2b3b96b110a",
+  "S": "396dd8f4008b8f31",
+  "XS": "c1d76d99c58da180",
+}
+`;
+
+exports[`yoke regression (before off-shoulder) > garment modified-raglan × cardigan × long: every piece in every size 1`] = `
+{
+  "1X": "f885e22e8c077c5c",
+  "2X": "f760dfcc2b3f52d6",
+  "2XS": "3c2908937c8785c8",
+  "3X": "ebab4ed9d5475360",
+  "3XS": "768847b2ae7d64cd",
+  "4X": "696f54c9cc833392",
+  "4XS": "79842c097ade0b30",
+  "L": "9897b033b3b96268",
+  "M": "15dccec2de6ab802",
+  "S": "eb0808611f565b4a",
+  "XS": "d0d6627664bfa5fb",
+}
+`;
+
+exports[`yoke regression (before off-shoulder) > garment modified-raglan × cardigan × short: every piece in every size 1`] = `
+{
+  "1X": "de877b3887e19fa6",
+  "2X": "59af23167b7c01a0",
+  "2XS": "6682100a848031dc",
+  "3X": "23203845a6a0ffb7",
+  "3XS": "9eafca01a7cd9aa1",
+  "4X": "7a4ef641cd1a0a1d",
+  "4XS": "f3e070504de4e7a6",
+  "L": "8205a673aef665cc",
+  "M": "8f0838a81b763393",
+  "S": "81c80b12c30dea43",
+  "XS": "8e1dae55f062d2e6",
+}
+`;
+
+exports[`yoke regression (before off-shoulder) > garment modified-raglan × closed × cap: every piece in every size 1`] = `
+{
+  "1X": "008aba30eb4a0c2d",
+  "2X": "a82d14604e0ebc5d",
+  "2XS": "1b4bca524483a412",
+  "3X": "d881b6fea3f0aa38",
+  "3XS": "b770f0b9ba40447e",
+  "4X": "c0751fa67a4bdb96",
+  "4XS": "e21d91a8f7768df9",
+  "L": "06bfcf752417a363",
+  "M": "d72a4c7070e481f6",
+  "S": "5bac41e4740f4898",
+  "XS": "d21a18b1bf43dbe4",
+}
+`;
+
+exports[`yoke regression (before off-shoulder) > garment modified-raglan × closed × long: every piece in every size 1`] = `
+{
+  "1X": "bc0a3325bb0c2fb5",
+  "2X": "9e3d7dccf2b9eca0",
+  "2XS": "88abf76d4204056a",
+  "3X": "4def22750f00d3db",
+  "3XS": "18aa45e6627b897a",
+  "4X": "18028cfd23147911",
+  "4XS": "33f7ee0627680203",
+  "L": "14a301d55cb6cd4b",
+  "M": "65bd045e09e23c64",
+  "S": "782533a41af947b0",
+  "XS": "97f94f1f35f72148",
+}
+`;
+
+exports[`yoke regression (before off-shoulder) > garment modified-raglan × closed × short: every piece in every size 1`] = `
+{
+  "1X": "128bcd354317a8ea",
+  "2X": "2ca09ba3191f4b7a",
+  "2XS": "e030379218ac2af7",
+  "3X": "0100b81172425829",
+  "3XS": "77725e953af8c4f3",
+  "4X": "0a6652335aee8efb",
+  "4XS": "1cea5aa6bbc40e66",
+  "L": "c9e244382aa9282d",
+  "M": "9edb8e97919755ee",
+  "S": "5abaeb84dad6005a",
+  "XS": "da4279a8ee8abe37",
+}
+`;
+
+exports[`yoke regression (before off-shoulder) > garment raglan × cardigan × cap: every piece in every size 1`] = `
+{
+  "1X": "3fdea7c4aca412e2",
+  "2X": "2309f399bc0b4e43",
+  "2XS": "7db05381e9d6504a",
+  "3X": "d1ffe45270174ca8",
+  "3XS": "8372bc55c9a1c555",
+  "4X": "b773fe787083ada7",
+  "4XS": "520f66fd495efc4c",
+  "L": "5b833b8d82ca345e",
+  "M": "5fcece08a46f7e07",
+  "S": "700e2414eee2a615",
+  "XS": "d9b2d0f13d658fe8",
+}
+`;
+
+exports[`yoke regression (before off-shoulder) > garment raglan × cardigan × long: every piece in every size 1`] = `
+{
+  "1X": "22684957b7e77c57",
+  "2X": "40d86ba8dfd8e653",
+  "2XS": "68c4123a98acf4af",
+  "3X": "c43c6622af8dd830",
+  "3XS": "743ca5d3649ae6da",
+  "4X": "f9669749b65bcb08",
+  "4XS": "397119a10fcc3947",
+  "L": "594f32eb85124413",
+  "M": "477b19e0aee1db6e",
+  "S": "51282616aa8d66dc",
+  "XS": "8057d018e9bd67a8",
+}
+`;
+
+exports[`yoke regression (before off-shoulder) > garment raglan × cardigan × short: every piece in every size 1`] = `
+{
+  "1X": "da865bae68bd8188",
+  "2X": "40aeb10cb58038ee",
+  "2XS": "135f0e7c4c8e8627",
+  "3X": "88e895c07d46d218",
+  "3XS": "2884c6d8222ea60f",
+  "4X": "f36e16a1644d3b35",
+  "4XS": "e01d84aa668b0c49",
+  "L": "3441241e0c91830b",
+  "M": "f0857b5ad711f476",
+  "S": "1ef9c5bce03468f1",
+  "XS": "273ab6d4c1d1f1fe",
+}
+`;
+
+exports[`yoke regression (before off-shoulder) > garment raglan × closed × cap: every piece in every size 1`] = `
+{
+  "1X": "b6a0b9667c93716a",
+  "2X": "1696d377ab42e3f3",
+  "2XS": "1620d31f96c6ff78",
+  "3X": "cb106813a6a8b06e",
+  "3XS": "79c3ff9e532b2b50",
+  "4X": "08debee1ecd93c39",
+  "4XS": "83ef12aef992855a",
+  "L": "a10b680d155e9272",
+  "M": "81cb75c11ffdcfd5",
+  "S": "f935ad32fa6b0fe8",
+  "XS": "33dc6e96f8711d31",
+}
+`;
+
+exports[`yoke regression (before off-shoulder) > garment raglan × closed × long: every piece in every size 1`] = `
+{
+  "1X": "d130b76c89dc3236",
+  "2X": "e4c5c2607655c16c",
+  "2XS": "47455ca3a1652608",
+  "3X": "ca8f728ee4bbdcda",
+  "3XS": "09258725f65c8a0c",
+  "4X": "d6db368b6b612723",
+  "4XS": "47dc5940288c2dcd",
+  "L": "d099c162d6501b99",
+  "M": "e93224f2be8b1c98",
+  "S": "290a22d3ced5b2bd",
+  "XS": "dd633934e19c4aef",
+}
+`;
+
+exports[`yoke regression (before off-shoulder) > garment raglan × closed × short: every piece in every size 1`] = `
+{
+  "1X": "1516a1f647330b4c",
+  "2X": "99141a6da9939596",
+  "2XS": "acd9ee39293c39f6",
+  "3X": "cd0a9968aaeed577",
+  "3XS": "0983edffb9aa7735",
+  "4X": "0fdc37755f0760c3",
+  "4XS": "806380c9a636d900",
+  "L": "825607a6c508d33c",
+  "M": "83a9feec80a0d60b",
+  "S": "db4912111c31a593",
+  "XS": "09d04ea8235fab01",
+}
+`;
+
+exports[`yoke regression (before off-shoulder) > raglan, back start × boat × cardigan 1`] = `
+{
+  "1X": "d5449e9dade97db8",
+  "2X": "71448610eaccb32b",
+  "2XS": "f74ee043327556b8",
+  "3X": "dffaee097bcb9e4b",
+  "3XS": "72fdd7acacd25e40",
+  "4X": "a840535306fbdb6c",
+  "4XS": "bb09afc4b22e9e31",
+  "L": "bf5bd5be12fcdd39",
+  "M": "25661789e020e854",
+  "S": "8c0936b918ea05ed",
+  "XS": "356c48d40f842e93",
+}
+`;
+
+exports[`yoke regression (before off-shoulder) > raglan, back start × boat × closed 1`] = `
+{
+  "1X": "38bf3dbbb4002208",
+  "2X": "3939325e390b4e41",
+  "2XS": "049f3bfac7194834",
+  "3X": "e63aa35b1cb63d93",
+  "3XS": "56b68b26417e25ac",
+  "4X": "75e004b26f54af9f",
+  "4XS": "4757a0ea35105e40",
+  "L": "805ffc7e50c82439",
+  "M": "a2f0cb06ccbddc86",
+  "S": "8215f93ed760d3da",
+  "XS": "1a967ba6da15114d",
+}
+`;
+
+exports[`yoke regression (before off-shoulder) > raglan, back start × round × cardigan 1`] = `
+{
+  "1X": "d461a8ed35ebace7",
+  "2X": "c9e44ce593a88fa3",
+  "2XS": "ce7ff5870d288103",
+  "3X": "a71bf2546daddaef",
+  "3XS": "031caa85d2553c80",
+  "4X": "76101c0ae04ef9a8",
+  "4XS": "ea1c377bb31ddf7a",
+  "L": "7a679caa17b0c7d3",
+  "M": "8fe24329c393453a",
+  "S": "bf7fc96558e8414d",
+  "XS": "f1a60468bd20a0a6",
+}
+`;
+
+exports[`yoke regression (before off-shoulder) > raglan, back start × round × closed 1`] = `
+{
+  "1X": "c8231401e9ee09a1",
+  "2X": "e69e753514b53fbf",
+  "2XS": "8c2b13bf4659eb81",
+  "3X": "a8246eab6a0dcb1e",
+  "3XS": "222ac51abaabf07f",
+  "4X": "2481180ad27ab170",
+  "4XS": "58990036482a252a",
+  "L": "8078d5eaf0fc3c23",
+  "M": "80e8b963a0d97935",
+  "S": "20e5d26bf9e3abcf",
+  "XS": "c2ef8bd49d7f79a7",
+}
+`;
+
+exports[`yoke regression (before off-shoulder) > raglan, back start × square × cardigan 1`] = `
+{
+  "1X": "5b51744ace02deaf",
+  "2X": "608f8a0b1e9f9b43",
+  "2XS": "e05b7638a426aa39",
+  "3X": "997ed91f3b7c51a1",
+  "3XS": "ff696ffe97d80044",
+  "4X": "f9103c0e4ae8f87a",
+  "4XS": "9b3d57c8810dea7d",
+  "L": "949a46086c2ba663",
+  "M": "13f0d76fd31f95e1",
+  "S": "e696056eadb17690",
+  "XS": "0fcc09899e108bef",
+}
+`;
+
+exports[`yoke regression (before off-shoulder) > raglan, back start × square × closed 1`] = `
+{
+  "1X": "85bc0d38ce309979",
+  "2X": "44b9427138f8b19d",
+  "2XS": "6a7844418236095d",
+  "3X": "30ff32400975900e",
+  "3XS": "19c88ed72a20f446",
+  "4X": "000360b4879e43bc",
+  "4XS": "91bacceaa8b3aa32",
+  "L": "379016a6e568b05e",
+  "M": "940b2f104a9ee827",
+  "S": "89954a697e023131",
+  "XS": "f6b1e3a3c82df4cf",
+}
+`;
+
+exports[`yoke regression (before off-shoulder) > raglan, back start × v × cardigan 1`] = `
+{
+  "1X": "0dda57c3cdb419b9",
+  "2X": "08dbccc8396c7677",
+  "2XS": "327dacd30d1c402b",
+  "3X": "8d942aeaf30ce371",
+  "3XS": "8489eccc5d09aa6d",
+  "4X": "38472513de42f0d2",
+  "4XS": "8d98e0a5a2b17dbd",
+  "L": "8c57b621ea038d27",
+  "M": "043f4a51d0e90197",
+  "S": "d88248136f695248",
+  "XS": "22addaaab9c93357",
+}
+`;
+
+exports[`yoke regression (before off-shoulder) > raglan, back start × v × closed 1`] = `
+{
+  "1X": "1ac5aed083a72598",
+  "2X": "5c7ee493ba61a80f",
+  "2XS": "7b535111ae07844d",
+  "3X": "3c79c7b797190b1b",
+  "3XS": "4b4f95ed702e7e1d",
+  "4X": "a4607d48d7b5b81e",
+  "4XS": "b65f217947664786",
+  "L": "e4f6171da7ec7120",
+  "M": "3371e3cd0ee4b4dd",
+  "S": "62c549a859884607",
+  "XS": "f25a5b4b3b95163b",
+}
+`;
+
+exports[`yoke regression (before off-shoulder) > raglan, whole neck × boat × cardigan 1`] = `
+{
+  "1X": "b2e7bda3f5dc1651",
+  "2X": "56d5c421a580fdfb",
+  "2XS": "7ae511204c90a404",
+  "3X": "ea628ceb2e134c95",
+  "3XS": "424a27c148dbff38",
+  "4X": "e9cdba8c52540c8f",
+  "4XS": "8af0ae476b748f7d",
+  "L": "c7a16d54bce479ab",
+  "M": "63935fcc04aca769",
+  "S": "42bdd24622f9e244",
+  "XS": "00e81c6aa3659375",
+}
+`;
+
+exports[`yoke regression (before off-shoulder) > raglan, whole neck × boat × closed 1`] = `
+{
+  "1X": "5de041dc1eb33f17",
+  "2X": "c4a30da2628e2252",
+  "2XS": "2fa1eae6644c5d42",
+  "3X": "724e166c135e5640",
+  "3XS": "20a7b7b56051e123",
+  "4X": "ac2db9428a0e0627",
+  "4XS": "1b945739832ce430",
+  "L": "600235830a5b2940",
+  "M": "7414a275dcbd64cf",
+  "S": "8927ced3927188ba",
+  "XS": "e8a9140d706f2d6d",
+}
+`;
+
+exports[`yoke regression (before off-shoulder) > raglan, whole neck × round × cardigan 1`] = `
+{
+  "1X": "5173a09d0c809e61",
+  "2X": "0431b8d9f7b7f406",
+  "2XS": "3971803a22ad1e8f",
+  "3X": "27ee16f97bb35304",
+  "3XS": "518967bc5168b020",
+  "4X": "d667206fd658dd83",
+  "4XS": "66f966e98d8ea7a2",
+  "L": "b6912120d380025c",
+  "M": "22d6677e26e86b6d",
+  "S": "81f60c5eb1e7f4e7",
+  "XS": "88d56a45acb24de4",
+}
+`;
+
+exports[`yoke regression (before off-shoulder) > raglan, whole neck × round × closed 1`] = `
+{
+  "1X": "931483be951c0e35",
+  "2X": "a234f9c6fdc2437d",
+  "2XS": "939058f7ab30ff16",
+  "3X": "09f20dc9c3e6f9d1",
+  "3XS": "39543edb5b0abadf",
+  "4X": "355859d1a9e47c74",
+  "4XS": "ebc12aea99f1d3bd",
+  "L": "691b0ed227b8f5fb",
+  "M": "20007da8ec4839a4",
+  "S": "77b102e5927fd27e",
+  "XS": "9fed73558f00fd37",
+}
+`;
+
+exports[`yoke regression (before off-shoulder) > raglan, whole neck × square × cardigan 1`] = `
+{
+  "1X": "c7e4ca37b70f82b0",
+  "2X": "f7870600e8139a43",
+  "2XS": "30c887cb1af97e8b",
+  "3X": "d9ef4336332ead64",
+  "3XS": "7017707063ce8b8a",
+  "4X": "b02ac04e244484db",
+  "4XS": "cf3f95c37aad02f6",
+  "L": "160a8a59c3cbda62",
+  "M": "9a6b360350761ddf",
+  "S": "dd514fc1aa5588f6",
+  "XS": "a22c1fdc0969c157",
+}
+`;
+
+exports[`yoke regression (before off-shoulder) > raglan, whole neck × square × closed 1`] = `
+{
+  "1X": "0fe9f70d4b96d506",
+  "2X": "0aa9ecb6c47cf1c7",
+  "2XS": "fdffe75bc3d81eb4",
+  "3X": "172348cacf0418d9",
+  "3XS": "3b8ecd2c3f2a97e7",
+  "4X": "a6f80cf2d3cb425c",
+  "4XS": "42d7d1d6e81d5e02",
+  "L": "eaa8dcc014692c27",
+  "M": "926810eed569495e",
+  "S": "39e9772e46e2f775",
+  "XS": "c697f55d43f779b6",
+}
+`;

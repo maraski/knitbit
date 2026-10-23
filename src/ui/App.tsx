@@ -73,6 +73,15 @@ export function App({ start }: { start: StartState }) {
   const compare = (compareRaw ?? project.sizes.map((s) => s.id)).filter((id) => project.sizes.some((s) => s.id === id));
   const side = useSidePanels(view.panels);
   const [measSel, setMeasSel] = useState<string | null>(null);
+  // A property panel's link to a measurement (e.g. the off-shoulder drop): open it in Measurements.
+  useEffect(() => {
+    const onMeas = (e: Event) => {
+      setCenter('measurements');
+      setMeasSel((e as CustomEvent<string>).detail);
+    };
+    window.addEventListener('knitbit:measurement', onMeas);
+    return () => window.removeEventListener('knitbit:measurement', onMeas);
+  }, []);
   const [importing, setImporting] = useState(false);
   // New garment dialog; 'first' = first run (nothing saved yet).
   const [newGarment, setNewGarment] = useState<'closed' | 'open' | 'first'>(start.firstRun ? 'first' : 'closed');

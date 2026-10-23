@@ -213,6 +213,7 @@ const panel = obj({
       obj({
         style: optional(oneOf('contiguous', 'raglan')),
         raglan: optional(obj({ sleeveTop: dimExpr })),
+        offShoulder: optional(obj({ bandEase: dimExpr, ringEase: dimExpr, armArc: dimExpr, backRaise: dimExpr })),
         start: optional(oneOf('back', 'neck')),
         shortRows: optional(obj({ frontCo: dimExpr, pairs: dimExpr, first: dimExpr, step: dimExpr })),
         increase: obj({ type: oneOf('kfb', 'm1', 'other'), symbol: str }),
@@ -224,7 +225,7 @@ const panel = obj({
         depth: obj({ mode: oneOf('back-length', 'armhole'), backLength: dimExpr, extra: dimExpr, deepen: bool, maxRapid: dimExpr }),
         body: obj({ width: dimExpr, increases: bool, zone: dimExpr }),
         underarm: obj({ castOn: dimExpr }),
-        neck: obj({ shape: oneOf('round', 'v', 'square', 'boat'), depth: dimExpr, centre: dimExpr, width: optional(dimExpr), backDepth: optional(dimExpr) }),
+        neck: obj({ shape: oneOf('round', 'v', 'square', 'boat', 'off-shoulder'), depth: dimExpr, centre: dimExpr, width: optional(dimExpr), backDepth: optional(dimExpr) }),
       }),
     ),
   ),

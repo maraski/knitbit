@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { CONTIGUOUS_CREDIT, OPENINGS, parseTags, setOpening } from '../../engine/garment';
-import { changeMethod, garmentChoice, lengthsFor, METHODS, NECKLINES, necklinesFor, setNeckline, setSleeve, setSleeveLength, SLEEVES, sleevesFor, type GarmentMethod, type SleeveChoice } from '../../engine/garmentSetup';
+import { changeMethod, garmentChoice, lengthsFor, METHODS, NECKLINES, necklinesFor, offShoulderNote, setNeckline, setSleeve, setSleeveLength, SLEEVES, sleevesFor, type GarmentMethod, type SleeveChoice } from '../../engine/garmentSetup';
 import { SLEEVE_LENGTHS } from '../../engine/sleeveLength';
 import type { FrontOpening, Id, Project, SleeveLength } from '../../engine/model';
 import { generateBodyAndSleeves, missingYokePanels } from '../../engine/contiguousGarment';
@@ -54,7 +54,7 @@ export function GarmentSettings({ project, update, sizeId }: Props & { sizeId: I
           {choice.method === 'custom' && <option value="custom" disabled>Custom (your own pieces)</option>}
           {METHODS.filter((m) => m.id !== 'blank').map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
         </select>
-        <div className="hint">{method.description}</div>
+        <div className="hint">{choice.neckline === 'off-shoulder' ? offShoulderNote(choice.method) : method.description}</div>
       </div>
       {pending && (
         <div className="method-changes" role="alertdialog" aria-label={pending.title}>
@@ -78,9 +78,10 @@ export function GarmentSettings({ project, update, sizeId }: Props & { sizeId: I
             update((p) => setOpening(p, opening));
           }}
         >
-          {OPENINGS.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
+          {/* Off-shoulder is a pullover only for now. */}
+          {OPENINGS.map((o) => <option key={o.id} value={o.id} disabled={choice.neckline === 'off-shoulder' && o.id === 'cardigan' && choice.opening !== 'cardigan'}>{o.label}</option>)}
         </select>
-        <div className="hint">{opening.description}</div>
+        <div className="hint">{opening.description}{choice.neckline === 'off-shoulder' && choice.opening !== 'cardigan' ? ' An off-shoulder neckline is pullover only for now.' : ''}</div>
       </div>
       {changes.length > 0 && (
         <ul className="hint changes">
@@ -92,7 +93,7 @@ export function GarmentSettings({ project, update, sizeId }: Props & { sizeId: I
           <div className="field">
             <label>Neckline</label>
             <select value={choice.neckline} onChange={(e) => update((p) => setNeckline(p, e.target.value as typeof choice.neckline))} title="Sets the front and back necks (and the shoulder tops) to this shape’s defaults">
-              {NECKLINES.filter((n) => n.id === choice.neckline || necklinesFor(choice.method).includes(n.id)).map((n) => <option key={n.id} value={n.id}>{n.label}</option>)}
+              {NECKLINES.filter((n) => n.id === choice.neckline || necklinesFor(choice.method, choice.opening).includes(n.id)).map((n) => <option key={n.id} value={n.id}>{n.label}</option>)}
             </select>
           </div>
           <div className="field">

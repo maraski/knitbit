@@ -27,7 +27,7 @@ export function derivedMeasurement(name: string): Measurement {
  * so the UI can mark them for checking. Expressions refer to table columns. The new sizing table has most of these;
  * the estimates are only seeded for tables that lack them (e.g. older tables).
  */
-export const ESTIMATED_MEASUREMENTS: { name: string; label: string; expr: string; note: string; region?: BodyRegion }[] = [
+export const ESTIMATED_MEASUREMENTS: { name: string; label: string; expr: string; note: string; region?: BodyRegion; /** Seeded only when a piece needs it (not with every new table). */ onDemand?: true }[] = [
   { name: 'back_shoulder_width', label: 'Back shoulder width', expr: 'round(cross_back + 3, 0.5)', note: 'Shoulder point to shoulder point across the back.' },
   { name: 'back_neck_width', label: 'Back neck width', expr: 'round(13 + upper_chest * 0.03, 0.5)', note: 'Width of the neck opening at the top of the back.' },
   { name: 'back_neck_drop', label: 'Back neck drop', expr: '2', note: 'Drop of the back neckline below the shoulder line.' },
@@ -47,10 +47,21 @@ export const ESTIMATED_MEASUREMENTS: { name: string; label: string; expr: string
     expr: '(bust - waist) / 4',
     note: 'Share of the bust-to-waist narrowing taken by the back: back waist = waist/2 + ease/2 − waist_shift, front waist = waist/2 + ease/2 + waist_shift.',
   },
+  // Off-shoulder necklines only (raglan.ts). Bodies vary a lot here: measure them.
+  {
+    name: 'off_shoulder_circ',
+    label: 'Off-shoulder circumference',
+    expr: 'round(upper_chest + bicep * 0.6, 0.5)',
+    note: 'Arms down, around both upper arms and the torso at the height of an off-shoulder band.',
+    region: 'upper',
+    onDemand: true,
+  },
+  { name: 'off_shoulder_drop', label: 'Off-shoulder drop', expr: '5', note: 'Shoulder point down to the top edge of an off-shoulder band.', region: 'upper', onDemand: true },
 ];
 
-export function estimatedMeasurements(): Measurement[] {
-  return ESTIMATED_MEASUREMENTS.map((e) => ({
+/** The estimates a new table is seeded with; `all` adds those seeded only when a piece needs them. */
+export function estimatedMeasurements(all = false): Measurement[] {
+  return ESTIMATED_MEASUREMENTS.filter((e) => all || !e.onDemand).map((e) => ({
     ...newMeasurement(e.name, e.label),
     rule: { type: 'expression', expr: e.expr },
     estimate: true,
@@ -65,7 +76,7 @@ export function ensureEstimates(project: Project, names: string[]): { project: P
   const derived = Object.entries(DERIVED_FROM_NEW)
     .filter(([n, d]) => names.includes(n) && !have.has(n) && d.needs.every((x) => have.has(x)))
     .map(([n]) => derivedMeasurement(n));
-  const add = [...derived, ...estimatedMeasurements().filter((m) => names.includes(m.name) && !have.has(m.name))];
+  const add = [...derived, ...estimatedMeasurements(true).filter((m) => names.includes(m.name) && !have.has(m.name))];
   if (!add.length) return { project, added: [] };
   return { project: { ...project, measurements: [...project.measurements, ...add] }, added: add.map((m) => m.name) };
 }
