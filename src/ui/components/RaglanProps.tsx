@@ -1,13 +1,16 @@
-import { defaultShortRows } from '../../engine/contiguous';
+import { defaultShortRows, type YokeResult } from '../../engine/contiguous';
 import { generateBodyAndSleeves, missingYokePanels } from '../../engine/contiguousGarment';
+import { edgesOf } from '../../engine/edgeTreatments';
 import { garmentChoice, NECKLINES, necklinesFor, setNeckline } from '../../engine/garmentSetup';
 import { dim, type DimExpr, type NecklineShape, type YokeSpec, type YokeStart } from '../../engine/model';
+import type { Units } from '../../engine/units';
 import { computePanel } from '../../engine/panel';
 import { defaultOffShoulder, RAGLAN_SLEEVE_TOP } from '../../engine/raglan';
 import { SYMBOLS } from '../../engine/symbols';
 import { editPanel } from '../edit';
 import { len } from '../format';
 import { ExprField } from './ExprField';
+import { NeckbandFold } from './NeckbandFold';
 import { IssueList, type PropsContext } from './Properties';
 import { NeckWorked, ParamField, ShortRowsWorked } from './YokeProps';
 
@@ -37,6 +40,12 @@ function incRows(rows: number[], fast: number, first = 1): string {
   if (!fast) return `rows ${rowRuns(rows)}`;
   const slow = rows.filter((r) => (r - first) % 2 === 0);
   return `every other row (rows ${slow[0]}–${slow[slow.length - 1]}), plus rows ${rows.filter((r) => (r - first) % 2 === 1).join(', ')}`;
+}
+
+/** The off-shoulder band in words: its stitch, depth and rows (a folded band: finished depth, knit twice). */
+function bandWords(o: NonNullable<YokeResult['offShoulder']>, units: Units): string {
+  if (!o.fold) return `${o.pattern.name}, ${len(o.bandCm, units)}, ${o.bandRows} rows`;
+  return `folded, ${len(o.bandCm, units)} finished: ${o.fold.depthRows} rows of facing, a ${o.fold.turn} turning round and ${o.fold.depthRows} rows outside, ${o.fold.close === 'knit' ? 'knit closed' : 'sewn down'} (${o.bandRows} rows)`;
 }
 
 /** Open a measurement in the Measurements view (App listens). */
@@ -98,8 +107,9 @@ export function RaglanProps({ ctx }: { ctx: PropsContext }) {
       {cm('Back raise, short rows after the increase round (cm)', (s) => (s.offShoulder ?? defaultOffShoulder()).backRaise, (s, d) => (osSet(s).backRaise = d), 'backRaise')}
       <p className="hint">
         A back raise reads back as the Modified raglan, 0 (a level band) as the Classic: it’s the same garment either way. The band is the Neckband edge (Garment tab):
-        {o ? ` ${o.pattern.name}, ${len(o.bandCm, ctx.units)}, ${o.bandRows} rows` : ''}.
+        {o ? ` ${bandWords(o, ctx.units)}` : ''}.
       </p>
+      {edgesOf(project).neckband.enabled && edgesOf(project).neckband.method === 'with-panel' && <NeckbandFold project={project} update={update} />}
       {(o?.backRaiseCm ?? 0) > 0 && (
         <>
           {num('Short-row pairs', 'srPairs', (s) => (s.shortRows ?? defaultShortRows()).pairs, (s, d) => (sr(s).pairs = d))}
@@ -146,7 +156,7 @@ export function RaglanProps({ ctx }: { ctx: PropsContext }) {
             </thead>
             <tbody>
               {y.phases.map((ph) => (
-                <tr key={ph.id}>
+                <tr key={`${ph.id}${ph.from}`}>
                   <td>{ph.label}</td>
                   <td>
                     {ph.from}–{ph.to} ({ph.to - ph.from + 1})
@@ -163,7 +173,17 @@ export function RaglanProps({ ctx }: { ctx: PropsContext }) {
             {o ? (
               <>
                 <div>
-                  Cast on <b>{o.bandSts}</b> all round for the band and join in the round; {o.pattern.name}, rows 1–{o.bandRows} ({len(o.bandCm, ctx.units)}).
+                  Cast on <b>{o.bandSts}</b> all round for the band and join in the round;{' '}
+                  {o.fold ? (
+                    <>
+                      stockinette, rows 1–{o.fold.depthRows} (the facing); row {o.fold.depthRows + 1}, {o.fold.turn === 'picot' ? 'picot turning round: *yo, k2tog*' : 'purl turning round'}; rows {o.fold.depthRows + 2}–{o.bandRows} stockinette
+                      {o.fold.close === 'knit' ? `, knitting each stitch together with its cast-on loop on row ${o.bandRows}` : ', then sew the facing down inside'} ({len(o.bandCm, ctx.units)} finished).
+                    </>
+                  ) : (
+                    <>
+                      {o.pattern.name}, rows 1–{o.bandRows} ({len(o.bandCm, ctx.units)}).
+                    </>
+                  )}
                 </div>
                 <div>
                   Row {o.incRow}, the increase round: {o.ringSts - o.bandSts} sts spread evenly to <b>{o.ringSts}</b> ({len(o.ringSts / y.stitchesPerCm, ctx.units)}): left front {o.ringZones.leftFront} · left

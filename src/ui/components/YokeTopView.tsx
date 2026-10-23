@@ -116,8 +116,10 @@ export function YokeTopView({ project, panel, computed: c, view, mode, compare, 
   const buttonDrag = useRef<{ index: number; key: string; last: number } | null>(null);
 
   const y = c.yoke;
-  const geo = useMemo(() => (y ? topGeometry(y) : null), [y]);
-  const all = useMemo(() => compare.filter((x) => x.yoke).map((x) => ({ c: x, g: topGeometry(x.yoke!) })), [compare]);
+  // The stitch chart shows every row (a folded band's facing too); the schematic the band folded.
+  const fold = view !== 'chart';
+  const geo = useMemo(() => (y ? topGeometry(y, fold) : null), [y, fold]);
+  const all = useMemo(() => compare.filter((x) => x.yoke).map((x) => ({ c: x, g: topGeometry(x.yoke!, fold) })), [compare, fold]);
   const maxR = Math.max(geo?.outerR ?? 1, ...(mode === 'overlay' ? all.map((a) => a.g.outerR) : []));
 
   // The key box sits at the top left in one-size mode: fit the drawing below it.
@@ -320,7 +322,10 @@ export function YokeTopView({ project, panel, computed: c, view, mode, compare, 
           {y.offShoulder ? (
             <>
               <div>
-                Band: cast on <b>{y.offShoulder.bandSts}</b> all round ({len(y.offShoulder.bandSts / y.stitchesPerCm, units)}) · {y.offShoulder.pattern.name} · rows 1–{y.offShoulder.bandRows} ({len(y.offShoulder.bandCm, units)})
+                Band: cast on <b>{y.offShoulder.bandSts}</b> all round ({len(y.offShoulder.bandSts / y.stitchesPerCm, units)}) ·{' '}
+                {y.offShoulder.fold
+                  ? `folded stockinette · facing rows 1–${y.offShoulder.fold.depthRows}${fold ? ' (drawn folded inside)' : ''}, ${y.offShoulder.fold.turn} turning round row ${y.offShoulder.fold.depthRows + 1}, outside to row ${y.offShoulder.bandRows}${y.offShoulder.fold.close === 'knit' ? ' (joined to the cast-on)' : ', facing sewn down'} · ${len(y.offShoulder.bandCm, units)} finished`
+                  : `${y.offShoulder.pattern.name} · rows 1–${y.offShoulder.bandRows} (${len(y.offShoulder.bandCm, units)})`}
               </div>
               <div>
                 Increase round, row {y.offShoulder.incRow}: to the ring, <b>{y.offShoulder.ringSts}</b> ({len(y.offShoulder.ringSts / y.stitchesPerCm, units)}): front {y.offShoulder.ringZones.leftFront} · sleeve {y.offShoulder.ringZones.leftSleeve} · back {y.offShoulder.ringZones.back} · sleeve {y.offShoulder.ringZones.rightSleeve} · front {y.offShoulder.ringZones.rightFront}

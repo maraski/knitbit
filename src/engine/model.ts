@@ -409,6 +409,13 @@ export interface EdgeTreatment {
   custom: StitchPattern;
   /** Knit with the panel (a pattern section, or extra stitches for front bands) or added later (picked up / sewn on). */
   method: 'with-panel' | 'later';
+  /**
+   * Neckband only, knit with the panels (an off-shoulder band): a folded band instead of `stitch`. Worked in
+   * stockinette twice `depth` deep with a turning round between (a purl round, or picot: yo, k2tog), then joined to
+   * the cast-on by knitting each stitch together with its cast-on loop ('knit') or sewn down afterwards ('sewn').
+   * Absent = a single band in `stitch`.
+   */
+  fold?: { turn: 'purl' | 'picot'; close: 'knit' | 'sewn' };
 }
 
 export type EdgeTreatments = Record<EdgeTreatmentId, EdgeTreatment>;

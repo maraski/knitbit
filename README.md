@@ -647,7 +647,7 @@ a stitch (1×1 rib = 2n, 2×2 rib = 4n + 2, garter, seed = 2n + 1, or a custom m
 |---|---|---|
 | Hem | a *Hem rib* pattern section at the lower edge of the back and fronts | a pick-up join on their lower edges |
 | Cuff | a *Cuff rib* section on the sleeves | a pick-up join on the sleeves' lower edges |
-| Neckband | an off-shoulder neckline only: the band, knit first with the yoke (see *Off-shoulder*) | a *Neckband* strip, picked up from every neckline |
+| Neckband | an off-shoulder neckline only: the band, knit first with the yoke, single or folded (see *Off-shoulder*) | a *Neckband* strip, picked up from every neckline |
 | Front bands | integrated: extra stitches at each front edge | picked up, or knit sideways and sewn on (per band, see below) |
 
 Changing any setting applies them to the panels you have; things made by a treatment are marked (`edge`) and
@@ -885,7 +885,8 @@ back as Modified, 0 as Classic (the same garment either way).
 | Increase round | `ringEase` 0 % | the row after the band: up to `off_shoulder_circ × (1 + ringEase)`, spread evenly in each zone |
 | Ring | `armArc` = `bicep × 0.5` per sleeve | each sleeve zone is the arm arc plus its two raglan lines; the rest is half front, half back |
 | Back raise | 0 (Classic) / 2 cm (Modified) | short-row pairs from the back raise (editable: pairs, first turn, step), turning in the fronts |
-| Depth | `armhole_depth − off_shoulder_drop + back_raise` (band top to underarm at the back) | the band and the increase round count inside it; the rates are solved as for the classic raglan |
+| Folded band | off (*Band: Single*); folded = purl turning round, knit closed | *Band: Folded* (Garment tab → Neckband, or the yoke's Off-shoulder part): stockinette, the depth is the **finished** band, worked as that many rows of facing, a turning round (purl, or picot: yo, k2tog, an even count) and as many rows outside; the outside's last round knits each stitch together with its cast-on loop (*knit closed*), or the facing is sewn down (*sewn*). Same band ease; no elastic |
+| Depth | `armhole_depth − off_shoulder_drop + back_raise` (band top to underarm at the back) | the band and the increase round count inside it (a folded band's facing and turning round are added on top: they fold inside); the rates are solved as for the classic raglan |
 
 Choosing off-shoulder pre-sets the neckband and removes a neckband strip (and its pick-up join); choosing another
 neckline goes back to the default neckband and makes the strip again. The yoke's properties have an *Off-shoulder*
@@ -896,7 +897,10 @@ repeat in the gutter), the increase round (*Inc*) and the raglan rows; the flat 
 the ring as a landmark. **Checks**: band ease above −5 % (may slide down) or below −20 % (too tight over the arms), a
 band wider than the ring, body zones at or below 0 (arm arc too big), less than 4 cm between the band and the underarm
 at the front, a cardigan (errors), and the raglan's split higher than `armhole_depth` measured from the band. Every
-sleeve length works, cap to long. Later (planned): a folded casing for elastic. See `docs/off-shoulder-plan.md`.
+sleeve length works, cap to long. A folded band shows its facing, turning round and outside in the rows table and
+the chart (*Facing*, *Turn*, *Band*; the joining round as *k-CO*), every row as a ring in the top view's chart, and the
+band folded (from its turning round) in the top view's schematic. Later: an i-cord edge. See
+`docs/off-shoulder-plan.md`.
 
 ## Short-row segments
 

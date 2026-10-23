@@ -7,6 +7,8 @@ import { PropsLoading } from './Properties';
 
 // Front-band settings (buttons, attachment) load the first time a cardigan's bands are shown.
 const BandSettings = lazy(() => import('./BandSettings').then((m) => ({ default: m.BandSettings })));
+// An off-shoulder band's type (single or folded) loads with the first off-shoulder neckband knit with the yoke.
+const NeckbandFold = lazy(() => import('./NeckbandFold').then((m) => ({ default: m.NeckbandFold })));
 
 interface Props {
   project: Project;
@@ -39,6 +41,9 @@ export function EdgeSettings({ project, sizeId, update }: Props) {
       {shown.map((d) => {
         const t = edges[d.id];
         const p = edgePattern(t);
+        // An off-shoulder band knit with the yoke can be folded (stockinette, no stitch to choose).
+        const yokeBand = d.id === 'neckband' && nbWithPanel && t.method === 'with-panel';
+        const folded = yokeBand && !!t.fold;
         return (
           <div key={d.id} className={`edge-treatment${t.enabled ? '' : ' off'}`}>
             <label className="check">
@@ -48,7 +53,7 @@ export function EdgeSettings({ project, sizeId, update }: Props) {
             {t.enabled && (
               <>
                 <ExprField
-                  label={`${d.depthLabel} (cm)`}
+                  label={`${d.depthLabel}${folded ? ', finished' : ''} (cm)`}
                   value={t.depth}
                   sizeId={sizeId}
                   sizeName={sizeName}
@@ -57,6 +62,12 @@ export function EdgeSettings({ project, sizeId, update }: Props) {
                   fieldKey={`edges.${d.id}.depth`}
                   onChange={(depth, key) => set(d.id, { ...t, depth }, key)}
                 />
+                {yokeBand && (
+                  <Suspense fallback={<PropsLoading />}>
+                    <NeckbandFold project={project} update={update} />
+                  </Suspense>
+                )}
+                {!folded && (
                 <div className="row2">
                   <div className="field">
                     <label>Stitch</label>
@@ -81,6 +92,7 @@ export function EdgeSettings({ project, sizeId, update }: Props) {
                     </div>
                   )}
                 </div>
+                )}
                 {d.id === 'frontBands' ? (
                   <Suspense fallback={<PropsLoading />}>
                     <BandSettings project={project} sizeId={sizeId} update={update} />

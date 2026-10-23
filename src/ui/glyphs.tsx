@@ -2,7 +2,7 @@
 // Shapes follow the common (Craft Yarn Council style) chart conventions.
 
 import type { CustomSymbol } from '../engine/model';
-import { HELD, HOLD, PLAIN } from '../engine/cells';
+import { HELD, HOLD, JOIN, PLAIN } from '../engine/cells';
 
 /** Background tint of a cell, by meaning. */
 export function cellFill(id: string, custom: CustomSymbol[] = []): string {
@@ -12,6 +12,7 @@ export function cellFill(id: string, custom: CustomSymbol[] = []): string {
     case 'bo':
       return 'var(--cell-bo)';
     case 'co':
+    case JOIN:
       return 'var(--cell-co)';
     case HOLD:
       return 'var(--cell-hold)';
@@ -97,6 +98,9 @@ export function Glyph({ id, custom = [] }: { id: string; custom?: CustomSymbol[]
       return <path d="M0.22,0.5 Q0.5,0.2 0.78,0.5" className="glyph" />;
     case 'co':
       return <path d="M0.22,0.5 Q0.5,0.8 0.78,0.5" className="glyph" />;
+    case JOIN:
+      // Knit together (a right-leaning slash) with the cast-on loop below (the cast-on's curve).
+      return <path d="M0.3,0.62 L0.7,0.18 M0.22,0.62 Q0.5,0.92 0.78,0.62" className="glyph" />;
     case HOLD:
       return <path d="M0.3,0.25 L0.3,0.75 M0.7,0.25 L0.7,0.75 M0.3,0.5 L0.7,0.5" className="glyph" />;
     case 'buttonhole':

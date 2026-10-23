@@ -153,7 +153,7 @@ export function NewGarmentDialog({ project, firstRun, onCancel, onCreate, onSamp
                     </div>
                   ))}
                   <p className="hint">
-                    {offShoulder ? 'The neckband is the off-shoulder band: 1×1 rib, 4 cm, knit first with the yoke. ' : ''}Depths, methods and buttons are in the Garment tab afterwards.
+                    {offShoulder ? 'The neckband is the off-shoulder band: 1×1 rib, 4 cm, knit first with the yoke (it can be folded instead, in the Garment tab). ' : ''}Depths, methods and buttons are in the Garment tab afterwards.
                   </p>
                 </>
               )}

@@ -1,9 +1,9 @@
 // A contiguous yoke's stitch chart: zone colours, marker lines, increase symbols, per-zone counts and a phase column.
 // Part of the chart code, kept apart from yokePanel.ts so the schematic doesn't load it. An off-shoulder raglan's
-// band rows show their rib (purls), with the band's repeat in the left gutter.
+// band rows show their rib (purls), with the band's repeat in the left gutter; a folded band its turning and joining rounds.
 
 import type { Chart, ChartRepeat, ChartRow } from './chart';
-import { cellInfo, PLAIN } from './chart';
+import { cellInfo, JOIN, PLAIN } from './chart';
 import { ZONES } from './contiguous';
 import type { Panel, Project, StitchPattern } from './model';
 import type { ComputedPanel } from './panel';
@@ -26,6 +26,13 @@ export function bandPurl(pattern: StitchPattern, i: number, row: number): boolea
   }
 }
 
+/** A folded band row's cell for stitch `i`, or null for a plain knit stitch. */
+export function foldCell(part: 'facing' | 'turn' | 'outer' | 'join', turn: 'purl' | 'picot', i: number): string | null {
+  if (part === 'join') return JOIN;
+  if (part !== 'turn') return null;
+  return turn === 'purl' ? 'purl' : i % 2 === 0 ? 'yo' : 'k2tog';
+}
+
 export function buildYokeChart(project: Project, panel: Panel, c: ComputedPanel): Chart {
   const y = c.yoke!;
   const os = y.offShoulder;
@@ -41,7 +48,15 @@ export function buildYokeChart(project: Project, panel: Panel, c: ComputedPanel)
     // A short row works only its span; the rest of the row stays blank.
     const [from, to] = yr.span ?? [0, yr.total];
     for (let k = starts[0] + from; k < starts[0] + to; k++) if (k >= 0 && k < cols) cells[k] = PLAIN;
-    if (yr.band && os) for (let i = 0; i < yr.total; i++) if (bandPurl(os.pattern, i, yr.row) && starts[0] + i >= 0 && starts[0] + i < cols) cells[starts[0] + i] = 'purl';
+    if (yr.band && os) {
+      for (let i = 0; i < yr.total; i++) {
+        const k = starts[0] + i;
+        if (k < 0 || k >= cols) continue;
+        // A folded band: plain but for its turning round (purl, or picot: yo, k2tog) and its joining round.
+        const v = yr.bandPart ? foldCell(yr.bandPart, os.fold?.turn ?? 'purl', i) : bandPurl(os.pattern, i, yr.row) ? 'purl' : null;
+        if (v) cells[k] = v;
+      }
+    }
     for (const inc of yr.incs) {
       const k = starts[ZONES.indexOf(inc.zone)] + inc.at;
       if (k >= 0 && k < cols) cells[k] = inc.symbol;
@@ -81,7 +96,8 @@ export function buildYokeChart(project: Project, panel: Panel, c: ComputedPanel)
   }
   // The off-shoulder band and its one increase round get short labels: the gutter is narrow (the band's stitch is on
   // its repeat bracket).
-  const phaseLabel = (p: (typeof y.phases)[number]) => (p.id === 'band' ? 'Band' : p.id === 'ring' ? 'Inc' : `${p.id} · ${p.label}`);
+  const bandLabel = (label: string) => (label.startsWith('Band facing') ? 'Facing' : label.startsWith('Turning') ? 'Turn' : 'Band');
+  const phaseLabel = (p: (typeof y.phases)[number]) => (p.id === 'band' ? bandLabel(p.label) : p.id === 'ring' ? 'Inc' : `${p.id} · ${p.label}`);
   const phases: NonNullable<Chart['phases']> = y.phases.filter((p) => p.id !== 'B' && p.id !== 'neck').map((p) => ({ label: phaseLabel(p), fromRow: p.from, toRow: p.to }));
   const repeats: ChartRepeat[] = os
     ? [{ name: `Band: ${os.pattern.name}`, fromRow: 1, toRow: os.bandRows, multiple: os.pattern.multiple, offset: os.pattern.offset, startCol: zoneStarts(y.rows[0], x0)[0] }]
