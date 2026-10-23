@@ -3,7 +3,7 @@
 // read back from the pieces (garmentChoice), so older projects show their method without a migration.
 
 import { yokePanel, yokeWithNeck } from './contiguous';
-import { raglanPanel } from './raglan';
+import { OFF_SHOULDER_NEEDS, offShoulderRaised, raglanPanel } from './raglan';
 import { generateBodyAndSleeves } from './contiguousGarment';
 import { applyEdgeTreatments } from './edgeTreatments';
 import { ensureEstimates } from './estimates';
@@ -12,7 +12,7 @@ import { dropPanelFromJoins } from './joins';
 import type { EaseSettings, EdgeRef, EdgeTreatments, FrontOpening, Join, NecklineShape, Panel, Project, SleeveLength } from './model';
 import { dim, newId } from './model';
 import { sleeveLengthNeeds, sleeveLengthOf, SLEEVE_LENGTHS, sleeveName, withSleeveLength } from './sleeveLength';
-import { backNeckFor, bodice, FRONT_NECKS, sleeve, sleeveLengthsFor, TEMPLATE_MEASUREMENTS, topDownTop, type SleeveType, type TemplateId } from './templates';
+import { backNeckFor, bodice, bodiceNeck, FRONT_NECKS, sleeve, sleeveLengthsFor, TEMPLATE_MEASUREMENTS, topDownTop, type SleeveType, type TemplateId } from './templates';
 
 /**
  * How the garment is built. 'blank' makes no pieces (drawn by hand); a project without bodices reads as 'custom'.
@@ -54,6 +54,9 @@ export const NECKLINES: { id: NecklineShape; label: string }[] = [
   { id: 'boat', label: 'Boat' },
 ];
 
+/** A neckline's name; off-shoulder (a raglan's, offered through necklinesFor) isn't in the list the selects show yet. */
+export const necklineLabel = (shape: NecklineShape) => NECKLINES.find((n) => n.id === shape)?.label ?? (shape === 'off-shoulder' ? 'Off-shoulder' : shape);
+
 export const SLEEVES: { id: SleeveChoice; label: string }[] = [
   { id: 'set-in', label: 'Set-in cap' },
   { id: 'drop', label: 'Drop shoulder' },
@@ -71,14 +74,18 @@ export function sleevesFor(method: GarmentMethod | 'custom'): SleeveChoice[] {
   return ['set-in', 'drop', 'straight', 'none'];
 }
 
-/** Necklines each method can make: the whole-neck start's short rows can't make a V's depth. */
-export function necklinesFor(method: GarmentMethod | 'custom'): NecklineShape[] {
+/**
+ * Necklines each method can make: the whole-neck start's short rows can't make a V's depth; off-shoulder is the
+ * raglans' only (a pullover only, for now).
+ */
+export function necklinesFor(method: GarmentMethod | 'custom', opening: FrontOpening = 'closed'): NecklineShape[] {
   const all = NECKLINES.map((n) => n.id);
-  return method === 'modified-raglan' ? all.filter((n) => n !== 'v') : all;
+  const os: NecklineShape[] = (method === 'raglan' || method === 'modified-raglan') && opening !== 'cardigan' ? ['off-shoulder'] : [];
+  return [...(method === 'modified-raglan' ? all.filter((n) => n !== 'v') : all), ...os];
 }
 
 /** A neckline the method can make: `shape`, or round. */
-const necklineFor = (method: GarmentMethod | 'custom', shape: NecklineShape): NecklineShape => (necklinesFor(method).includes(shape) ? shape : 'round');
+const necklineFor = (method: GarmentMethod | 'custom', shape: NecklineShape, opening: FrontOpening = 'closed'): NecklineShape => (necklinesFor(method, opening).includes(shape) ? shape : 'round');
 
 /** Lengths a sleeve type can be made in, longest first (a cap needs a cap: set-in, or a yoke's sleeves). */
 export function lengthsFor(sleeve: SleeveChoice): SleeveLength[] {
@@ -147,7 +154,8 @@ export function garmentChoice(p: Project): GarmentChoice {
   const opening = p.garment.opening;
   if (p.garment.construction === 'contiguous') {
     const y = p.panels.find((x) => x.yoke)?.yoke;
-    const method: YokeMethod = y?.style === 'raglan' ? 'raglan' : y?.start === 'neck' ? 'modified-raglan' : 'contiguous';
+    // An off-shoulder yoke is always a raglan's; raising the back is what the Modified card does.
+    const method: YokeMethod = y?.style === 'raglan' ? (y.neck.shape === 'off-shoulder' && offShoulderRaised(y) ? 'modified-raglan' : 'raglan') : y?.start === 'neck' ? 'modified-raglan' : 'contiguous';
     const ys = p.panels.find((x) => x.fromYoke === 'leftSleeve' || x.fromYoke === 'rightSleeve');
     return { method, opening, neckline: y?.neck.shape ?? 'round', sleeve: method === 'raglan' ? 'raglan' : 'contiguous', sleeveLength: ys ? sleeveLengthOf(ys) : 'long' };
   }
@@ -214,9 +222,10 @@ function panelPieces(method: 'seamed' | 'top-down', neckline: NecklineShape, sle
 function addPieces(p: Project, method: GarmentMethod, neckline: NecklineShape, sleeveChoice: SleeveChoice, length: SleeveLength, notes: string[]): Project {
   if (method === 'blank') return p;
   if (isYokeMethod(method)) {
-    const q = ensureEstimates(p, TEMPLATE_MEASUREMENTS.yoke).project;
-    const shape = necklineFor(method, neckline);
-    const yoke = method === 'raglan' ? raglanPanel(shape) : yokePanel(shape, method === 'modified-raglan' ? 'neck' : 'back');
+    const shape = necklineFor(method, neckline, p.garment.opening);
+    const q = ensureEstimates(p, [...TEMPLATE_MEASUREMENTS.yoke, ...(shape === 'off-shoulder' ? OFF_SHOULDER_NEEDS : [])]).project;
+    // Off-shoulder is always a raglan yoke; on the Modified card its back is raised.
+    const yoke = method === 'raglan' ? raglanPanel(shape) : shape === 'off-shoulder' ? raglanPanel(shape, 'neck') : yokePanel(shape, method === 'modified-raglan' ? 'neck' : 'back');
     return generateBodyAndSleeves({ ...q, panels: [...q.panels, yoke] }, notes, length);
   }
   const set = panelPieces(method, neckline, sleeveChoice, length);
@@ -272,7 +281,7 @@ export function changeMethod(p: Project, method: Exclude<GarmentMethod, 'blank'>
   // Between yoke methods the sleeves are part of the method: no note.
   if (sleeveChoice !== now.sleeve && now.sleeve !== 'none' && !isYokeMethod(now.method)) notes.push(`Sleeves become ${SLEEVES.find((s) => s.id === sleeveChoice)!.label.toLowerCase()}: this method has no ${SLEEVES.find((s) => s.id === now.sleeve)!.label.toLowerCase()}.`);
   if (length !== now.sleeveLength && now.sleeve !== 'none') notes.push(`Sleeves become ${lengthLabel(length)}: these sleeves can’t be ${lengthLabel(now.sleeveLength)}.`);
-  if (necklineFor(method, now.neckline) !== now.neckline) notes.push(`The neckline becomes round: this method has no ${NECKLINES.find((n) => n.id === now.neckline)!.label} neck.`);
+  if (necklineFor(method, now.neckline, q.garment.opening) !== now.neckline) notes.push(`The neckline becomes round: this method has no ${necklineLabel(now.neckline)} neck.`);
   notes.push('Sizes, gauge, ease and edge settings stay. Undo goes back.');
   return q.edges ? applyEdgeTreatments(q) : q;
 }
@@ -283,10 +292,11 @@ export function changeMethod(p: Project, method: Exclude<GarmentMethod, 'blank'>
  * and both tops follow the opening so the shoulder seams match.
  */
 export function setNeckline(p: Project, shape: NecklineShape): Project {
+  if (shape === 'off-shoulder' && p.panels.some((x) => x.yoke)) p = ensureEstimates(p, OFF_SHOULDER_NEEDS).project;
   const panels = p.panels.map((x): Panel => {
     if (x.yoke) return { ...x, yoke: yokeWithNeck(x.yoke, shape) };
     if (!isBodice(x)) return x;
-    const n = x.template === 'front' ? { ...FRONT_NECKS[shape], shape } : backNeckFor(shape);
+    const n = x.template === 'front' ? { ...FRONT_NECKS[bodiceNeck(shape)], shape: bodiceNeck(shape) } : backNeckFor(shape);
     const neckline = x.neckline && { ...x.neckline, shape: n.shape, width: dim(n.width), depth: dim(n.depth), centreWidth: dim(n.centre) };
     const waypoints = x.waypoints.map((w) => (w.name === 'neck_side' ? { ...w, height: dim(`shoulder.height + ${n.rise}`), width: dim(n.top) } : w));
     return { ...x, neckline, waypoints };

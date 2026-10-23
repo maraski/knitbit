@@ -18,23 +18,25 @@ import { distributeAcross, distributeAuto } from './distribute';
 import { evaluate, scopeFrom } from './expr';
 import { rowsPerCm, stitchesPerCm } from './gauge';
 import { buildScope } from './measurements';
-import type { DimExpr, Id, NecklineShape, Project, YokeSpec, YokeStart } from './model';
+import type { DimExpr, Id, NecklineShape, Project, StitchPattern, YokeSpec, YokeStart } from './model';
 import { dim, newPanel, type Panel } from './model';
-import { backNeckFor, FRONT_NECKS } from './templates';
-import { defaultRaglan, generateRaglan } from './raglan';
+import { backNeckFor, bodiceNeck, FRONT_NECKS } from './templates';
+import { defaultRaglan, generateRaglan, offShoulderRaised } from './raglan';
 
 export type Zone = 'leftFront' | 'leftSleeve' | 'back' | 'rightSleeve' | 'rightFront';
 export const ZONES: Zone[] = ['leftFront', 'leftSleeve', 'back', 'rightSleeve', 'rightFront'];
 export type ZoneCounts = Record<Zone, number>;
 
-export type YokePhase = 'A' | 'C' | 'D' | 'E' | 'R';
+/** Phases of a row; 'band' = an off-shoulder raglan's band, knit first (raglan.ts). */
+export type YokePhase = 'A' | 'C' | 'D' | 'E' | 'R' | 'band';
 
 export interface YokeInc {
   zone: Zone;
   /** Index of the new stitch within its zone (as seen from the RS, after the row). */
   at: number;
   symbol: string;
-  kind: 'seam' | 'backNeck' | 'neck' | 'sleeve' | 'body';
+  /** 'band': an off-shoulder raglan's increase round, from the band to the ring. */
+  kind: 'seam' | 'backNeck' | 'neck' | 'sleeve' | 'body' | 'band';
 }
 
 export interface YokeCastOn {
@@ -51,6 +53,8 @@ export interface YokeRow {
   turn?: { side: 'left' | 'right'; at: number };
   /** A half row with no increases (a pullover's first and last short-row-section rows). */
   plain?: boolean;
+  /** An off-shoulder raglan's band row (rib, in the round, no increases). */
+  band?: boolean;
   phase: YokePhase;
   /** Phase B (back neck increases) is worked on this row too. */
   backNeck: boolean;
@@ -76,7 +80,8 @@ export interface YokeParam {
 }
 
 export interface PhaseSummary {
-  id: 'A' | 'B' | 'neck' | 'C' | 'D' | 'E' | 'R';
+  /** 'band', 'ring': an off-shoulder raglan's band and its increase round to the ring. */
+  id: 'A' | 'B' | 'neck' | 'C' | 'D' | 'E' | 'R' | 'band' | 'ring';
   label: string;
   from: number; // first row
   to: number; // last row
@@ -102,8 +107,9 @@ export interface YokeResult {
   counts: { A: number; B: number; C: number; D: number; E: number; total: number; neckRow: number | null; joinRow: number | null; rapidBase: number };
   start: YokeStart;
   /** Whole-neck start: the short rows. `turns[i]` = stitches left unworked at each front's centre-front end by pair
-   * i + 1; `endRow` = the last flat row of the section (the round starts after it on a pullover). */
-  shortRows: { pairs: number; first: number; step: number; turns: number[]; endRow: number; frontSts: number } | null;
+   * i + 1; `endRow` = the last flat row of the section (the round starts after it on a pullover). `fromRow`: the
+   * section's first row (absent = row 1; an off-shoulder raglan's back raise starts after its band and increase round). */
+  shortRows: { pairs: number; first: number; step: number; turns: number[]; endRow: number; frontSts: number; fromRow?: number } | null;
   seamSts: number;
   capTopSts: number;
   /** Stitches left at the split: each sleeve on hold, the body continues. */
@@ -130,6 +136,10 @@ export interface YokeResult {
   /** A raglan yoke (raglan.ts): the sleeve top at the cast-on, the rows the body and the sleeves increase on (4 sts
    * each), how many of those are extra rows beyond every other row, and the raglan line's length. */
   raglan?: { sleeveTopSts: number; bodyRows: number[]; sleeveRows: number[]; bodyFast: number; sleeveFast: number; lineCm: number };
+  /** An off-shoulder raglan: the band (its count is the cast-on, rows 1..bandRows, in `pattern`), the ring after the
+   * increase round (row `incRow`), the arm arc (sts between the raglan lines), the back raise (cm) and how many rows
+   * the centre front works (all but the short rows). */
+  offShoulder?: { bandSts: number; bandRows: number; bandCm: number; pattern: StitchPattern; ringSts: number; ringZones: ZoneCounts; incRow: number; armSts: number; backRaiseCm: number; frontRows: number };
 }
 
 // ---------- defaults ----------
@@ -149,7 +159,7 @@ export function defaultShortRows(): NonNullable<YokeSpec['shortRows']> {
 
 /** New yokes start with the whole neck, except a V neck: its depth needs the neck increases of the method's start. */
 export function defaultYoke(shape: NecklineShape = 'round', start: YokeStart = shape === 'v' ? 'back' : 'neck'): YokeSpec {
-  const n = FRONT_NECKS[shape];
+  const n = FRONT_NECKS[bodiceNeck(shape)];
   const boat = shape === 'boat';
   return {
     start,
@@ -174,17 +184,31 @@ const BOAT_BACK_LENGTH = 'shoulder_drop * min(1, (shoulder_w - neck_w) / max(1, 
 
 /**
  * A yoke with another neck shape: the neck takes the new shape's defaults, and any other setting still at the old
- * shape's default follows the new shape's default (settings you changed are kept).
+ * shape's default follows the new shape's default (settings you changed are kept). Off-shoulder is always a raglan
+ * yoke: from a modified raglan (a contiguous yoke started with the whole neck) it raises the back, and back from a
+ * raised one it makes a modified raglan again (a level one goes back to the classic raglan).
  */
 export function yokeWithNeck(yoke: YokeSpec, shape: NecklineShape): YokeSpec {
+  const os = (s: NecklineShape) => s === 'off-shoulder';
+  const modified = os(yoke.neck.shape) ? offShoulderRaised(yoke) : yoke.style !== 'raglan' && yoke.start === 'neck';
   // A raglan keeps its start (both make every shape); its defaults are the raglan's.
-  const base = (s: NecklineShape) => (yoke.style === 'raglan' ? defaultRaglan(s, yoke.start ?? 'back') : defaultYoke(s));
-  const before = base(yoke.neck.shape) as unknown as Record<string, unknown>;
-  const after = base(shape) as unknown as Record<string, unknown>;
+  const base = (s: NecklineShape, from: boolean) => {
+    if (os(s)) return defaultRaglan(s, modified ? 'neck' : 'back');
+    if (os(yoke.neck.shape) && !from) return modified ? defaultYoke(s, 'neck') : defaultRaglan(s, 'back');
+    return yoke.style === 'raglan' ? defaultRaglan(s, yoke.start ?? 'back') : defaultYoke(s);
+  };
+  const before = base(yoke.neck.shape, true) as unknown as Record<string, unknown>;
+  const after = base(shape, false) as unknown as Record<string, unknown>;
   const next = { ...yoke } as unknown as Record<string, unknown>;
   for (const k of Object.keys(after)) if (JSON.stringify(next[k]) === JSON.stringify(before[k])) next[k] = after[k];
+  // Settings the new kind of yoke doesn't have go, when they were still the old defaults (a contiguous yoke has no style).
+  for (const k of Object.keys(before)) if (!(k in after) && JSON.stringify(next[k]) === JSON.stringify(before[k])) delete next[k];
+  if (os(shape) || os(yoke.neck.shape)) {
+    if (after.style) next.style = after.style;
+    else delete next.style;
+  }
   // The whole neck is the new shape's (a boat neck's back depth goes with it).
-  return { ...(next as unknown as YokeSpec), neck: base(shape).neck };
+  return { ...(next as unknown as YokeSpec), neck: base(shape, false).neck };
 }
 
 const sum = (z: ZoneCounts) => ZONES.reduce((a, k) => a + z[k], 0);

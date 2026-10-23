@@ -210,7 +210,8 @@ export interface FrontHalf {
   cfSelvedge: number;
 }
 
-export type NecklineShape = 'round' | 'v' | 'square' | 'boat';
+/** 'off-shoulder' is a yoke neckline only (the raglan's): the bodice templates never make it. */
+export type NecklineShape = 'round' | 'v' | 'square' | 'boat' | 'off-shoulder';
 
 export interface Neckline {
   shape: NecklineShape;
@@ -242,6 +243,13 @@ export interface YokeSpec {
    * wide; `depth`, `body.width`, `sleeveWidth` and `underarm` are shared with the contiguous yoke (the shoulder, back
    * neck and cap phases are not used). */
   raglan?: { sleeveTop: DimExpr };
+  /**
+   * Off-shoulder neckline (raglan only, `neck.shape` 'off-shoulder'): a rib band cast on all round at
+   * `off_shoulder_circ × (1 + bandEase)`, an increase round up to the ring (`off_shoulder_circ × (1 + ringEase)`), split
+   * into a sleeve zone of `armArc` cm (plus the raglan lines) each side and the rest half front, half back; then
+   * `backRaise` cm of German short rows raising the back (0 = level band). Fractions for the eases, cm otherwise.
+   */
+  offShoulder?: { bandEase: DimExpr; ringEase: DimExpr; armArc: DimExpr; backRaise: DimExpr };
   increase: { type: YokeIncrease; symbol: string };
   /** Stitches in each shoulder seam group (2; more makes a rounder cap). */
   seamSts: DimExpr;

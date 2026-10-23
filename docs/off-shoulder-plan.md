@@ -3,7 +3,7 @@
 Goal: design an off-shoulder top (the opening sits below the shoulders and around the upper arms) in Knitbit, with
 the band, the yoke, the body and the sleeves all worked out per size.
 
-**Status: planned (2026-10-23), nothing built yet.**
+**Status: M1 (engine) built (2026-10-23); M2 and M3 to do.**
 
 ## Your answers (2026-10-23)
 
@@ -137,6 +137,47 @@ increase round, optional back-raise short rows), the two new measurements as est
 - Old raglan, modified-raglan and contiguous projects compute exactly as before.
 - `npm test`, the typecheck and `npm run build` pass.
 - Main chunk growth is noted (see the main-chunk budget).
+
+**Built (M1), and what it settled:**
+- `generateRaglan` has the off-shoulder branch ([raglan.ts](../src/engine/raglan.ts), `offShoulderStart`). Rows: the band
+  (rows 1..B, `row.band`, phase `'band'`, in the round, no increases), the increase round (row B+1, incs of kind
+  `'band'`, phase table id `'ring'`), then the back-raise short rows (rows B+2.., `shortRows.fromRow`, turning in the
+  fronts from 3 sts past the raglan line towards the middle of each front), then the raglan rates over the rest.
+  The result carries `offShoulder` (band and ring counts and zones, band rows and pattern, arm sts, back raise,
+  `frontRows` = rows the centre front works).
+- The arm arc is **between the raglan lines**: each sleeve zone = `bicep × 0.5` + 2 × the line stitches, and the body
+  zones are the ring less both sleeve zones (so ≈ 1.8 cm less than `ring − 2 × armArc`).
+- `castOn` / `castOnZones` are the **band's** (the ring's zones scaled to the band count). The band count is rounded
+  to the band stitch's multiple (even for 1×1 rib).
+- The band reads the **Neckband** edge when it is enabled and set to "knit with the panels" (its depth and stitch);
+  otherwise it is 4 cm of 1×1 rib. Nothing pre-sets the neckband yet (M2).
+- Modified = `backRaise` 2 cm, default short-row pairs `round(backRaise / row_h / 2)` (3 pairs in the sample gauge).
+  The back works 2 rows more per pair than centre front. `garmentChoice` reads any back raise other than `0` as
+  Modified. `yokeWithNeck` switches a modified raglan (a contiguous whole-neck yoke) to a raised off-shoulder raglan
+  and back.
+- `necklinesFor(method, opening)` offers off-shoulder for the raglans, pullover only. `NECKLINES` (the list the selects
+  show) doesn't have it yet, so it isn't in the dialog or the Garment tab; `necklineLabel` names it.
+- The two measurements are estimates seeded only when an off-shoulder yoke is made or chosen (`onDemand`).
+- Checks: band ease outside −5 %…−20 % (warning), band wider than the ring, body zones ≤ 0, less than 4 cm between
+  the band's lower edge and the underarm at the front, a cardigan (errors), `off_shoulder_circ` still an estimate
+  (info), and the raglan's "splits higher than the armhole depth" measured from the band (drop + front rows).
+- Every sample size reaches the body and sleeve targets with no warnings (Classic and Modified); some sizes use a few
+  "rows between" for the sleeves (info). Main chunk 265.1 → 272.3 kB (85.7 → 88.1 kB gzip): the branch is in
+  raglan.ts, which `computePanel` needs at startup.
+
+**For M2 (found in M1):**
+- Add `{ id: 'off-shoulder', label: 'Off-shoulder' }` to `NECKLINES` (the dialog and Garment tab already filter it by
+  `necklinesFor(method, opening)`; pass the opening there), and disable the cardigan front while it is selected.
+- RaglanProps / YokeProps: the neckline select lists `Object.keys(FRONT_NECKS)` (bodice necks only now) and sets
+  `defaultRaglan(shape).neck`; switch to `yokeWithNeck` so the off-shoulder settings and start come and go. Hide the
+  start select, neck width/depth/centre and the sleeve top for off-shoulder; show the Off-shoulder section (band ease,
+  ring ease, arm arc, back raise, drop) and the short-row settings (pairs default from the back raise).
+- `ShortRowsWorked` (YokeProps) says "rows 1–endRow" and the top view's `unworked(row)` assumes the short rows start
+  at row 1: use `shortRows.fromRow`. The top view should draw the band rings (fewer sts) and the increase round.
+- The yoke panel's `roundRows` is all rows (`joinRow` 0) though the short rows are flat.
+- Choosing off-shoulder should pre-set the neckband (with-panel, 1×1 rib, 4 cm) and `knitWithPanel` /
+  `applyEdgeTreatments` must not make a neckband strip for it (it currently would, with a round neck's length).
+- The flat chart labels phases `band · …` and `ring · …`: give them nicer labels.
 
 ### M2: UI
 New garment dialog and Garment tab neckline (raglan only), the neckband pre-set to with-panel, the Yoke properties

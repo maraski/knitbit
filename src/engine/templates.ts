@@ -75,7 +75,12 @@ export const BOAT_RISE = 'shoulder_drop * min(1, (shoulder.width - neck_side.wid
 
 type NeckDefaults = { width: string; depth: string; centre: string; top: string; rise: string };
 
-export const FRONT_NECKS: Record<NecklineShape, NeckDefaults> = {
+/** The necklines a bodice can have (off-shoulder is a raglan yoke's only). */
+export type BodiceNeck = Exclude<NecklineShape, 'off-shoulder'>;
+/** A bodice's neckline for a shape: off-shoulder (a yoke's) makes a round neck. */
+export const bodiceNeck = (shape: NecklineShape): BodiceNeck => (shape === 'off-shoulder' ? 'round' : shape);
+
+export const FRONT_NECKS: Record<BodiceNeck, NeckDefaults> = {
   round: { width: 'back_neck_width', depth: 'front_neck_drop', centre: 'back_neck_width * 0.4', top: 'back_neck_width', rise: 'shoulder_drop' },
   v: { width: 'back_neck_width', depth: 'front_neck_drop * 2', centre: '0', top: 'back_neck_width', rise: 'shoulder_drop' },
   square: { width: 'back_neck_width', depth: 'front_neck_drop + 2', centre: 'back_neck_width', top: 'back_neck_width', rise: 'shoulder_drop' },
@@ -102,7 +107,7 @@ function shouldersFirstEarly(direction: KnitDirection, opts: TemplateOptions): b
 export function bodice(kind: 'back' | 'front', opts: TemplateOptions = {}): Panel {
   const direction = opts.direction ?? 'bottom-up';
   const shape = opts.neckline ?? 'round';
-  const neck = kind === 'back' ? backNeckFor(shape) : { ...FRONT_NECKS[shape], shape };
+  const neck = kind === 'back' ? backNeckFor(shape) : { ...FRONT_NECKS[bodiceNeck(shape)], shape: bodiceNeck(shape) };
   const p = newPanel(kind === 'back' ? 'Back' : 'Front');
   p.template = kind;
   p.direction = direction;
