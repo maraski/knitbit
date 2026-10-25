@@ -9,11 +9,12 @@
 import { jsPDF } from 'jspdf';
 import { svg2pdf } from 'svg2pdf.js';
 import { exportFooter } from '../engine/garment';
-import type { PanelCache } from '../engine/joins';
+import { cachedPanel, type PanelCache } from '../engine/joins';
 import type { Id, Project } from '../engine/model';
 import { orderedSizes, planExport, type ExportOptions, type Paper, type Part } from './plan';
-import { bodyTable, exportDate, finishedTable, headerInfo, piecesTable, type Table } from './tables';
+import { bodyTable, exportDate, finishedTable, headerInfo, pieceEntries, piecesTable, type Table } from './tables';
 import { helveticaText, printable, splitArrows, type Arrow } from './text';
+import { printScale, scaleText, waypointTable, yokeTable } from './schematics';
 
 export type Orientation = 'portrait' | 'landscape';
 
@@ -101,6 +102,15 @@ export class Writer {
     this.y = this.box().top;
   }
   private fresh = true;
+
+  /** Turn the current page, still empty and the last one, to `orientation`. */
+  reorient(orientation: Orientation): void {
+    const { width, height } = this.doc.internal.pageSize;
+    if ((width > height) === (orientation === 'landscape')) return;
+    this.doc.deletePage(this.page);
+    this.doc.addPage(PAPER_MM[this.paper], orientation);
+    this.y = this.box().top;
+  }
 
   /** Room for `h` mm below the cursor, on a new page if this one is full. True when it turned the page. */
   ensure(h: number): boolean {
@@ -306,6 +316,7 @@ export const RENDERERS: Partial<Record<Part['section'], Renderer>> = {
   body: (w, _p, { project, sizeIds }) => section(w, bodyTable(project, sizeIds)),
   finished: (w, _p, { project, sizeIds, cache }) => section(w, finishedTable(project, sizeIds, cache)),
   pieces: (w, _p, { project, sizeIds, cache }) => section(w, piecesTable(project, sizeIds, cache)),
+  schematics: (w, part, ctx) => drawSchematics(w, part, ctx),
 };
 
 /** The header band's text: the project, and the size for per-size pages (else the ticked sizes). */
@@ -334,4 +345,76 @@ export async function buildPdf(project: Project, options: ExportOptions, opts: {
     await new Promise((r) => setTimeout(r, 0));
   }
   return w.finish(date);
+}
+
+// ---------- schematics ----------
+
+/** How big a drawing px prints: 10.5 px labels come out at about 7.8 pt. */
+const MM_PER_PX = 0.26;
+
+/** Text in a rendered SVG made Helvetica-safe; text halos (paint-order: stroke) dropped, as svg2pdf paints them on top. */
+function forPdf(svg: SVGSVGElement, w: Writer): void {
+  for (const t of svg.querySelectorAll<SVGElement>('text, tspan')) {
+    t.setAttribute('font-family', 'helvetica');
+    const weight = t.getAttribute('font-weight') ?? '';
+    t.setAttribute('font-weight', weight === 'bold' || Number(weight) >= 600 ? 'bold' : 'normal');
+    if ((t.getAttribute('paint-order') ?? '').startsWith('stroke')) t.setAttribute('stroke', 'none');
+    t.removeAttribute('paint-order');
+    for (const n of t.childNodes) if (n.nodeType === 3) n.textContent = w.clean(n.textContent ?? '').replace(/[→←↑↓]/g, '-');
+  }
+}
+
+/** A table's height as drawTable lays it out (heading, rows, note). */
+const tableHeight = (t: Table) => (t.rows.length + 1) * ROW_H + 0.6 + (t.note ? ROW_H : 0);
+
+/**
+ * One page per piece for the part's size: the title (piece, size, "make 2"), the scale, the drawing fitted to the
+ * page at a standard scale, and the waypoint (or yoke phase) table under it. A page turns landscape when the drawing
+ * prints bigger that way.
+ */
+async function drawSchematics(w: Writer, part: Part, { project, cache }: RenderContext): Promise<void> {
+  const sizeId = part.sizeId!;
+  const sizeName = project.sizes.find((s) => s.id === sizeId)?.name ?? '?';
+  const snap = (px: number) => printScale(px, MM_PER_PX).pxPerCm;
+  const { pieceSvg } = await import('./render');
+  const [pw, ph] = PAPER_MM[w.paper];
+  const TITLE_H = 9;
+  const entries = pieceEntries(project);
+  for (let i = 0; i < entries.length; i++) {
+    const { panel, make } = entries[i];
+    const c = cachedPanel(project, panel.id, sizeId, cache);
+    const table = c?.ok ? (c.yoke ? yokeTable(c, project.units) : waypointTable(c, project.units)) : null;
+    // The content box in each orientation (the frame takes the same height off both). A long table keeps the
+    // drawing at least 60% of the page and flows on.
+    const frame = w.doc.internal.pageSize.getHeight() - w.box().height;
+    const boxes = (['portrait', 'landscape'] as const).map((o) => {
+      const [W, H] = o === 'portrait' ? [pw, ph] : [ph, pw];
+      const room = H - frame - TITLE_H;
+      return { o, width: W - 2 * MARGIN, height: room - Math.min(table ? tableHeight(table) + 4 : 0, room * 0.4) };
+    });
+    const fits = [];
+    if (c?.ok) for (const b of boxes.filter((b) => b.height > 40)) fits.push({ ...b, ...(await pieceSvg(project, panel, c, sizeId, b.width / MM_PER_PX, b.height / MM_PER_PX, snap, cache)) });
+    const best = fits.length ? fits.reduce((a, b) => (b.pxPerCm > a.pxPerCm + 1e-9 ? b : a)) : null;
+    const o = best?.o ?? 'portrait';
+    if (i === 0) w.reorient(o);
+    else w.newPage(o);
+    const { left, right, width } = w.box();
+    w.y += 5;
+    w.text(`${panel.name} · size ${sizeName}`, left, w.y, { size: 12, bold: true });
+    const n = best ? printScale(best.pxPerCm, MM_PER_PX).n : null;
+    w.text([make, n !== null ? `scale ${scaleText(n)}` : ''].filter(Boolean).join(' · '), right, w.y, { size: 9.5, bold: !!make, align: 'right' });
+    w.y += TITLE_H - 5;
+    if (!c?.ok || !best || !table) {
+      const why = c?.issues.find((x) => x.severity === 'error')?.message ?? '';
+      for (const l of w.wrap(`This piece can't be drawn in size ${sizeName}. ${why}`, width, { size: 9.5 })) {
+        w.y += 5;
+        w.text(l, left, w.y, { size: 9.5 });
+      }
+      continue;
+    }
+    forPdf(best.svg, w);
+    await svg2pdf(best.svg, w.doc, { x: left, y: w.y, width: best.width, height: best.height });
+    w.y += best.height + 4;
+    drawTable(w, table);
+  }
 }

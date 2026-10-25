@@ -595,3 +595,40 @@ function FrontChart({ y, g, S, scale, chart, custom, size }: { y: YokeResult; g:
     </g>
   );
 }
+
+// ---------- export: the laid-flat schematic alone ----------
+
+/**
+ * The laid-flat schematic fitted to `width` × `height` px for the export (PDF, PNG): titles and labels, no key box,
+ * hover, buttons or zoom. `snap` rounds the fitted scale (px per cm); the scale is in `data-px-per-cm`.
+ */
+export function YokeFrontSheet({ computed: c, units, width, height, snap = (s) => s }: { computed: ComputedPanel; units: Units; width: number; height: number; snap?: (pxPerCm: number) => number }) {
+  const y = c.yoke;
+  if (!y) return null;
+  const g = frontGeometry(y, true);
+  const L = layoutFor([g], false, y.stitchesPerCm);
+  // Room above for the back's title and the cast-on note, below for the split label.
+  const top = 44;
+  const bottom = 30;
+  const wW = L.xmax - L.xmin;
+  const wH = L.frontY0 + L.H;
+  const scale = snap(Math.max(0.05, Math.min((width - 2 * PAD) / wW, (height - top - bottom - 2 * PAD) / wH)));
+  const ox = width / 2 - ((L.xmin + L.xmax) / 2) * scale;
+  const oy = top + PAD + (height - top - bottom - 2 * PAD - wH * scale) / 2;
+  const S: ToScreen = (half, x, yy) => ({ x: ox + (x / L.spc) * scale, y: oy + ((half === 'front' ? L.frontY0 : 0) + yy) * scale });
+  return (
+    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} className="schematic" data-px-per-cm={scale}>
+      <g className="yoke-top">
+        <FrontSchematic y={y} g={g} S={S} labels units={units} />
+        {HALVES.map((half) => {
+          const q = S(half, 0, 0);
+          return (
+            <text key={half} x={q.x} y={q.y - (half === 'back' ? 26 : 12)} textAnchor="middle" className="yoke-front-title">
+              {TITLE[half]}
+            </text>
+          );
+        })}
+      </g>
+    </svg>
+  );
+}
