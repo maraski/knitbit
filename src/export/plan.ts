@@ -12,6 +12,8 @@ export interface SectionDef {
   scope: 'once' | 'perSize';
   /** Built yet: only these are offered in the dialog and planned. */
   ready: boolean;
+  /** Its renderer starts its own pages (and picks their orientation), so the plan doesn't start one. */
+  ownPages?: boolean;
 }
 
 export const SECTIONS: SectionDef[] = [
@@ -19,7 +21,7 @@ export const SECTIONS: SectionDef[] = [
   { id: 'finished', label: 'Finished measurements', scope: 'once', ready: true },
   { id: 'pieces', label: 'Key numbers per piece', scope: 'once', ready: true },
   { id: 'schematics', label: 'Schematics', scope: 'perSize', ready: false },
-  { id: 'charts', label: 'Stitch charts', scope: 'perSize', ready: false },
+  { id: 'charts', label: 'Stitch charts', scope: 'perSize', ready: true, ownPages: true },
 ];
 
 export const readySections = (): SectionId[] => SECTIONS.filter((s) => s.ready).map((s) => s.id);
@@ -30,6 +32,8 @@ export interface ExportOptions {
   sizeIds: Id[];
   paper: Paper;
   sections: SectionId[];
+  /** Charts: fold long runs of plain columns, as the Chart tab's "Collapse plain middle". */
+  collapse?: boolean;
 }
 
 /**
@@ -52,7 +56,7 @@ export function planExport(project: Project, opts: ExportOptions): Part[] {
   const parts: Part[] = [{ section: 'header', newPage: true }];
   for (const s of want.filter((s) => s.scope === 'once')) parts.push({ section: s.id, newPage: false });
   for (const sizeId of orderedSizes(project, opts.sizeIds)) {
-    for (const s of want.filter((s) => s.scope === 'perSize')) parts.push({ section: s.id, sizeId, newPage: true });
+    for (const s of want.filter((s) => s.scope === 'perSize')) parts.push({ section: s.id, sizeId, newPage: !s.ownPages });
   }
   return parts;
 }
