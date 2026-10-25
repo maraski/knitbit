@@ -99,7 +99,7 @@ export function buildYokeChart(project: Project, panel: Panel, c: ComputedPanel)
   const bandLabel = (label: string) => (label.startsWith('Band facing') ? 'Facing' : label.startsWith('Turning') ? 'Turn' : 'Band');
   const phaseLabel = (p: (typeof y.phases)[number]) => (p.id === 'band' ? bandLabel(p.label) : p.id === 'ring' ? 'Inc' : `${p.id} · ${p.label}`);
   const phases: NonNullable<Chart['phases']> = y.phases.filter((p) => p.id !== 'B' && p.id !== 'neck').map((p) => ({ label: phaseLabel(p), fromRow: p.from, toRow: p.to }));
-  const repeats: ChartRepeat[] = os
+  const repeats: ChartRepeat[] = os && os.bandRows > 0
     ? [{ name: `Band: ${os.pattern.name}`, fromRow: 1, toRow: os.bandRows, multiple: os.pattern.multiple, offset: os.pattern.offset, startCol: zoneStarts(y.rows[0], x0)[0] }]
     : [];
   const used = new Set<string>([PLAIN, 'marker']);

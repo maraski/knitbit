@@ -248,6 +248,14 @@ sewn. I-cord **later**.
 - Main chunk 273.9 → 275.4 kB (88.6 → 89.1 kB gzip): the fold branch in raglan.ts and yokeTop.ts, the label, the
   Edges hooks and the glyph.
 
+**No band (2026-10-25, asked after M3):** the band is optional, for freedom of design (the fit depends on the overall
+ease, the band's depth and stitch). *Band: None*, the same as unticking the Neckband edge, makes `offShoulderStart`
+cast on the ring itself: `noBand`, `bandRows` 0, `incRow` 0, no band ease (not evaluated), no increase round, the
+raglan increases and the back-raise short rows from row 1, the same depth. An info check says only the ring ease
+holds it up. A neckband that is on but *picked up later* keeps the 4 cm rib fallback. The chart has no band repeat,
+the flat panel no band section, the top view no band ring; the Band select has None / Single / Folded.
+Main chunk 275.4 → 275.9 kB (89.1 → 89.3 kB gzip).
+
 ### Later (not planned)
 - An i-cord edge for the off-shoulder band (asked about for M3, left for later).
 - Off-shoulder cardigan (flat, band running into the front bands).

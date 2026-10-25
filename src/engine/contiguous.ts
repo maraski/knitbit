@@ -156,6 +156,8 @@ export interface YokeResult {
     backRaiseCm: number;
     frontRows: number;
     fold?: { turn: 'purl' | 'picot'; close: 'knit' | 'sewn'; depthRows: number; hiddenRows: number };
+    /** No band (the Neckband edge is off): the ring is the cast-on, bandRows and incRow 0, the raglan from row 1. */
+    noBand?: boolean;
   };
 }
 

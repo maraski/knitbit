@@ -12,7 +12,16 @@ export function YokeKey({ project, computed: c, units, fold, front = false }: { 
   const y = c.yoke!;
   return (
     <div className="yoke-key">
-      {y.offShoulder ? (
+      {y.offShoulder?.noBand ? (
+        <>
+          <div>
+            No band: the ring cast on all round, <b>{y.offShoulder.ringSts}</b> ({len(y.offShoulder.ringSts / y.stitchesPerCm, units)}): front {y.offShoulder.ringZones.leftFront} · sleeve {y.offShoulder.ringZones.leftSleeve} · back {y.offShoulder.ringZones.back} · sleeve {y.offShoulder.ringZones.rightSleeve} · front {y.offShoulder.ringZones.rightFront}
+          </div>
+          <div>
+            Top edge {len(buildScope(project, c.sizeId).off_shoulder_drop ?? 0, units)} below the shoulder point · raglan lines {y.seamSts} sts · about {len(y.raglan!.lineCm, units)} · increases to row {y.counts.total - y.counts.E}
+          </div>
+        </>
+      ) : y.offShoulder ? (
         <>
           <div>
             Band: cast on <b>{y.offShoulder.bandSts}</b> all round ({len(y.offShoulder.bandSts / y.stitchesPerCm, units)}) ·{' '}
@@ -51,8 +60,8 @@ export function YokeKey({ project, computed: c, units, fold, front = false }: { 
           Cap <b>{y.counts.C + y.counts.D}</b> rows · {len((y.counts.C + y.counts.D) / y.rowsPerCm, units)}
         </div>
       )}
-      <div className="key-rings">Dashed {front ? 'lines' : 'rings'}, from the {y.offShoulder ? 'band' : 'neck'} {front ? 'down' : 'out'}:</div>
-      {y.offShoulder && <div>end of the band · row {y.offShoulder.bandRows}; the increase round · row {y.offShoulder.incRow} · {y.offShoulder.ringSts} sts</div>}
+      <div className="key-rings">Dashed {front ? 'lines' : 'rings'}, from the {y.offShoulder ? (y.offShoulder.noBand ? 'cast-on' : 'band') : 'neck'} {front ? 'down' : 'out'}:</div>
+      {y.offShoulder && !y.offShoulder.noBand && <div>end of the band · row {y.offShoulder.bandRows}; the increase round · row {y.offShoulder.incRow} · {y.offShoulder.ringSts} sts</div>}
       {y.phases
         .filter((ph) => ph.id === 'A' || ph.id === 'C' || ph.id === 'D' || (ph.id === 'R' && y.counts.E > 0))
         .map((ph) => (

@@ -85,7 +85,7 @@ function phaseRows(y: YokeResult): number[] {
   rows.push(A);
   if (C) rows.push(A + C);
   if (D) rows.push(A + C + D);
-  if (os) rows.push(os.bandRows);
+  if (os && !os.noBand) rows.push(os.bandRows);
   if (neckRow && neckRow <= total && (!os || !!y.shortRows?.pairs)) rows.push(neckRow);
   return [...new Set(rows)].filter((r) => r > 0 && r < total);
 }
@@ -379,7 +379,7 @@ function FrontSchematic({ y, g, S, labels, units }: { y: YokeResult; g: FrontGeo
         fills.push(<path key={`f${half}${z}${k}`} d={d} className={`yz yz-${zi}`} />);
       }),
     );
-    if (os) {
+    if (os && !os.noBand) {
       // The band (knit first) shaded across the half, and the ring after its increase round as a solid line.
       const left: Pt[] = [];
       const right: Pt[] = [];
@@ -429,8 +429,8 @@ function FrontSchematic({ y, g, S, labels, units }: { y: YokeResult; g: FrontGeo
     t('splitf', below('front'), `split after row ${T}: body ${y.held.body} + 2 × ${y.underarmCo} underarm cast-on · sleeves ${y.held.leftSleeve} sts each on hold`);
     // How it starts: the cast-on along the top edge of both halves.
     const top = S('back', 0, 0);
-    t('co', { x: top.x, y: top.y - 8 }, `cast on ${y.castOn} round the ${os ? 'band' : y.shortRows ? 'whole neck' : 'back neck'} (both halves’ top edges) · row 1 below`, 'middle', 'yoke-note');
-    if (os) {
+    t('co', { x: top.x, y: top.y - 8 }, `cast on ${y.castOn} round the ${os ? (os.noBand ? 'ring, no band' : 'band') : y.shortRows ? 'whole neck' : 'back neck'} (both halves’ top edges) · row 1 below`, 'middle', 'yoke-note');
+    if (os && !os.noBand) {
       const band = g.rows[Math.min(os.bandRows, T)];
       t('bandt', S('back', 0, (band.y1 + g.rows[0].y1) / 2 + 0.3), os.fold ? `folded band ${os.bandSts} sts · the top edge is the fold` : `band ${os.bandSts} sts · ${os.pattern.name}`);
       const ring = g.rows[os.incRow];

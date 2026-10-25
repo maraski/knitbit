@@ -337,7 +337,7 @@ function TopSchematic({ y, g, P, labels, scale, units }: { y: YokeResult; g: Top
   const parts: React.ReactNode[] = [];
   ZONES.forEach((_, zi) => parts.push(<path key={`z${zi}`} d={zoneShape(g, zi, P)} className={`yz yz-${zi}`} />));
   const os = y.offShoulder;
-  if (os) {
+  if (os && !os.noBand) {
     // The band (knit first, in rib) as a hatched ring, and the ring after its increase round as a solid line.
     const band = g.rings[Math.min(os.bandRows, g.rings.length - 1)];
     const c0 = P(0, 0);

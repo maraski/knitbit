@@ -72,7 +72,7 @@ export function computeYokePanel(project: Project, panel: Panel, sizeId: Id): Co
     roundRows: join !== null && join < T ? { from: join + 1, to: T } : null,
     firstFlatRow: 1,
     // Off-shoulder: the band, knit first.
-    sections: os ? [{ id: `${panel.id}:band`, name: 'Band', fromRow: 1, toRow: Math.min(os.bandRows, T), multiple: os.pattern.multiple, offset: os.pattern.offset, patternName: os.pattern.name }] : [],
+    sections: os && os.bandRows > 0 ? [{ id: `${panel.id}:band`, name: 'Band', fromRow: 1, toRow: Math.min(os.bandRows, T), multiple: os.pattern.multiple, offset: os.pattern.offset, patternName: os.pattern.name }] : [],
     bust: null,
     lines: [],
     princess: null,

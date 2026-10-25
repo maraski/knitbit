@@ -15,9 +15,10 @@ const M = sizeId(p, 'M');
 const cardigan = setOpening(p, 'cardigan');
 const base = () => ({ ...fixtureProject(), panels: [], joins: [] });
 const spec = (s: Partial<GarmentSpec>): GarmentSpec => ({ method: 'raglan', opening: 'closed', neckline: 'off-shoulder', sleeve: 'raglan', ease: 'standard', ...s });
-const offShoulder = (fold: boolean): Project => {
-  const g = buildGarment(base(), spec({}));
-  return applyEdgeTreatments({ ...g, edges: { ...defaultEdges(), neckband: { ...offShoulderNeckband(), depth: dim(4), ...(fold ? { fold: { turn: 'purl', close: 'knit' } } : {}) } } });
+/** `fold` true: a folded band; 'none': no band (the Neckband switched off); `modified`: the back raised. */
+const offShoulder = (fold: boolean | 'none', modified = false): Project => {
+  const g = buildGarment(base(), spec(modified ? { method: 'modified-raglan', sleeve: 'contiguous' } : {}));
+  return applyEdgeTreatments({ ...g, edges: { ...defaultEdges(), neckband: { ...offShoulderNeckband(), depth: dim(4), enabled: fold !== 'none', ...(fold === true ? { fold: { turn: 'purl', close: 'knit' } } : {}) } } });
 };
 /** (By the size's name: the garment is built on its own copy of the fixture.) */
 const genOS = (q: Project, s = M) => generateYoke(q, q.panels.find((x) => x.yoke)!.yoke!, sizeId(q, p.sizes.find((z) => z.id === s)!.name));
@@ -34,6 +35,8 @@ const cases: [string, (s: string) => YokeResult][] = [
   ['classic raglan V neck', (s) => generateYoke(p, defaultRaglan('v'), s)],
   ['off-shoulder rib band', (s) => genOS(offShoulder(false), s)],
   ['off-shoulder folded band', (s) => genOS(offShoulder(true), s)],
+  ['off-shoulder no band', (s) => genOS(offShoulder('none'), s)],
+  ['off-shoulder no band, back raised', (s) => genOS(offShoulder('none', true), s)],
 ];
 
 const worked = (g: FrontGeometry, row: number) => g.rows[row].parts.reduce((n, q) => n + q.x1 - q.x0, 0);
@@ -209,6 +212,32 @@ describe('row shaping counts', () => {
     expect(sh.castOn).toBe(y.neck.centre);
     expect(sh.castOnWhere).toBe('centre-front');
     expect(shapingText(sh)).toContain(`cast on ${y.neck.centre} at centre front, join`);
+  });
+
+  it('starts an off-shoulder yoke with no band at the ring: every row drawn with height, the raglan from row 1', () => {
+    for (const modified of [false, true]) {
+      const y = genOS(offShoulder('none', modified));
+      expect(y.offShoulder).toMatchObject({ noBand: true, bandRows: 0, incRow: 0 });
+      const g = frontGeometry(y);
+      expect(g.rows[0].total).toBe(y.offShoulder!.ringSts);
+      expect(g.height).toBeCloseTo(y.rows.length / y.rowsPerCm);
+      expect(frontGeometry(y, false).height).toBeCloseTo(g.height);
+      for (const r of g.rows.slice(1)) if (r.y1 <= r.y0) expect(r.y1).toBeGreaterThan(r.y0);
+    }
+  });
+
+  it('reads no band rounds without a band: row 1 is a raglan row (or a short row), never the band or an increase round', () => {
+    const classic = genOS(offShoulder('none'));
+    const t1 = shapingText(rowShaping(classic, 1));
+    expect(rowShaping(classic, 1).band).toBeUndefined();
+    expect(t1).not.toMatch(/band|increase round|turning|joining/);
+    expect(rowShaping(classic, 1).incs).toBe(classic.rows[0].total - classic.castOn);
+    const raised = genOS(offShoulder('none', true));
+    expect(raised.shortRows!.fromRow).toBe(1);
+    for (let r = 1; r <= raised.rows.length; r++) {
+      const sh = rowShaping(raised, r);
+      if (sh.band || sh.notes.some((n) => /band|increase round/.test(n))) expect(sh.notes).toEqual([]);
+    }
   });
 
   it('describes the off-shoulder band, its increase round and a folded band’s turning and joining rounds', () => {

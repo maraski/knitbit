@@ -206,3 +206,66 @@ describe('off-shoulder folded band: settings', () => {
     expect((p.joins ?? []).some((j) => j.edge === 'neckband')).toBe(false);
   });
 });
+
+describe('off-shoulder with no band (the Neckband switched off)', () => {
+  const none = (p: Project) => applyEdgeTreatments({ ...p, edges: { ...defaultEdges(), neckband: { ...offShoulderNeckband(), enabled: false } } });
+
+  for (const [name, p0] of [['Classic', classic], ['Modified', modified]] as const) {
+    it(`${name}: the ring is cast on, no band or increase round, the raglan from row 1, on target in every size`, () => {
+      const p = none(p0);
+      const rib = withBand(p0);
+      for (const s of p.sizes) {
+        const y = gen(p, s.id);
+        const r = gen(rib, s.id);
+        const o = y.offShoulder!;
+        expect(o).toMatchObject({ noBand: true, bandRows: 0, incRow: 0, bandCm: 0, ringSts: r.offShoulder!.ringSts });
+        expect(o.fold).toBeUndefined();
+        expect(y.castOn, s.name).toBe(o.ringSts);
+        expect(y.castOnZones).toEqual(o.ringZones);
+        expect(o.bandSts).toBe(o.ringSts);
+        expect(y.rows.some((row) => row.band || row.incs.some((i) => i.kind === 'band'))).toBe(false);
+        expect(y.phases.some((ph) => ph.id === 'band' || ph.id === 'ring')).toBe(false);
+        expect(y.params.bandEase).toBeUndefined();
+        // The same finished depth: the rows the band and increase round took are raglan rows now.
+        expect(y.counts.total).toBe(r.counts.total);
+        expect(errors(y), s.name).toEqual([]);
+        expect(y.issues.some((i) => i.severity === 'info' && /No band/.test(i.message))).toBe(true);
+        const sc = buildScope(p, s.id);
+        expect(Math.abs(y.held.body + 2 * y.underarmCo - Math.round((sc.upper_chest + sc.ease) * spc)), s.name).toBeLessThanOrEqual(2);
+        expect(Math.abs(y.held.leftSleeve + y.underarmCo - Math.round((sc.bicep + sc['ease.bicep']) * spc)), s.name).toBeLessThanOrEqual(1);
+        if (name === 'Modified') {
+          expect(y.shortRows!.fromRow).toBe(1);
+          expect(y.shortRows!.pairs).toBeGreaterThan(0);
+        } else expect(Math.min(...y.raglan!.bodyRows, ...y.raglan!.sleeveRows)).toBe(1);
+        const warn = contiguousChecks(p, s.id, new Map()).filter((c) => c.issue.severity !== 'info');
+        expect(warn.map((c) => c.issue.message), s.name).toEqual([]);
+        for (const panel of p.panels) {
+          const c = computePanel(p, panel, s.id);
+          expect(c.ok, `${s.name} ${panel.name}`).toBe(true);
+          if (panel.yoke) {
+            const chart = buildChart(p, panel, c);
+            expect(chart.repeats).toEqual([]);
+            expect(chart.phases!.some((x) => x.label === 'Band' || x.label === 'Inc')).toBe(false);
+            expect(c.sections).toEqual([]);
+            expect(topGeometry(c.yoke!).rings[0].total).toBe(o.ringSts);
+          }
+        }
+      }
+    });
+  }
+
+  it('adds no strip or join, and saves and loads', () => {
+    const p = none(classic);
+    expect(p.panels.some((x) => x.edge === 'neckband')).toBe(false);
+    expect((p.joins ?? []).some((j) => j.edge === 'neckband')).toBe(false);
+    const r = loadProject(JSON.stringify(p));
+    if (!r.ok) throw new Error(r.errors.join('\n'));
+    expect(gen(r.project).offShoulder!.noBand).toBe(true);
+  });
+
+  it('a neckband picked up later (not off) still makes the 4 cm rib band', () => {
+    const p: Project = { ...classic, edges: defaultEdges() };
+    expect(gen(p).offShoulder).toMatchObject({ bandRows: Math.round(4 * gen(p).rowsPerCm), pattern: { name: '1x1 rib' } });
+    expect(gen(p).offShoulder!.noBand).toBeUndefined();
+  });
+});

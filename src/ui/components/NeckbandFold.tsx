@@ -17,25 +17,29 @@ interface Props {
   update: (fn: (p: Project) => Project, key?: string | null) => void;
 }
 
-/** An off-shoulder band's type (single, in the Neckband's stitch, or folded) and a folded band's turning round and
+/** An off-shoulder band's type (none, single in the Neckband's stitch, or folded) and a folded band's turning round and
  * closing. Shown with the Neckband edge (Garment tab) and in the yoke's properties; loaded only for off-shoulder. */
 export function NeckbandFold({ project, update }: Props) {
   const nb = edgesOf(project).neckband;
-  const set = (fold: EdgeTreatment['fold']) =>
+  // Any band is knit with the yoke; none = the Neckband switched off (the ring is the cast-on).
+  const set = (fold: EdgeTreatment['fold'], enabled = true) =>
     update((p) => {
       const { fold: _, ...rest } = edgesOf(p).neckband;
-      return applyEdgeTreatments({ ...p, edges: { ...edgesOf(p), neckband: fold ? { ...rest, fold } : rest } });
+      return applyEdgeTreatments({ ...p, edges: { ...edgesOf(p), neckband: { ...rest, enabled, ...(enabled ? { method: 'with-panel' as const } : {}), ...(fold ? { fold } : {}) } } });
     });
-  const fold = nb.fold;
+  const fold = nb.enabled ? nb.fold : undefined;
+  const kind = !nb.enabled ? 'none' : fold ? 'folded' : 'single';
   return (
     <>
       <div className="field">
         <label>Band</label>
-        <select value={fold ? 'folded' : 'single'} onChange={(e) => set(e.target.value === 'folded' ? defaultFold() : undefined)}>
-          <option value="single">Single, in the Neckband stitch (rib)</option>
+        <select value={kind} onChange={(e) => set(e.target.value === 'folded' ? defaultFold() : undefined, e.target.value !== 'none')}>
+          <option value="none">None: the ring is cast on as the top edge</option>
+          <option value="single">Single, in the Neckband stitch (rib, garter, seed…)</option>
           <option value="folded">Folded: stockinette, knit twice the depth</option>
         </select>
       </div>
+      {!nb.enabled && <p className="hint">No band: the yoke starts with the ring’s cast-on, and only the ring ease holds it up. The Neckband edge is switched off.</p>}
       {fold && (
         <>
           <div className="row2">
