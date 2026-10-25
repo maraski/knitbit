@@ -499,6 +499,13 @@ table.events.editable select { font-size: 11.5px; max-width: 110px; padding: 1px
 .hover-readout { position: absolute; background: rgba(255,255,255,0.95); border: 1px solid var(--line, #e4e0d8); border-radius: 4px; padding: 3px 6px; font-size: 11px; pointer-events: none; max-width: 320px; }
 .yoke-grid { display: flex; flex-wrap: wrap; gap: 10px; overflow: auto; padding: 10px; align-content: flex-start; cursor: default; }
 .yoke-card { margin: 0; text-align: center; font-size: 11px; }
+/* yoke laid flat */
+.yoke-front-outline { fill: none; stroke: var(--ink, #333); stroke-width: 2.4; stroke-linejoin: round; pointer-events: none; }
+.yoke-front-card svg * { vector-effect: non-scaling-stroke; }
+.yoke-front-card .yoke-front-outline { stroke-width: 1.4; }
+.yoke-front-card .yoke-phase-line { stroke-dasharray: 0.8 0.8; }
+.yoke-front-ground { fill: var(--canvas); stroke: none; pointer-events: none; }
+.yoke-front-title { fill: var(--fg); font-size: 12px; font-weight: 600; pointer-events: none; }
 .yoke-key { position: absolute; left: 10px; top: 10px; background: rgba(255,255,255,0.9); padding: 6px 8px; border-radius: 6px; font-size: 11px; line-height: 1.45; max-width: 260px; pointer-events: none; }
 .yoke-key .key-rings { color: var(--muted); margin-top: 3px; }
 
