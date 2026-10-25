@@ -96,6 +96,8 @@ export function finishedTable(project: Project, sizeIds: Id[], cache: PanelCache
 interface PieceEntry {
   label: string;
   panel: Panel;
+  /** The piece stands for two: 'make 2' (a seamed sleeve), 'make 2, mirrored' (a pair of fronts, the left printed). */
+  make?: string;
 }
 
 export function pieceEntries(project: Project): PieceEntry[] {
@@ -109,11 +111,11 @@ export function pieceEntries(project: Project): PieceEntry[] {
       done.add(pair.id);
       // The left front first (it's the one E2 prints), the right mirrors it.
       const [a, b] = p.half!.side === 'left' ? [p, pair] : [pair, p];
-      out.push({ label: `${a.name} / ${b.name} (mirrored)`, panel: a });
+      out.push({ label: `${a.name} / ${b.name} (mirrored)`, panel: a, make: 'make 2, mirrored' });
       continue;
     }
     const both = panelRole(p) === 'sleeve' && !p.fromYoke;
-    out.push({ label: both ? `${p.name} ×2` : p.name, panel: p });
+    out.push(both ? { label: `${p.name} ×2`, panel: p, make: 'make 2' } : { label: p.name, panel: p });
   }
   return out;
 }

@@ -9,6 +9,13 @@ import { readySections } from './plan';
 // svg2pdf.js needs a DOM; here it only counts the arrows it's asked to draw (measurement labels have some).
 const drawn: string[] = [];
 vi.mock('svg2pdf.js', () => ({ svg2pdf: async (el: { kids: { attrs: Record<string, string> }[] }) => void drawn.push(el.kids[0].attrs.transform) }));
+// The schematic itself needs a browser (render.tsx); here a stand-in fitted like the real one, about 60 cm across.
+vi.mock('./render', () => ({
+  pieceSvg: async (_p: unknown, panel: { name: string }, _c: unknown, _s: unknown, width: number, _h: number, snap: (px: number) => number) => ({
+    svg: { kids: [{ attrs: { transform: `schematic ${panel.name}` } }], querySelectorAll: () => [] },
+    pxPerCm: snap(width / 60),
+  }),
+}));
 const el = () => ({ attrs: {} as Record<string, string>, kids: [] as unknown[], setAttribute(k: string, v: string) { this.attrs[k] = v; }, append(...k: unknown[]) { this.kids.push(...k); } });
 vi.stubGlobal('document', { createElementNS: el });
 
@@ -59,5 +66,38 @@ describe('buildPdf', () => {
     const text = await pdfText(await buildPdf(p, { sizeIds: [sizeId(p, 'M')], paper: 'a4', sections: ['finished'] }));
     expect(text).not.toContain('Susie Myers');
     expect(text).not.toMatch(/−/);
+  });
+});
+
+describe('schematic pages', () => {
+  const pages = (text: string) => Number(text.match(/\(p\. 1 of (\d+)\)/)![1]);
+
+  it('a page per piece per size, after the tables; fronts and sleeves once, marked "make 2"', async () => {
+    const p = garment({ opening: 'cardigan' });
+    drawn.length = 0;
+    const sizes = [sizeId(p, 'S'), sizeId(p, 'M')];
+    const text = await pdfText(await buildPdf(p, { sizeIds: sizes, paper: 'a4', sections: ['schematics'] }));
+    const front = p.panels.find((x) => x.half?.side === 'left')!.name;
+    const right = p.panels.find((x) => x.half?.side === 'right')!.name;
+    expect(text).toContain(`(${front} · size S)`);
+    expect(text).toContain(`(${front} · size M)`);
+    expect(text).not.toContain(`(${right} · size`);
+    expect(text).toMatch(/\(make 2, mirrored · scale 1 : [\d.]+\)/);
+    expect(text).toMatch(/\(make 2 · scale 1 : [\d.]+\)/);
+    expect(text).toContain('(Waypoint)');
+    // Header page + one page per piece per size.
+    const pieces = p.panels.length - 1;
+    expect(pages(text)).toBe(1 + 2 * pieces);
+    expect(drawn.filter((d) => d?.startsWith('schematic')).length).toBe(2 * pieces);
+    // In the size's order, the piece's order.
+    expect(text.indexOf(`(${front} · size S)`)).toBeLessThan(text.indexOf(`(${front} · size M)`));
+  });
+
+  it('a contiguous yoke prints laid flat with its phases', async () => {
+    const p = garment({ method: 'contiguous', sleeve: 'contiguous' });
+    const text = await pdfText(await buildPdf(p, { sizeIds: [sizeId(p, 'M')], paper: 'letter', sections: ['schematics'] }));
+    expect(text).toContain('(Yoke · size M)');
+    expect(text).toContain('(Phase)');
+    expect(text).toMatch(/\(Cast on \d+ · split after row \d+/);
   });
 });

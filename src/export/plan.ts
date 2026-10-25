@@ -18,7 +18,7 @@ export const SECTIONS: SectionDef[] = [
   { id: 'body', label: 'Body measurements', scope: 'once', ready: true },
   { id: 'finished', label: 'Finished measurements', scope: 'once', ready: true },
   { id: 'pieces', label: 'Key numbers per piece', scope: 'once', ready: true },
-  { id: 'schematics', label: 'Schematics', scope: 'perSize', ready: false },
+  { id: 'schematics', label: 'Schematics', scope: 'perSize', ready: true },
   { id: 'charts', label: 'Stitch charts', scope: 'perSize', ready: false },
 ];
 

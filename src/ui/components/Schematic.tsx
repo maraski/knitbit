@@ -51,6 +51,12 @@ interface Props {
   onDragWaypoint?: (wpId: string, change: { kind: 'height'; h: number } | { kind: 'width'; part: 'width' | 'left' | 'right'; factor: number }, size: boolean, key: string) => void;
   /** A cardigan front or band: its band (stitch x range), button positions (cm up), buttonholes, and dragging. */
   bands?: SchematicBands;
+  /**
+   * Off-screen export (PDF, PNG): no handles, hover, selection, touch grips or zoom; the drawing fitted to this box
+   * (px). `snap` rounds the fitted scale (px per cm), e.g. to a whole print scale. Only the svg is rendered, with its
+   * scale in `data-px-per-cm`.
+   */
+  exportMode?: { width: number; height: number; snap?: (pxPerCm: number) => number };
 }
 
 export interface SchematicBands {
@@ -92,7 +98,7 @@ interface MarkerDrag {
 
 const isStepLike = (e: ShapeEvent) => e.kind === 'bindoff' || e.kind === 'caston' || e.kind === 'turn';
 
-export function Schematic({ computed: c, direction, units, selection, onSelect, fitKey, fitOutlines, markers, joins = [], mode = 'single', compare = [], align = 'hem', project, drawLine = false, onDrawLine, onDragWaypoint, bands }: Props) {
+export function Schematic({ computed: c, direction, units, selection, onSelect, fitKey, fitOutlines, markers, joins = [], mode = 'single', compare = [], align = 'hem', project, drawLine = false, onDrawLine, onDragWaypoint, bands, exportMode }: Props) {
   const wpDrag = useRef<{ wpId: string; kind: 'height' | 'width'; part: 'width' | 'left' | 'right'; half0: number; key: string; x: number; y: number; moved: boolean; last: string } | null>(null);
   const [wpReadout, setWpReadout] = useState<{ sx: number; sy: number; text: string } | null>(null);
   const [drawPts, setDrawPts] = useState<{ first: { h: number; x: number; sx: number; sy: number } | null; cursor: { sx: number; sy: number } | null }>({ first: null, cursor: null });
@@ -146,14 +152,18 @@ export function Schematic({ computed: c, direction, units, selection, onSelect, 
     };
   }, [c.outline, c.topDown, T, fitOutlines, orient]);
 
-  const fit = useCallback(() => {
-    const bw = Math.max(1, bbox.x1 - bbox.x0);
-    const bh = Math.max(1, bbox.y1 - bbox.y0);
-    const scale = Math.max(0.5, Math.min((size.w - PAD.left - PAD.right) / bw, (size.h - PAD.top - PAD.bottom) / bh));
-    const ox = PAD.left + (size.w - PAD.left - PAD.right - bw * scale) / 2 - bbox.x0 * scale;
-    const oy = PAD.top + (size.h - PAD.top - PAD.bottom - bh * scale) / 2 - bbox.y0 * scale;
-    setView({ scale, ox, oy });
-  }, [bbox, size]);
+  const fitFor = useCallback(
+    (box: { w: number; h: number }, snap = (s: number) => s): View => {
+      const bw = Math.max(1, bbox.x1 - bbox.x0);
+      const bh = Math.max(1, bbox.y1 - bbox.y0);
+      const scale = snap(Math.max(0.5, Math.min((box.w - PAD.left - PAD.right) / bw, (box.h - PAD.top - PAD.bottom) / bh)));
+      const ox = PAD.left + (box.w - PAD.left - PAD.right - bw * scale) / 2 - bbox.x0 * scale;
+      const oy = PAD.top + (box.h - PAD.top - PAD.bottom - bh * scale) / 2 - bbox.y0 * scale;
+      return { scale, ox, oy };
+    },
+    [bbox],
+  );
+  const fit = useCallback(() => setView(fitFor(size)), [fitFor, size]);
 
   useLayoutEffect(() => {
     const el = wrapRef.current;
@@ -195,7 +205,7 @@ export function Schematic({ computed: c, direction, units, selection, onSelect, 
   }, []);
 
   // Two fingers zoom and pan; a second finger landing takes back whatever the first one started.
-  const touchUi = useTouchUi();
+  const touchUi = useTouchUi() && !exportMode;
   usePinch(wrapRef, {
     start: () => {
       for (const d of [wpDrag.current, buttonDrag.current, markerDrag.current]) if (d) cancelDrag(d.key);
@@ -221,7 +231,8 @@ export function Schematic({ computed: c, direction, units, selection, onSelect, 
     );
   }
 
-  const v = view ?? { scale: 4, ox: size.w / 2, oy: size.h / 2 };
+  const box = exportMode ? { w: exportMode.width, h: exportMode.height } : size;
+  const v = exportMode ? fitFor(box, exportMode.snap) : (view ?? { scale: 4, ox: size.w / 2, oy: size.h / 2 });
   const S = (xSts: number, yRows: number): Pt => {
     const p = orient(xSts, yRows);
     return { x: v.ox + p.x * v.scale, y: v.oy + p.y * v.scale };
@@ -518,18 +529,8 @@ export function Schematic({ computed: c, direction, units, selection, onSelect, 
   // Rows kept from before an edit may be past a panel that got shorter (e.g. its top dragged down).
   const liveHover = rowInPanel(c, hoverRow);
   const liveDrag = rowInPanel(c, dragRow);
-  return (
-    <div
-      className="canvas"
-      ref={wrapRef}
-      onPointerDown={onPointerDown}
-      onPointerMove={onPointerMove}
-      onPointerUp={onPointerUp}
-      onPointerLeave={(e) => e.pointerType !== 'touch' && setHoverRow(null)}
-      onClick={() => !suppressClick.current && !drawLine && onSelect({ kind: 'panel' })}
-      style={drawLine ? { cursor: 'crosshair' } : undefined}
-    >
-      <svg width={size.w} height={size.h} className={`schematic${touchUi ? ' touch' : ''}`}>
+  const drawing = (
+      <svg width={box.w} height={box.h} className={`schematic${touchUi ? ' touch' : ''}`} {...(exportMode && { viewBox: `0 0 ${box.w} ${box.h}`, 'data-px-per-cm': v.scale })}>
         <defs>
           <pattern id="section-hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
             <line x1="0" y1="0" x2="0" y2="6" className="hatch-line" />
@@ -607,14 +608,14 @@ export function Schematic({ computed: c, direction, units, selection, onSelect, 
           return (
             <g key={w.id} className={`wp${sel ? ' selected' : ''}`} onClick={click({ kind: 'waypoint', id: w.id })}>
               <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} className="wp-line" />
-              <line
+              {!exportMode && <line
                 x1={a.x}
                 y1={a.y}
                 x2={b.x}
                 y2={b.y}
                 className={`hit${onDragWaypoint && vertical && i > 0 && (sel || rect) ? ' drag-y' : ''}`}
                 onPointerDown={(e) => i > 0 && (sel ? startWpDrag(e, w, 'height', 'width') : rect && startWpDrag(e, w, 'height', 'width', { kind: 'panel' }))}
-              />
+              />}
               {onDragWaypoint && vertical && i > 0 && sel && (
                 <g className="wp-grip" onPointerDown={(e) => startWpDrag(e, w, 'height', 'width')}>
                   {touchUi && <rect x={(a.x + b.x) / 2 - 24} y={(a.y + b.y) / 2 - 18} width={48} height={36} className="touch-hit" />}
@@ -759,7 +760,7 @@ export function Schematic({ computed: c, direction, units, selection, onSelect, 
         })}
 
         {/* edge segments: hit areas + selection highlight */}
-        {c.segments.map((seg) =>
+        {!exportMode && c.segments.map((seg) =>
           (['left', 'right'] as const).map((edge) => {
             const pts = edgePts(edge === 'left' ? c.leftEdge : c.rightEdge, seg.rowFrom, seg.rowTo);
             const sel = isSel({ kind: 'segment', fromWaypoint: seg.fromWaypoint });
@@ -781,7 +782,7 @@ export function Schematic({ computed: c, direction, units, selection, onSelect, 
             );
           }),
         )}
-        {c.neck && (
+        {c.neck && !exportMode && (
           <g onClick={click({ kind: 'neckline' })}>
             {(['neckLeft', 'neckRight'] as const).map((k) => {
               const arr = k === 'neckLeft' ? c.neckLeft : c.neckRight;
@@ -823,7 +824,7 @@ export function Schematic({ computed: c, direction, units, selection, onSelect, 
                   return (
                     <g key={sgn}>
                       <path d={`M${a.x},${a.y} L${b.x},${b.y}`} className="line-path" />
-                      <path d={`M${a.x},${a.y} L${b.x},${b.y}`} className="hit" />
+                      {!exportMode && <path d={`M${a.x},${a.y} L${b.x},${b.y}`} className="hit" />}
                       {l.events.map((ev, k) => {
                         const p = S(centre(ev.row) + sgn * lineX(l, ev.row), ev.row);
                         return <circle key={k} cx={p.x} cy={p.y} r={2.2} className={ev.delta < 0 ? 'mk-dec' : 'mk-inc'} />;
@@ -1093,6 +1094,20 @@ export function Schematic({ computed: c, direction, units, selection, onSelect, 
           );
         })()}
       </svg>
+  );
+  if (exportMode) return drawing;
+  return (
+    <div
+      className="canvas"
+      ref={wrapRef}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerLeave={(e) => e.pointerType !== 'touch' && setHoverRow(null)}
+      onClick={() => !suppressClick.current && !drawLine && onSelect({ kind: 'panel' })}
+      style={drawLine ? { cursor: 'crosshair' } : undefined}
+    >
+      {drawing}
       <div className="canvas-hint">
         {touchUi ? 'Pinch to zoom · drag to pan · tap a row for its count' : 'Scroll to zoom · drag to pan · F to fit'}
         {markers && selection.kind === 'segment' ? ' · drag a marker to move it · double-click the edge to add one · Delete removes the selected marker' : rect ? ' · drag a side to change the width, the top to change the height' : ` · ${touchUi ? 'tap' : 'click'} an edge to edit its shaping`}
