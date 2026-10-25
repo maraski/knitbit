@@ -33,6 +33,7 @@ import { loadSample, migrationNotice, useProjectStore, type Notice, type StartSt
 const LayoutView = lazy(() => import('./components/LayoutView').then((m) => ({ default: m.LayoutView })));
 const ChartView = lazy(() => import('./components/ChartView').then((m) => ({ default: m.ChartView })));
 const YokeTopView = lazy(() => import('./components/YokeTopView').then((m) => ({ default: m.YokeTopView })));
+const YokeFrontView = lazy(() => import('./components/YokeFrontView').then((m) => ({ default: m.YokeFrontView })));
 const MeasurementsView = lazy(() => import('./components/MeasurementsView').then((m) => ({ default: m.MeasurementsView })));
 const ImportDialog = lazy(() => import('./components/ImportDialog').then((m) => ({ default: m.ImportDialog })));
 const NewGarmentDialog = lazy(() => import('./components/NewGarmentDialog').then((m) => ({ default: m.NewGarmentDialog })));
@@ -45,8 +46,10 @@ const SizesProps = lazy(() => import('./components/MeasurementProps').then((m) =
 
 const VIEW_KEY = 'knitbit.view.v1';
 type CenterView = 'schematic' | 'chart' | 'layout' | 'measurements';
+/** How a yoke is drawn on the schematic and chart: seen from above, or laid flat (folded into back and front halves). */
+type YokeView = 'top' | 'front';
 
-function readView(): { sizeId?: Id; panelId?: Id; center?: CenterView; mode?: SizeMode; compare?: Id[]; align?: AlignRef; cascade?: Id[] | null; panels?: Partial<SidePanels> } {
+function readView(): { sizeId?: Id; panelId?: Id; center?: CenterView; mode?: SizeMode; compare?: Id[]; align?: AlignRef; cascade?: Id[] | null; panels?: Partial<SidePanels>; yoke?: YokeView } {
   try {
     return JSON.parse(localStorage.getItem(VIEW_KEY) ?? '{}');
   } catch {
@@ -63,6 +66,7 @@ export function App({ start }: { start: StartState }) {
   const [panelId, setPanelId] = useState<Id | null>(view.panelId ?? project.panels[0]?.id ?? null);
   const [selection, setSelection] = useState<Selection>(PANEL_SELECTION);
   const [center, setCenter] = useState<CenterView>(view.center ?? 'schematic');
+  const [yokeView, setYokeView] = useState<YokeView>(view.yoke ?? 'top');
   const [sizeMode, setSizeMode] = useState<SizeMode>(view.mode ?? 'single');
   const [drawLine, setDrawLine] = useState(false);
   const wpDragStart = useRef<{ key: string; value: number } | null>(null);
@@ -92,11 +96,11 @@ export function App({ start }: { start: StartState }) {
 
   useEffect(() => {
     try {
-      localStorage.setItem(VIEW_KEY, JSON.stringify({ sizeId: size?.id, panelId: panel?.id, center, mode: sizeMode, compare: compareRaw, align, cascade: cascadeRaw, panels: side.panels }));
+      localStorage.setItem(VIEW_KEY, JSON.stringify({ sizeId: size?.id, panelId: panel?.id, center, mode: sizeMode, compare: compareRaw, align, cascade: cascadeRaw, panels: side.panels, yoke: yokeView }));
     } catch {
       /* ignore */
     }
-  }, [size?.id, panel?.id, center, sizeMode, compareRaw, align, cascadeRaw, side.panels]);
+  }, [size?.id, panel?.id, center, sizeMode, compareRaw, align, cascadeRaw, side.panels, yokeView]);
 
   // One cache of computed panels per project version, shared by every view.
   const computedFor = useMemo(() => {
@@ -361,6 +365,12 @@ export function App({ start }: { start: StartState }) {
                 modes={center === 'chart' ? ['single', 'grid'] : undefined}
               />
             )}
+            {(center === 'chart' || center === 'schematic') && panel?.yoke && (
+              <div className="segmented" title="How the yoke is drawn">
+                <button className={yokeView === 'top' ? 'active' : ''} onClick={() => setYokeView('top')} title="Seen from above: rings round the neck">Top</button>
+                <button className={yokeView === 'front' ? 'active' : ''} onClick={() => setYokeView('front')} title="Laid flat: folded at the top of each sleeve into back and front halves">Front</button>
+              </div>
+            )}
             {center === 'layout' && (
               <>
                 <span className="spacer" />
@@ -371,7 +381,7 @@ export function App({ start }: { start: StartState }) {
               <>
                 <strong>{panel.name}</strong>
                 <span className="muted">
-                  · size {size ? sizeText(size, project) : ''} · {panel.yoke ? 'seen from above, row 1 at the neck' : panel.direction === 'top-down' ? 'row 1 at top' : 'row 1 at bottom'}
+                  · size {size ? sizeText(size, project) : ''} · {panel.yoke ? (yokeView === 'front' ? 'laid flat, row 1 at top' : 'seen from above, row 1 at the neck') : panel.direction === 'top-down' ? 'row 1 at top' : 'row 1 at bottom'}
                   {panel.direction === 'side-to-side' ? ' · worked side to side (chart in knitting orientation)' : ''}
                 </span>
               </>
@@ -380,7 +390,7 @@ export function App({ start }: { start: StartState }) {
               <>
                 <strong>{panel.name}</strong>
                 <span className="muted">
-                  · size {size ? sizeText(size, project) : ''} · {panel.yoke ? 'seen from above' : panel.direction}
+                  · size {size ? sizeText(size, project) : ''} · {panel.yoke ? (yokeView === 'front' ? 'laid flat (back above, front below)' : 'seen from above') : panel.direction}
                   {panel.yoke ? '' : panel.direction === 'top-down' ? ' (row 1 at top)' : panel.direction === 'bottom-up' ? ' (row 1 at bottom)' : ''}
                   {panel.inTheRound ? ' · in the round' : panel.joinAt ? ' · round below ' + (panel.waypoints.find((w) => w.id === panel.joinAt)?.name ?? '?') : ''}
                 </span>
@@ -414,6 +424,17 @@ export function App({ start }: { start: StartState }) {
                   setSelection(PANEL_SELECTION);
                 }}
                 onSelectJoin={(id) => setSelection({ kind: 'join', id })}
+              />
+            ) : (center === 'chart' || center === 'schematic') && panel?.yoke && computed && yokeView === 'front' ? (
+              <YokeFrontView
+                project={project}
+                panel={panel}
+                computed={computed}
+                view={center === 'chart' ? 'chart' : 'schematic'}
+                mode={center === 'chart' && sizeMode === 'overlay' ? 'single' : sizeMode}
+                compare={(sizeMode === 'single' ? [size?.id ?? ''] : compare).map((sid) => computedFor(panel.id, sid))}
+                units={project.units}
+                buttons={yokeButtons}
               />
             ) : (center === 'chart' || center === 'schematic') && panel?.yoke && computed ? (
               <YokeTopView
