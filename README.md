@@ -204,7 +204,8 @@ removed; delete them in the console if you want the space back.
   - `edgeTreatments.ts`: hem, cuff, neckband and front band settings applied as sections, strips and joins.
   - `bands.ts`, `buttons.ts`: band width / overlap / closing width, button positions, buttonholes, band checks.
   - `contiguous.ts`: the contiguous yoke generator (phases A–F, neck, row-by-row zones and increases) and `yoke.*` names.
-  - `yokePanel.ts`, `yokeTop.ts`: the yoke as a panel and chart; its top-view geometry.
+  - `yokePanel.ts`, `yokeTop.ts`, `yokeFront.ts`: the yoke as a panel and chart; its top-view and laid-flat geometry.
+    `yokeShaping.ts`: each row's shaping counts for the readouts.
   - `contiguousGarment.ts`: body and sleeves from the yoke's held stitches. `contiguousChecks.ts`: their checks.
   - `raglan.ts`: the raglan yoke generator (same rows and result as the contiguous yoke; its neck comes from
     `generateYoke`). `generateYoke` hands a `style: 'raglan'` yoke to it.
@@ -753,6 +754,24 @@ per phase, back length, underarm cast-on, held stitches). Removing a size clears
 - **Chart:** the same rings, one per row, with stitch boundaries when zoomed in; increases and cast-ons drawn at their
   stitches, symbols pointing away from the neck (the knitting direction); markers as bold red lines; cast-on marks round
   the neck; row numbers up centre back (row 1 next to the cast-on); the symbol legend (incl. *place marker on row 1, slip after*) at the bottom right.
+- **Laid flat (Front).** A *Top / Front* toggle (Schematic and Chart, every yoke: contiguous, classic and modified
+  raglan, off-shoulder; remembered per user with the other view settings) draws the yoke as if folded flat at the top
+  of each sleeve: the back half above the front half, both upright (neck at the top, row 1 first) and RS facing — the
+  back as seen from behind (the wearer's left on the left), the front as seen from the front (the wearer's left on the
+  right). The fold runs down the middle of each sleeve (on the contiguous yoke, the shoulder seam and cap); an odd
+  centre stitch goes to the back half. Each stitch keeps its place along the row as in the top view, so the PDF
+  start's fronts grow in from the neck points, short rows are drawn as the stitches they work (the front neck sits
+  lower, turns marked DS), and a cardigan's band space stays open at centre front, with its buttons. The schematic
+  tints the zones (½ sleeves at the sides), draws the markers, the dashed phase lines, the off-shoulder band (folded:
+  facing and turning round folded inside, the top edge being the fold) and its ring line, and labels the cast-on,
+  the front neck and the split. The chart has a cell per stitch in each half, the cast-on row (*CO*) above row 1 and
+  row numbers on the left. Overlay and Grid work as in the top view (`yokeFront.ts`).
+- **Shaping in the readouts.** In both views, hovering (or tapping on a touch screen) a stitch also gives what
+  happens in its row: increases by symbol and by zone (and how many are front neck increases), cast-ons (at centre
+  front with the join, or at the front edges), German short-row turns and their zone, the half rows with no
+  increases, and an off-shoulder band's rounds (its stitch, the increase round to the ring, a folded band's facing,
+  purl or picot turning round and knit-closed joining round), or *no shaping*. The laid-flat readout adds the half.
+  Counted from the generator's rows (`yokeShaping.ts`), not the drawn cells, so both views agree.
 
 **Body and sleeves.** *Add body and sleeves* (Pieces tab when a contiguous garment lacks them, or the yoke's
 properties) adds the yoke if there is none and the panels it lacks, all top-down; it never runs on its own and adds
