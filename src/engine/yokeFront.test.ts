@@ -47,11 +47,18 @@ describe('yoke laid flat: two halves', () => {
         const g = frontGeometry(y, false);
         expect(g.rows.length).toBe(y.rows.length + 1);
         for (const r of g.rows) {
-          // The pieces cover the row exactly.
-          expect(r.pieces.reduce((n, q) => n + q.i1 - q.i0, 0)).toBe(r.total);
-          for (let i = 0; i < r.total; i++) expect(r.pieces.filter((q) => i >= q.i0 && i < q.i1)).toHaveLength(1);
+          // The pieces cover the row exactly: end to end from 0 to the row's total (checked per piece, not per stitch,
+          // to keep the every-size run fast).
+          const sorted = [...r.pieces].filter((q) => q.i1 > q.i0).sort((a, b) => a.i0 - b.i0);
+          let at = 0;
+          for (const q of sorted) {
+            if (q.i0 !== at) expect(q.i0).toBe(at);
+            at = q.i1;
+          }
+          if (at !== r.total) expect(at).toBe(r.total);
           // The zone parts are the worked stitches.
-          expect(worked(g, r.row)).toBe(r.hi - r.lo);
+          const w = worked(g, r.row);
+          if (w !== r.hi - r.lo) expect(w).toBe(r.hi - r.lo);
         }
       }
     });
