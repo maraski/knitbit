@@ -41,8 +41,10 @@ describe('plan', () => {
   it('header first, then the size tables once; per-size sections only when built', () => {
     const p = garment();
     const parts = planExport(p, { sizeIds: [sizeId(p, 'L'), sizeId(p, 'M')], paper: 'a4', sections: readySections() });
-    expect(parts.map((x) => x.section)).toEqual(['header', 'body', 'finished', 'pieces']);
+    expect(parts.map((x) => x.section)).toEqual(['header', 'body', 'finished', 'pieces', 'charts', 'charts']);
+    expect(parts.slice(4).map((x) => x.sizeId)).toEqual([sizeId(p, 'M'), sizeId(p, 'L')]);
     expect(parts[0].newPage).toBe(true);
+    // The tables flow on; the charts start their own pages (portrait or landscape).
     expect(parts.slice(1).every((x) => !x.newPage)).toBe(true);
     expect(planExport(p, { sizeIds: [], paper: 'a4', sections: ['finished', 'charts'] }).map((x) => x.section)).toEqual(['header', 'finished']);
   });

@@ -25,6 +25,15 @@ function savePaper(paper: Paper): void {
   }
 }
 
+/** The Chart tab's "Collapse plain middle" setting: the export follows it. */
+function readCollapse(): boolean {
+  try {
+    return !!JSON.parse(localStorage.getItem('knitbit.chart.v1') ?? '{}').collapse;
+  } catch {
+    return false;
+  }
+}
+
 /** Text the PDF prints that Helvetica can't draw: where it is and which characters. */
 function printProblems(project: Project): { where: string; chars: string[] }[] {
   const items: { where: string; text: string }[] = [
@@ -48,6 +57,7 @@ export function ExportDialog({ project, sizeId, onClose }: Props) {
   const [sizes, setSizes] = useState<Id[]>([sizeId]);
   const [paper, setPaperState] = useState<Paper>(readPaper);
   const [sections, setSections] = useState<SectionId[]>(readySections);
+  const [collapse, setCollapse] = useState(readCollapse);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const problems = useMemo(() => printProblems(project), [project]);
@@ -64,7 +74,7 @@ export function ExportDialog({ project, sizeId, onClose }: Props) {
     setBusy('Loading…');
     try {
       const { buildPdf } = await import('../../export/pdf');
-      const blob = await buildPdf(project, { sizeIds: ticked, paper, sections }, { onProgress: (d, t) => setBusy(`Building the PDF (${d} of ${t})…`) });
+      const blob = await buildPdf(project, { sizeIds: ticked, paper, sections, collapse }, { onProgress: (d, t) => setBusy(`Building the PDF (${d} of ${t})…`) });
       downloadBlob(pdfFileName(project.name, ticked.map((id) => project.sizes.find((s) => s.id === id)!.name)), blob);
       onClose();
     } catch (e) {
@@ -81,7 +91,7 @@ export function ExportDialog({ project, sizeId, onClose }: Props) {
           <button className="icon" onClick={onClose} aria-label="Close" disabled={!!busy}>×</button>
         </div>
         <div className="modal-body">
-          <p className="hint">A working copy to knit from: the gauge and size tables for the sizes you tick.</p>
+          <p className="hint">A working copy to knit from: the gauge, size tables and stitch charts for the sizes you tick.</p>
           <div className="export-grid">
             <div className="field">
               <label>Sizes</label>
@@ -121,7 +131,13 @@ export function ExportDialog({ project, sizeId, onClose }: Props) {
                     {s.label}
                   </label>
                 ))}
-                <span className="hint">Schematics and stitch charts are coming next.</span>
+                {sections.includes('charts') && (
+                  <label className="check export-sub" title="Fold long runs of identical plain columns, as on the Chart tab">
+                    <input type="checkbox" checked={collapse} onChange={() => setCollapse(!collapse)} />
+                    Collapse plain middle
+                  </label>
+                )}
+                {!SECTIONS.find((s) => s.id === 'schematics')?.ready && <span className="hint">Schematics are coming next.</span>}
               </div>
             </div>
           </div>

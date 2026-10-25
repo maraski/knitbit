@@ -11,6 +11,7 @@ import { svg2pdf } from 'svg2pdf.js';
 import { exportFooter } from '../engine/garment';
 import type { PanelCache } from '../engine/joins';
 import type { Id, Project } from '../engine/model';
+import { drawCharts } from './charts';
 import { orderedSizes, planExport, type ExportOptions, type Paper, type Part } from './plan';
 import { bodyTable, exportDate, finishedTable, headerInfo, piecesTable, type Table } from './tables';
 import { helveticaText, printable, splitArrows, type Arrow } from './text';
@@ -70,6 +71,13 @@ export class Writer {
     const top = MARGIN + HEADER_BAND + 4;
     const bottom = h - MARGIN - this.footerHeight(w) - 3;
     return { left: MARGIN, right: w - MARGIN, top, bottom, width: w - 2 * MARGIN, height: bottom - top };
+  }
+
+  /** The content box of a page in the given orientation, before it exists (for choosing one). */
+  boxFor(orientation: Orientation): { width: number; height: number } {
+    const [a, b] = PAPER_MM[this.paper];
+    const [w, h] = orientation === 'portrait' ? [a, b] : [b, a];
+    return { width: w - 2 * MARGIN, height: h - MARGIN - this.footerHeight(w) - 3 - (MARGIN + HEADER_BAND + 4) };
   }
 
   private footerLinesFor(width: number): string[] {
@@ -306,6 +314,7 @@ export const RENDERERS: Partial<Record<Part['section'], Renderer>> = {
   body: (w, _p, { project, sizeIds }) => section(w, bodyTable(project, sizeIds)),
   finished: (w, _p, { project, sizeIds, cache }) => section(w, finishedTable(project, sizeIds, cache)),
   pieces: (w, _p, { project, sizeIds, cache }) => section(w, piecesTable(project, sizeIds, cache)),
+  charts: drawCharts,
 };
 
 /** The header band's text: the project, and the size for per-size pages (else the ticked sizes). */
