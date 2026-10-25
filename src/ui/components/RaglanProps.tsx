@@ -44,6 +44,7 @@ function incRows(rows: number[], fast: number, first = 1): string {
 
 /** The off-shoulder band in words: its stitch, depth and rows (a folded band: finished depth, knit twice). */
 function bandWords(o: NonNullable<YokeResult['offShoulder']>, units: Units): string {
+  if (o.noBand) return 'none (switched off), the ring cast on as the top edge';
   if (!o.fold) return `${o.pattern.name}, ${len(o.bandCm, units)}, ${o.bandRows} rows`;
   return `folded, ${len(o.bandCm, units)} finished: ${o.fold.depthRows} rows of facing, a ${o.fold.turn} turning round and ${o.fold.depthRows} rows outside, ${o.fold.close === 'knit' ? 'knit closed' : 'sewn down'} (${o.bandRows} rows)`;
 }
@@ -101,15 +102,15 @@ export function RaglanProps({ ctx }: { ctx: PropsContext }) {
     <>
       {meas('off_shoulder_circ', 'Off-shoulder circumference')}
       {meas('off_shoulder_drop', 'Drop: shoulder point to the band’s top edge')}
-      {num(`Band ease, a fraction of off_shoulder_circ${pct('bandEase')}`, 'bandEase', (s) => (s.offShoulder ?? defaultOffShoulder()).bandEase, (s, d) => (osSet(s).bandEase = d))}
-      {num(`Ring ease after the increase round${pct('ringEase')}`, 'ringEase', (s) => (s.offShoulder ?? defaultOffShoulder()).ringEase, (s, d) => (osSet(s).ringEase = d))}
+      {!o?.noBand && num(`Band ease, a fraction of off_shoulder_circ${pct('bandEase')}`, 'bandEase', (s) => (s.offShoulder ?? defaultOffShoulder()).bandEase, (s, d) => (osSet(s).bandEase = d))}
+      {num(`Ring ease ${o?.noBand ? 'at the cast-on' : 'after the increase round'}${pct('ringEase')}`, 'ringEase', (s) => (s.offShoulder ?? defaultOffShoulder()).ringEase, (s, d) => (osSet(s).ringEase = d))}
       {cm('Arm arc, each sleeve at the ring, between the lines (cm)', (s) => (s.offShoulder ?? defaultOffShoulder()).armArc, (s, d) => (osSet(s).armArc = d), 'armArc')}
-      {cm('Back raise, short rows after the increase round (cm)', (s) => (s.offShoulder ?? defaultOffShoulder()).backRaise, (s, d) => (osSet(s).backRaise = d), 'backRaise')}
+      {cm(`Back raise, short rows after the ${o?.noBand ? 'cast-on' : 'increase round'} (cm)`, (s) => (s.offShoulder ?? defaultOffShoulder()).backRaise, (s, d) => (osSet(s).backRaise = d), 'backRaise')}
       <p className="hint">
         A back raise reads back as the Modified raglan, 0 (a level band) as the Classic: it’s the same garment either way. The band is the Neckband edge (Garment tab):
         {o ? ` ${bandWords(o, ctx.units)}` : ''}.
       </p>
-      {edgesOf(project).neckband.enabled && edgesOf(project).neckband.method === 'with-panel' && <NeckbandFold project={project} update={update} />}
+      {(!edgesOf(project).neckband.enabled || edgesOf(project).neckband.method === 'with-panel') && <NeckbandFold project={project} update={update} />}
       {(o?.backRaiseCm ?? 0) > 0 && (
         <>
           {num('Short-row pairs', 'srPairs', (s) => (s.shortRows ?? defaultShortRows()).pairs, (s, d) => (sr(s).pairs = d))}
@@ -130,8 +131,9 @@ export function RaglanProps({ ctx }: { ctx: PropsContext }) {
       </div>
       {os ? (
         <p className="hint">
-          Worked top-down in one piece from a rib band below the shoulders: the band is cast on all round and knit first, an increase round takes it to the ring (fronts, arm
-          arcs and back){o?.backRaiseCm ? ', short rows raise the back' : ''}, then four raglan lines run to the underarms. The body and sleeves each increase every other row
+          Worked top-down in one piece from below the shoulders:{' '}
+          {o?.noBand ? 'the ring (fronts, arm arcs and back) is cast on all round, with no band' : 'a band is cast on all round and knit first, an increase round takes it to the ring (fronts, arm arcs and back)'}
+          {o?.backRaiseCm ? ', short rows raise the back' : ''}, then four raglan lines run to the underarms. The body and sleeves each increase every other row
           (more often where they need to) to reach their widths at the split.
         </p>
       ) : (
@@ -170,7 +172,12 @@ export function RaglanProps({ ctx }: { ctx: PropsContext }) {
             </tbody>
           </table>
           <div className="formula">
-            {o ? (
+            {o?.noBand ? (
+              <div>
+                No band: cast on <b>{o.ringSts}</b> all round ({len(o.ringSts / y.stitchesPerCm, ctx.units)}) and join in the round: left front {o.ringZones.leftFront} · left sleeve {o.ringZones.leftSleeve} ({y.seamSts} + {o.armSts} +{' '}
+                {y.seamSts}) · back {o.ringZones.back} · right sleeve {o.ringZones.rightSleeve} · right front {o.ringZones.rightFront}.
+              </div>
+            ) : o ? (
               <>
                 <div>
                   Cast on <b>{o.bandSts}</b> all round for the band and join in the round;{' '}
@@ -335,7 +342,7 @@ function AllSizes({ ctx }: { ctx: PropsContext }) {
             y?.raglan ? (
               <tr key={s.id} className={s.id === ctx.sizeId ? 'current' : ''}>
                 <td>{s.name}</td>
-                <td>{y.offShoulder ? `${y.offShoulder.bandSts} / ${y.offShoulder.ringSts}` : y.castOn}</td>
+                <td>{y.offShoulder ? `${y.offShoulder.noBand ? '—' : y.offShoulder.bandSts} / ${y.offShoulder.ringSts}` : y.castOn}</td>
                 <td>{y.counts.total}</td>
                 <td>{rate(y.raglan.bodyRows.length, y.raglan.bodyFast)}</td>
                 <td>{rate(y.raglan.sleeveRows.length, y.raglan.sleeveFast)}</td>

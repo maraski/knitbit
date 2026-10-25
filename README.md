@@ -647,7 +647,7 @@ a stitch (1×1 rib = 2n, 2×2 rib = 4n + 2, garter, seed = 2n + 1, or a custom m
 |---|---|---|
 | Hem | a *Hem rib* pattern section at the lower edge of the back and fronts | a pick-up join on their lower edges |
 | Cuff | a *Cuff rib* section on the sleeves | a pick-up join on the sleeves' lower edges |
-| Neckband | an off-shoulder neckline only: the band, knit first with the yoke, single or folded (see *Off-shoulder*) | a *Neckband* strip, picked up from every neckline |
+| Neckband | an off-shoulder neckline only: the band, knit first with the yoke, single or folded; untick it for no band (see *Off-shoulder*) | a *Neckband* strip, picked up from every neckline |
 | Front bands | integrated: extra stitches at each front edge | picked up, or knit sideways and sewn on (per band, see below) |
 
 Changing any setting applies them to the panels you have; things made by a treatment are marked (`edge`) and
@@ -885,6 +885,7 @@ back as Modified, 0 as Classic (the same garment either way).
 | Increase round | `ringEase` 0 % | the row after the band: up to `off_shoulder_circ × (1 + ringEase)`, spread evenly in each zone |
 | Ring | `armArc` = `bicep × 0.5` per sleeve | each sleeve zone is the arm arc plus its two raglan lines; the rest is half front, half back |
 | Back raise | 0 (Classic) / 2 cm (Modified) | short-row pairs from the back raise (editable: pairs, first turn, step), turning in the fronts |
+| No band | off (*Band: Single*) | *Band: None* (or untick the **Neckband** edge): the ring is cast on as the top edge, with no band rows and no increase round; the raglan (and a back raise's short rows) start on row 1, and the depth is unchanged. Only the ring ease holds it up (an info check says so). A neckband set to *picked up later* still gets the 4 cm rib band |
 | Folded band | off (*Band: Single*); folded = purl turning round, knit closed | *Band: Folded* (Garment tab → Neckband, or the yoke's Off-shoulder part): stockinette, the depth is the **finished** band, worked as that many rows of facing, a turning round (purl, or picot: yo, k2tog, an even count) and as many rows outside; the outside's last round knits each stitch together with its cast-on loop (*knit closed*), or the facing is sewn down (*sewn*). Same band ease; no elastic |
 | Depth | `armhole_depth − off_shoulder_drop + back_raise` (band top to underarm at the back) | the band and the increase round count inside it (a folded band's facing and turning round are added on top: they fold inside); the rates are solved as for the classic raglan |
 

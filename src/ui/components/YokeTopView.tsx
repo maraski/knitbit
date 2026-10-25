@@ -319,7 +319,16 @@ export function YokeTopView({ project, panel, computed: c, view, mode, compare, 
       )}
       {mode === 'single' && (
         <div className="yoke-key">
-          {y.offShoulder ? (
+          {y.offShoulder?.noBand ? (
+            <>
+              <div>
+                No band: the ring cast on all round, <b>{y.offShoulder.ringSts}</b> ({len(y.offShoulder.ringSts / y.stitchesPerCm, units)}): front {y.offShoulder.ringZones.leftFront} · sleeve {y.offShoulder.ringZones.leftSleeve} · back {y.offShoulder.ringZones.back} · sleeve {y.offShoulder.ringZones.rightSleeve} · front {y.offShoulder.ringZones.rightFront}
+              </div>
+              <div>
+                Top edge {len(buildScope(project, c.sizeId).off_shoulder_drop ?? 0, units)} below the shoulder point · raglan lines {y.seamSts} sts · about {len(y.raglan!.lineCm, units)} · increases to row {y.counts.total - y.counts.E}
+              </div>
+            </>
+          ) : y.offShoulder ? (
             <>
               <div>
                 Band: cast on <b>{y.offShoulder.bandSts}</b> all round ({len(y.offShoulder.bandSts / y.stitchesPerCm, units)}) ·{' '}
@@ -358,8 +367,8 @@ export function YokeTopView({ project, panel, computed: c, view, mode, compare, 
               Cap <b>{y.counts.C + y.counts.D}</b> rows · {len((y.counts.C + y.counts.D) / y.rowsPerCm, units)}
             </div>
           )}
-          <div className="key-rings">Dashed rings, from the {y.offShoulder ? 'band' : 'neck'} out:</div>
-          {y.offShoulder && <div>end of the band · row {y.offShoulder.bandRows}; the increase round · row {y.offShoulder.incRow} · {y.offShoulder.ringSts} sts</div>}
+          <div className="key-rings">Dashed rings, from the {y.offShoulder ? (y.offShoulder.noBand ? 'cast-on' : 'band') : 'neck'} out:</div>
+          {y.offShoulder && !y.offShoulder.noBand && <div>end of the band · row {y.offShoulder.bandRows}; the increase round · row {y.offShoulder.incRow} · {y.offShoulder.ringSts} sts</div>}
           {y.phases
             .filter((ph) => ph.id === 'A' || ph.id === 'C' || ph.id === 'D' || (ph.id === 'R' && y.counts.E > 0))
             .map((ph) => (
@@ -406,7 +415,7 @@ function TopSchematic({ y, g, P, labels, scale, units }: { y: YokeResult; g: Top
   const parts: React.ReactNode[] = [];
   ZONES.forEach((_, zi) => parts.push(<path key={`z${zi}`} d={zoneShape(g, zi, P)} className={`yz yz-${zi}`} />));
   const os = y.offShoulder;
-  if (os) {
+  if (os && !os.noBand) {
     // The band (knit first, in rib) as a hatched ring, and the ring after its increase round as a solid line.
     const band = g.rings[Math.min(os.bandRows, g.rings.length - 1)];
     const c0 = P(0, 0);

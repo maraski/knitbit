@@ -50,6 +50,7 @@ export function EdgeSettings({ project, sizeId, update }: Props) {
               <input type="checkbox" checked={t.enabled} onChange={(e) => set(d.id, { ...t, enabled: e.target.checked })} />
               {d.label}
             </label>
+            {d.id === 'neckband' && nbWithPanel && !t.enabled && <p className="hint">Off-shoulder with no band: the yoke’s ring is cast on as the top edge.</p>}
             {t.enabled && (
               <>
                 <ExprField

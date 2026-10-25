@@ -165,7 +165,7 @@ export function generateRaglan(project: Project, spec: YokeSpec, sizeId: Id): Yo
   const neckSet = new Set(o ? [] : ny!.rows.filter((r) => r.neck).map((r) => r.row));
   const plain = o ? o.plain : new Set(ny!.rows.filter((r) => r.plain).map((r) => r.row));
   // The first row that can increase (off-shoulder: after the band and the increase round) and the short rows' first row.
-  const first = o ? o.bandRows + 2 : 1;
+  const first = o ? o.first : 1;
   const srFrom = shortRows?.fromRow ?? 1;
 
   // ---- cast-on: the sleeve tops, each between its raglan lines (off-shoulder: the ring's zones, after the band) ----
@@ -242,7 +242,7 @@ export function generateRaglan(project: Project, spec: YokeSpec, sizeId: Id): Yo
     const incs: YokeInc[] = [];
     const castOns: YokeCastOn[] = [];
     // Off-shoulder: the increase round takes each zone from its share of the band to the ring, spread evenly.
-    if (o && r === o.bandRows + 1) {
+    if (o && !o.noBand && r === o.bandRows + 1) {
       for (const k of ZONES) {
         for (const at of distributeAcross(ringZones[k], Math.max(0, ringZones[k] - z[k]))) incs.push({ zone: k, at, symbol: sym.after, kind: 'band' });
         z[k] = ringZones[k];
@@ -309,7 +309,7 @@ export function generateRaglan(project: Project, spec: YokeSpec, sizeId: Id): Yo
   const add = (id: PhaseSummary['id'], label: string, from: number, to: number, incsPerRow: string) => {
     if (to >= from) phases.push({ id, label, from, to, stsBefore: stsAt(from - 1), stsAfter: stsAt(to), incsPerRow });
   };
-  if (o) {
+  if (o && !o.noBand) {
     if (o.fold) {
       const d = o.fold.depthRows;
       add('band', 'Band facing, stockinette, in the round', 1, Math.min(d, Y), `${castOn} sts, no increases`);
@@ -317,6 +317,8 @@ export function generateRaglan(project: Project, spec: YokeSpec, sizeId: Id): Yo
       add('band', 'Band outside, stockinette', d + 2, Math.min(o.bandRows, Y), o.fold.close === 'knit' ? `last round: each st knit together with its cast-on loop` : 'sew the facing down afterwards');
     } else add('band', `Band, ${o.pattern.name}, in the round`, 1, Math.min(o.bandRows, Y), `${castOn} sts, no increases`);
     add('ring', 'Increase round', o.bandRows + 1, Math.min(o.bandRows + 1, Y), `${o.ringSts - castOn} sts spread evenly`);
+  }
+  if (o) {
     if (shortRows?.pairs) add('neck', 'Short rows (back raise)', srFrom, Math.min(shortRows.endRow, Y), `${shortRows.pairs} pairs, German short rows, then in the round`);
   } else if (shortRows) {
     if (shortRows.pairs) add('neck', 'Short rows (neck)', 1, Math.min(R, Y), `${shortRows.pairs} pairs, German short rows${cardigan ? '' : ', then in the round'}`);
@@ -365,7 +367,7 @@ export function generateRaglan(project: Project, spec: YokeSpec, sizeId: Id): Yo
     stitchesPerCm: spc,
     rowsPerCm: rpc,
     raglan: { sleeveTopSts: top, bodyRows, sleeveRows, bodyFast, sleeveFast, lineCm },
-    ...(o ? { offShoulder: { bandSts: castOn, bandRows: o.bandRows, bandCm: o.bandCm, pattern: o.pattern, ringSts: o.ringSts, ringZones, incRow: o.bandRows + 1, armSts: o.armSts, backRaiseCm: o.backRaise, frontRows: o.frontRows, ...(o.fold ? { fold: o.fold } : {}) } } : {}),
+    ...(o ? { offShoulder: { bandSts: castOn, bandRows: o.bandRows, bandCm: o.bandCm, pattern: o.pattern, ringSts: o.ringSts, ringZones, incRow: o.noBand ? 0 : o.bandRows + 1, armSts: o.armSts, backRaiseCm: o.backRaise, frontRows: o.frontRows, ...(o.fold ? { fold: o.fold } : {}), ...(o.noBand ? { noBand: true } : {}) } } : {}),
   };
 }
 
@@ -383,11 +385,15 @@ function offShoulderStart(project: Project, spec: YokeSpec, scope: Record<string
   if (circ === undefined) issues.push({ severity: 'error', message: 'Off-shoulder needs the off_shoulder_circ measurement (around both upper arms and the torso at band height).' });
   if (scope.off_shoulder_drop === undefined) issues.push({ severity: 'error', message: 'Off-shoulder needs the off_shoulder_drop measurement (shoulder point down to the band).' });
   const c = circ ?? 0;
-  const bandEase = val('bandEase', 'Band ease (fraction of off_shoulder_circ)', os.bandEase, '');
+  // No band when the Neckband edge is switched off: the ring is cast on and the raglan starts at once.
+  const nbEdge = edgesOf(project).neckband;
+  const noBand = !nbEdge.enabled;
+  const bandEase = noBand ? 0 : val('bandEase', 'Band ease (fraction of off_shoulder_circ)', os.bandEase, '');
   const ringEase = val('ringEase', 'Ring ease (fraction of off_shoulder_circ)', os.ringEase, '');
   const armCm = Math.max(0, val('armArc', 'Arm arc at the ring, each sleeve (between the raglan lines)', os.armArc, 'cm'));
   const backRaise = Math.max(0, val('backRaise', 'Back raise (short rows)', os.backRaise, 'cm'));
-  if (bandEase > -0.05) issues.push({ severity: 'warning', message: `Band ease ${Math.round(bandEase * 100)} %: with less than 5 % negative ease the band may slide down.` });
+  if (noBand) issues.push({ severity: 'info', message: 'No band (the Neckband is off): the ring is cast on as the top edge, and only its ease (ring ease) holds the garment up.' });
+  else if (bandEase > -0.05) issues.push({ severity: 'warning', message: `Band ease ${Math.round(bandEase * 100)} %: with less than 5 % negative ease the band may slide down.` });
   else if (bandEase < -0.2) issues.push({ severity: 'warning', message: `Band ease ${Math.round(bandEase * 100)} %: more than 20 % negative ease may be too tight to pull over the arms.` });
 
   // The ring after the increase round.
@@ -400,19 +406,18 @@ function offShoulderStart(project: Project, spec: YokeSpec, scope: Record<string
   const front = Math.max(0, bodySts - back);
   const ring: ZoneCounts = { leftFront: Math.floor(front / 2), leftSleeve: sleeve, back, rightSleeve: sleeve, rightFront: front - Math.floor(front / 2) };
 
-  // The band: from the Neckband edge when it is knit with the panels, else 4 cm of 1×1 rib.
-  const nbEdge = edgesOf(project).neckband;
+  // The band: from the Neckband edge when it is knit with the panels, else 4 cm of 1×1 rib (none when it is off).
   const withPanel = nbEdge.enabled && nbEdge.method === 'with-panel';
   // A folded band: stockinette, its finished depth knit twice with a turning round between (picot pairs its stitches).
   const f0 = withPanel ? nbEdge.fold : undefined;
   const pattern = f0 ? foldedPattern(f0.turn) : withPanel ? edgePattern(nbEdge) : OFF_SHOULDER_BAND.pattern;
   const bandCm = withPanel ? val('bandDepth', f0 ? 'Band depth, finished (Neckband edge)' : 'Band depth (Neckband edge)', nbEdge.depth, 'cm') : OFF_SHOULDER_BAND.depth;
   const depthRows = Math.max(1, rowsOf(bandCm));
-  const bandRows = f0 ? 2 * depthRows + 1 : depthRows;
+  const bandRows = noBand ? 0 : f0 ? 2 * depthRows + 1 : depthRows;
   const fold = f0 ? { turn: f0.turn, close: f0.close, depthRows, hiddenRows: depthRows + 1 } : undefined;
   const m = Math.max(1, pattern.multiple);
-  const bandSts = Math.max(m, Math.round(sts(c * (1 + bandEase)) / m) * m);
-  if (bandSts > ringSts) issues.push({ severity: 'error', message: `The band (${bandSts} sts) is wider than the ring (${ringSts} sts): its ease must be below the ring's.` });
+  const bandSts = noBand ? ringSts : Math.max(m, Math.round(sts(c * (1 + bandEase)) / m) * m);
+  if (!noBand && bandSts > ringSts) issues.push({ severity: 'error', message: `The band (${bandSts} sts) is wider than the ring (${ringSts} sts): its ease must be below the ring's.` });
   // The band's zones: the ring's scaled to the band, the rest of the count on the fronts.
   const f = ringSts > 0 ? Math.min(1, bandSts / ringSts) : 0;
   const bSleeve = Math.round(sleeve * f);
@@ -432,7 +437,8 @@ function offShoulderStart(project: Project, spec: YokeSpec, scope: Record<string
   const lastTurn = turns[turns.length - 1] ?? side;
   if (pairs && lastTurn < 1) issues.push({ severity: 'error', message: `Short rows: ${pairs} pairs ${step} sts apart don't fit in a front of ${side} sts (the last turn is past centre front). Fewer pairs or a smaller step.` });
   if (pairs > 1 && step < 2) issues.push({ severity: 'info', message: `Short rows: turns 1 st apart. Fewer pairs spread them more.` });
-  const fromRow = bandRows + 2;
+  // The first row after the band and its increase round (row 1 without a band).
+  const fromRow = noBand ? 1 : bandRows + 2;
   const endRow = pairs > 0 ? fromRow + 2 * pairs : 0;
   // No raglan increases on the band, the increase round, or the half rows that start and end the short rows.
   const plain = new Set<number>();
@@ -441,7 +447,7 @@ function offShoulderStart(project: Project, spec: YokeSpec, scope: Record<string
     plain.add(endRow);
   }
   const shortRows: NonNullable<YokeResult['shortRows']> = { pairs, first: firstTurn, step, turns: turns.map((u) => Math.max(1, u)), endRow, frontSts: ring.leftFront + ring.rightFront, fromRow };
-  const R = pairs > 0 ? endRow : bandRows + 1;
+  const R = pairs > 0 ? endRow : noBand ? 0 : bandRows + 1;
   const neck: YokeResult['neck'] = { depthRows: 0, row: R, perSide: 0, backNeck: back, centre: 0, closingSts: 0, frontEdgeCo: 0 };
-  return { ring, band, bandRows, bandCm, pattern, fold, ringSts, armSts, seam, backRaise, shortRows, plain, neck, frontRows: 0 };
+  return { ring, band, bandRows, bandCm: noBand ? 0 : bandCm, pattern, fold: noBand ? undefined : fold, noBand, first: fromRow, ringSts, armSts, seam, backRaise, shortRows, plain, neck, frontRows: 0 };
 }
