@@ -1,0 +1,11 @@
+/* Export dialog (loaded with it). */
+.modal.export-dialog { width: min(620px, calc(100vw - 32px)); }
+.export-dialog .modal-foot { align-items: center; margin-top: 0; border-top: 1px solid var(--line); }
+.export-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+.export-sizes { display: grid; grid-template-columns: repeat(3, auto); justify-content: start; gap: 2px 18px; margin-bottom: 4px; }
+.export-dialog .field > label.check { display: flex; align-items: center; gap: 6px; font-size: inherit; color: inherit; margin: 2px 0; }
+.export-dialog .field input[type=checkbox] { width: auto; margin: 0; }
+.export-dialog .segmented { align-self: flex-start; }
+.export-dialog .inline { display: flex; gap: 12px; }
+.export-warn ul { margin: 4px 0 0; padding-left: 16px; }
+@media (max-width: 560px) { .export-grid { grid-template-columns: 1fr; } }

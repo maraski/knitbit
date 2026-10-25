@@ -27,7 +27,7 @@ M9), `6ee297f` (M10 + bust/princess options), `89c2318` (painted stitches, shapi
 > README's *Garment options* table): cross back is followed (shoulder width is a style option); the yoke splits by
 > back length and deepens until the cap is at most half rapid; body increases low in the armhole with `underarm_co`;
 > edge settings never add or remove panels (explicit *Add strips* / *Add yoke, body and sleeves*); the yoke is drawn
-> from above. Not done: PDF/PNG export (the credit footer text and toggle are ready: `exportFooter()`), integrated
+> from above. Not done: PDF schematics/charts and PNG export (E2–E5 of `docs/export-plan.md`; E1, page 1 and the size tables, is built), integrated
 > bands on a contiguous yoke, neckband knit with the panel, dragging back-neck increases on the chart.
 
 ## 1. Project goal and architecture
@@ -431,6 +431,19 @@ Done since the first handoff: the set-in cap follows the armhole (user confirmed
 and M10 (stitch chart, glyphs, legend, custom symbols).
 
 ### M11: Export (PDF + PNG)
+**Replaced by `docs/export-plan.md` (milestones E1–E5).** E1 is built (2026-10-25, branch
+`claude/sharp-tharp-6efca5`): `jspdf@4.2.1` + `svg2pdf.js@2.8.1` pinned; `src/export/` (`plan.ts` page order with a
+`SECTIONS` list where `ready: false` marks E2/E3's schematics and charts; `tables.ts`; `text.ts`; `fileName.ts`;
+`pdf.ts` with a `Writer` page frame and a `RENDERERS` map: a new page kind = a section in `plan.ts` + a renderer);
+`engine/finished.ts` (`finishedMeasurements`, `panelRole`); `fileio.downloadBlob`; lazy `ExportDialog.tsx`; Export…
+button. Tests: `finished.test.ts`, `export/export.test.ts`, `export/pdf.test.ts` (builds real PDFs in Node with
+svg2pdf mocked and reads the inflated text: page numbers, credit only for contiguous). Build: the PDF code is its own
+chunk (`pdf-*.js`, 498 kB / 159 kB gzip); main `index-*.js` +0.61 kB (+0.17 kB gzip) for the button and lazy dialog,
+and Rolldown now puts its CommonJS-interop helpers in a shared `rolldown-runtime-*.js` (0.58 kB / 0.36 kB gzip,
+preloaded) because jsPDF/svg2pdf's CommonJS deps need them too (a code-splitting group can't capture the runtime).
+Gotcha: the browser preview only saves a download from a real click, and only once per file name.
+
+Old outline (kept for reference):
 1. Add `jspdf` + `svg2pdf.js` (exact versions pinned).
 2. Export current view or **all sizes**: multi-page PDF with title, gauge, units, size, legend; **1:1 scale** (cm on
    paper) or fit-to-page; PNG at chosen resolution (serialize SVG → canvas → blob).

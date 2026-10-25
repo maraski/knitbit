@@ -13,8 +13,10 @@
   },
   "dependencies": {
     "firebase": "^13.0.0",
+    "jspdf": "4.2.1",
     "react": "^19.3.0",
-    "react-dom": "^19.3.0"
+    "react-dom": "^19.3.0",
+    "svg2pdf.js": "2.8.1"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",

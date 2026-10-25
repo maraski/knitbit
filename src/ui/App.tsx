@@ -37,6 +37,8 @@ const YokeFrontView = lazy(() => import('./components/YokeFrontView').then((m) =
 const MeasurementsView = lazy(() => import('./components/MeasurementsView').then((m) => ({ default: m.MeasurementsView })));
 const ImportDialog = lazy(() => import('./components/ImportDialog').then((m) => ({ default: m.ImportDialog })));
 const NewGarmentDialog = lazy(() => import('./components/NewGarmentDialog').then((m) => ({ default: m.NewGarmentDialog })));
+// Export…: the dialog, and on Export the PDF code with jsPDF (src/export/), each loaded on first use.
+const ExportDialog = lazy(() => import('./components/ExportDialog').then((m) => ({ default: m.ExportDialog })));
 // Signed-in Open…: loaded on first use, with the sync code it needs (kept out of the main chunk).
 const ProjectsDialog = lazy(() => import('./components/ProjectsDialog').then((m) => ({ default: m.ProjectsDialog })));
 // Right-sidebar panels for a join or the measurements screen: loaded the first time one is shown.
@@ -87,6 +89,7 @@ export function App({ start }: { start: StartState }) {
     return () => window.removeEventListener('knitbit:measurement', onMeas);
   }, []);
   const [importing, setImporting] = useState(false);
+  const [exporting, setExporting] = useState(false);
   // New garment dialog; 'first' = first run (nothing saved yet).
   const [newGarment, setNewGarment] = useState<'closed' | 'open' | 'first'>(start.firstRun ? 'first' : 'closed');
 
@@ -310,6 +313,7 @@ export function App({ start }: { start: StartState }) {
         onNew={newProject}
         onOpen={open}
         onSave={save}
+        onExport={() => setExporting(true)}
         cloud={cloud}
       />
       {store.notice && (
@@ -576,6 +580,11 @@ export function App({ start }: { start: StartState }) {
               void startSample(null);
             }}
           />
+        </Suspense>
+      )}
+      {exporting && size && (
+        <Suspense fallback={null}>
+          <ExportDialog project={project} sizeId={size.id} onClose={() => setExporting(false)} />
         </Suspense>
       )}
       {importing && (
