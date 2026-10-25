@@ -19,6 +19,7 @@ interface Props {
   onNew: () => void;
   onOpen: () => void;
   onSave: () => void;
+  onExport: () => void;
   cloud: Cloud;
 }
 
@@ -47,6 +48,7 @@ export function Toolbar(p: Props) {
       <button onClick={p.onNew} title="Start a new garment">New…</button>
       <button onClick={p.onOpen} title="Open (⌘O)">Open…</button>
       <button onClick={p.onSave} title="Save (⌘S)">Save</button>
+      <button onClick={p.onExport} title="Export a PDF to knit from">Export…</button>
       <span className="spacer" />
       <div className="size-picker" title="Size ([ and ])">
         <button onClick={() => step(-1)} disabled={idx <= 0}>‹</button>

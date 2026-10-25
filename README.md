@@ -28,8 +28,8 @@ its phases. Contiguous projects get the tag *contiguous* (raglan and modified ra
 contiguous and modified raglan methods (both use its shoulder and sleeve-cap phases) carry this line in their footer (Garment
 tab → *Credit the construction method in export footers*, on by default): *"This garment is worked seamlessly
 from the top-down using the contiguous sleeve method developed by Susie Myers, SusieM on Ravelry
-(http://www.ravelry.com/people/SusieM)"*. (PDF/PNG export itself is not built yet; `exportFooter()` in
-`src/engine/garment.ts` gives it the footer lines.)
+(http://www.ravelry.com/people/SusieM)"*. It is printed in the footer of every page of the PDF export (below);
+`exportFooter()` in `src/engine/garment.ts` gives the footer lines (none for a classic raglan yoke).
 
 ## Running
 
@@ -209,14 +209,52 @@ removed; delete them in the console if you want the space back.
   - `contiguousGarment.ts`: body and sleeves from the yoke's held stitches. `contiguousChecks.ts`: their checks.
   - `raglan.ts`: the raglan yoke generator (same rows and result as the contiguous yoke; its neck comes from
     `generateYoke`). `generateYoke` hands a `style: 'raglan'` yoke to it.
+  - `finished.ts`: finished garment measurements (`finishedMeasurements`) and piece roles (`panelRole`), for the export.
   - `cloudSync.ts`: online sync decisions (upload, download, conflict) against a `ProjectRemote` interface, the sync
     marker, conflict resolution. `cloudProjects.ts`: Projects dialog operations. `testRemote.ts`: in-memory remote for tests.
 - `src/ui/`: React views. `src/ui/cloud/`: online saving (`config.ts` env check, `status.ts` status labels,
   `firebase.ts` Firebase + `ProjectRemote`, loaded lazily, `saver.ts` debounce, retries and status, `useCloud.ts` hook);
   `components/CloudStatus.tsx`, `ProjectsDialog.tsx`, `ConflictDialog.tsx` (the last two lazy).
+- `src/export/`: the PDF export, loaded only on Export (see *Export (PDF)*): `plan.ts` (page order), `tables.ts`
+  (header facts and the size tables), `text.ts` (Helvetica-safe text), `fileName.ts`, `pdf.ts` (jsPDF + svg2pdf.js:
+  page frame and renderers). jsPDF and svg2pdf.js are imported only here. `ui/components/ExportDialog.tsx` is the dialog.
 - `firestore.rules`, `firebase.json`, `.env.example`: Firebase security rules and config (see *Cloud save setup*).
 - `samples/`: the sample sizing table (`sizing_table_ysolda_cm.csv`, and `.json` with the same data).
 - `src/engine/fixtures/`: test data: the old sample table, and schema-1 and schema-2 project files.
+
+## Export (PDF)
+
+**Export…** in the toolbar makes a PDF to knit from (the plan and the user's decisions: `docs/export-plan.md`). Built
+so far (milestone E1): page 1 and the size tables. Schematics (E2), stitch charts (E3), PNG (E4) and the extras (E5)
+come next.
+
+- **Dialog** (`ExportDialog.tsx`, lazy): tick sizes (the current size is ticked; *All*, *Just this size*), A4 or US
+  Letter (remembered in `localStorage` `knitbit.export.v1`), and the sections built so far (body measurements,
+  finished measurements, key numbers per piece; the header is always there). It warns before exporting when a project,
+  size, piece or measurement name or a custom symbol has characters the PDF font can't draw (they print as "?").
+- **File name**: `<project>-<size>.pdf`, or `<project>-<n>-sizes.pdf`; characters not allowed in file names become `-`.
+- **Every page**: a header band (project · size(s), "p. N of M"), and a footer with the construction credit when the
+  project uses the contiguous method (and the credit setting is on), then "Made with Knitbit · date". Margins 12 mm.
+- **Page 1**: the project name, gauge, units, the ticked sizes and the date, the method; then three tables, each with
+  a column per ticked size (base size marked `*`), flowing onto the next page with the heading row repeated:
+  1. **Body measurements**: the Measurements tab's values (no rules or estimate marks).
+  2. **Finished measurements**: what the garment measures once knitted, from the computed stitch and row counts
+     divided by the gauge (after rounding; selvedges, which seams use up, left out). Rows, each only when the project
+     has the pieces for it: bust / chest (the widest row from the bust point, else the waist, up to the underarm, all
+     body pieces added), ease at bust (finished − body `bust`, signed), waist (only when the body is narrower there
+     than at both the hem and the bust), hem (above a rib knit with the piece), body length (back, shoulder to hem;
+     a yoke's back from the back neck), yoke depth, upper arm, cuff, sleeve length (underarm to cuff), neck opening
+     (the yoke's neck edge, else the bodices' necklines), and for a cardigan the front band width and overlap. A
+     cardigan is measured closed (bands added unless knit into the fronts, the overlap taken off once). Pieces are
+     found by role (`panelRole`: from the yoke, else the template) and waypoints by name or by the measurement their
+     width or height uses (`underarm` ↔ `upper_chest` / `bicep` / `yoke.*_w`, `waist`, `hem` ↔ `hem_circ`…), so a
+     renamed waypoint still works; anything that can't be found prints "—".
+  3. **Key numbers per piece**: cast-on (a top-down front: "pick up N"; a yoke: its cast-on), rows and length, a row
+     per size. A cardigan pair is listed once ("mirrored"); a seamed sleeve "×2".
+- **Text** is the PDF's built-in Helvetica (no font embedded): `−` prints as `-`, `≈` as `~`, and arrows (→ ← ↑ ↓)
+  are drawn as small vector shapes with svg2pdf.js.
+- **Size**: jsPDF + svg2pdf.js are about 160 kB gzip, in their own chunk (`pdf-*.js`) loaded only when you export;
+  jsPDF's optional `html2canvas`, `canvg` and `dompurify` chunks are never loaded.
 
 ## Expression syntax
 
