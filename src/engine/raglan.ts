@@ -155,7 +155,7 @@ export function generateRaglan(project: Project, spec: YokeSpec, sizeId: Id): Yo
     // shoulder and cap phases unused.
     ny = generateYoke(project, { ...spec, style: 'contiguous', backNeck: { ...spec.backNeck, perRow: dim(0) }, cap: { ...spec.cap, solve: false }, depth: { ...spec.depth, deepen: false } }, sizeId);
     issues.push(...ny.issues.filter((i) => /^(Short|Front|Neck|First turn|Sts between|The neck width|Integrated)/.test(i.message)));
-    for (const k of ['neckWidth', 'neckDepth', 'neckCentre', 'frontCo', 'srPairs', 'srFirst', 'srStep']) if (ny.params[k]) params[k] = ny.params[k];
+    for (const k of ['neckWidth', 'neckDepth', 'neckCentre', 'neckBackDepth', 'frontCo', 'srPairs', 'srFirst', 'srStep']) if (ny.params[k]) params[k] = ny.params[k];
   }
   const shortRows = o ? o.shortRows : ny!.shortRows;
   const neck = o ? o.neck : ny!.neck;
@@ -184,7 +184,11 @@ export function generateRaglan(project: Project, spec: YokeSpec, sizeId: Id): Yo
   if (spec.depth.mode === 'armhole') {
     Y = rowsOf(scope.armhole_depth ?? 0);
     params.backLength = { label: 'Armhole depth', expr: 'armhole_depth', plugged: String(scope.armhole_depth ?? 0), value: scope.armhole_depth ?? 0, overridden: false, unit: 'cm' };
-  } else Y = rowsOf(val('backLength', 'Back length, neck to underarm', spec.depth.backLength, 'cm', o ? { back_raise: o.backRaise } : {}));
+  } else {
+    // As the contiguous yoke: a boat neck's back length uses the neck width and its back depth.
+    const neckNames: Record<string, number> = ny ? { neck_w: ny.params.neckWidth?.value ?? scope.back_neck_width ?? 0, back_depth: ny.params.neckBackDepth?.value ?? scope.back_neck_drop ?? 0 } : {};
+    Y = rowsOf(val('backLength', 'Back length, neck to underarm', spec.depth.backLength, 'cm', o ? { back_raise: o.backRaise } : neckNames));
+  }
   Y += rowsOf(val('extraDepth', 'Extra yoke depth', spec.depth.extra, 'cm'));
   // A folded band's facing and turning round fold inside: they don't count towards the depth.
   const hidden = o?.fold?.hiddenRows ?? 0;

@@ -932,7 +932,7 @@ only; a pullover joins in the round at the neck, a cardigan stays flat.
 The properties show the rows for this size (body and sleeve increase rows, how many are extra), the cast-on
 breakdown, the split, the raglan line's length, and every size side by side. **Checks**: the body at the split
 against its target (more than 2 sts off is a warning), a split higher than `armhole_depth` below the shoulder (may
-bind), and as for every yoke: the sleeve against bicep + ease, and the body and sleeves starting with the held
+bind; a boat neck is measured from its strap top, the strap's share of `shoulder_drop` above the shoulder), and as for every yoke: the sleeve against bicep + ease, and the body and sleeves starting with the held
 stitches plus the underarm cast-on. The contiguous checks for the cross back, cross front, scye and cap shape don't
 apply to a raglan.
 

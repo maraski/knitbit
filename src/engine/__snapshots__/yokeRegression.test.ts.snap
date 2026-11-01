@@ -514,33 +514,33 @@ exports[`yoke regression (before off-shoulder) > garment raglan × closed × sho
 
 exports[`yoke regression (before off-shoulder) > raglan, back start × boat × cardigan 1`] = `
 {
-  "1X": "d5449e9dade97db8",
-  "2X": "71448610eaccb32b",
-  "2XS": "f74ee043327556b8",
-  "3X": "dffaee097bcb9e4b",
-  "3XS": "72fdd7acacd25e40",
-  "4X": "a840535306fbdb6c",
-  "4XS": "bb09afc4b22e9e31",
-  "L": "bf5bd5be12fcdd39",
-  "M": "25661789e020e854",
-  "S": "8c0936b918ea05ed",
-  "XS": "356c48d40f842e93",
+  "1X": "1e253dd9a4f028c2",
+  "2X": "b1099de7d67bb07d",
+  "2XS": "de572b59a8bde828",
+  "3X": "80fdd6b46d1d991a",
+  "3XS": "093440a3fc95fe06",
+  "4X": "1b4ab9d2d89b677d",
+  "4XS": "697dc54271f1eb10",
+  "L": "64f7bd38e2afbece",
+  "M": "705ce977dc997a0c",
+  "S": "5172fb9df9ac2645",
+  "XS": "7b9b36b9e001fd0f",
 }
 `;
 
 exports[`yoke regression (before off-shoulder) > raglan, back start × boat × closed 1`] = `
 {
-  "1X": "38bf3dbbb4002208",
-  "2X": "3939325e390b4e41",
-  "2XS": "049f3bfac7194834",
-  "3X": "e63aa35b1cb63d93",
-  "3XS": "56b68b26417e25ac",
-  "4X": "75e004b26f54af9f",
-  "4XS": "4757a0ea35105e40",
-  "L": "805ffc7e50c82439",
-  "M": "a2f0cb06ccbddc86",
-  "S": "8215f93ed760d3da",
-  "XS": "1a967ba6da15114d",
+  "1X": "8956939ce4ec3aa5",
+  "2X": "36ea8c216e1c9107",
+  "2XS": "5761b921465e9d12",
+  "3X": "92a57d1fcf6dba61",
+  "3XS": "30574faf2bbb09e0",
+  "4X": "469dd2051283ab57",
+  "4XS": "5c5fd6bfd8a2642c",
+  "L": "291f3f46402c4df9",
+  "M": "6c3ca976ae21d926",
+  "S": "230881ff8946978f",
+  "XS": "b363a99241be7f00",
 }
 `;
 
@@ -642,33 +642,33 @@ exports[`yoke regression (before off-shoulder) > raglan, back start × v × clos
 
 exports[`yoke regression (before off-shoulder) > raglan, whole neck × boat × cardigan 1`] = `
 {
-  "1X": "b2e7bda3f5dc1651",
-  "2X": "56d5c421a580fdfb",
-  "2XS": "7ae511204c90a404",
-  "3X": "ea628ceb2e134c95",
-  "3XS": "424a27c148dbff38",
-  "4X": "e9cdba8c52540c8f",
-  "4XS": "8af0ae476b748f7d",
-  "L": "c7a16d54bce479ab",
-  "M": "63935fcc04aca769",
-  "S": "42bdd24622f9e244",
-  "XS": "00e81c6aa3659375",
+  "1X": "44abc16498391dc2",
+  "2X": "edfe77fd0924afbf",
+  "2XS": "fd702ddfcb58eb01",
+  "3X": "45c3e77daf3ee139",
+  "3XS": "9cac6bdde9a2184c",
+  "4X": "5fc00c8b06bc47b7",
+  "4XS": "3c069afe5a4d251e",
+  "L": "5f8c360ac9d597ec",
+  "M": "f172a1b4c3750145",
+  "S": "a09be94332b0c0f2",
+  "XS": "a39f726e1755195c",
 }
 `;
 
 exports[`yoke regression (before off-shoulder) > raglan, whole neck × boat × closed 1`] = `
 {
-  "1X": "5de041dc1eb33f17",
-  "2X": "c4a30da2628e2252",
-  "2XS": "2fa1eae6644c5d42",
-  "3X": "724e166c135e5640",
-  "3XS": "20a7b7b56051e123",
-  "4X": "ac2db9428a0e0627",
-  "4XS": "1b945739832ce430",
-  "L": "600235830a5b2940",
-  "M": "7414a275dcbd64cf",
-  "S": "8927ced3927188ba",
-  "XS": "e8a9140d706f2d6d",
+  "1X": "05af950a554b93c5",
+  "2X": "2928988828abae6a",
+  "2XS": "a8781d48c28543c9",
+  "3X": "c4a54881e3cb82d1",
+  "3XS": "ca07c4fa37c20de4",
+  "4X": "2ecb48ac54fb7aa0",
+  "4XS": "ee465e36ab30ebb5",
+  "L": "37421ca814d3e2f7",
+  "M": "70f9f8a44ce3038f",
+  "S": "986bd7da7b8129eb",
+  "XS": "e6182ad109228236",
 }
 `;
 

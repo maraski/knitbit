@@ -162,6 +162,23 @@ describe('boat neck: contiguous yoke', () => {
     const share = Math.min(1, 6 / (sc.shoulder_w - sc.back_neck_width));
     expect(y.params.backLength.value).toBeCloseTo(sc.shoulder_drop * share + sc.armhole_depth - sc.back_neck_drop, 5);
   });
+
+  for (const opening of ['closed', 'cardigan'] as const) {
+    it(`classic raglan, ${opening}: the back length knows the boat neck's width and back depth`, () => {
+      const p = garment('raglan', opening);
+      const yoke = p.panels.find((x) => x.yoke)!;
+      expect(yoke.yoke!.style).toBe('raglan');
+      // The split is a whole armhole depth below the shoulder point (from the strap top), so no "splits higher" warning.
+      expect(projectChecks(p).filter((c) => c.issue.severity !== 'info').map((c) => `${c.sizeName} ${c.panelName}: ${c.issue.message}`)).toEqual([]);
+      for (const s of p.sizes) {
+        const y = generateYoke(p, yoke.yoke!, s.id);
+        const sc = buildScope(p, s.id);
+        const share = Math.min(1, 6 / (sc.shoulder_w - sc.back_neck_width));
+        expect(y.params.backLength.value).toBeCloseTo(sc.shoulder_drop * share + sc.armhole_depth - 2, 5);
+        expect(y.params.neckBackDepth.value).toBe(2);
+      }
+    });
+  }
 });
 
 describe('boat neck: changing the neckline', () => {
