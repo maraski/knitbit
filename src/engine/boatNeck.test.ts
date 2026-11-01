@@ -168,7 +168,8 @@ describe('boat neck: contiguous yoke', () => {
       const p = garment('raglan', opening);
       const yoke = p.panels.find((x) => x.yoke)!;
       expect(yoke.yoke!.style).toBe('raglan');
-      expect(projectChecks(p).filter((c) => c.issue.severity === 'error').map((c) => `${c.sizeName} ${c.panelName}: ${c.issue.message}`)).toEqual([]);
+      // The split is a whole armhole depth below the shoulder point (from the strap top), so no "splits higher" warning.
+      expect(projectChecks(p).filter((c) => c.issue.severity !== 'info').map((c) => `${c.sizeName} ${c.panelName}: ${c.issue.message}`)).toEqual([]);
       for (const s of p.sizes) {
         const y = generateYoke(p, yoke.yoke!, s.id);
         const sc = buildScope(p, s.id);
