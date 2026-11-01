@@ -42,7 +42,7 @@ describe('fit choices', () => {
     expect(missingAliasHint(p, 'bust')).toBeNull();
     p.panels = [bodice('back')];
     const c = computePanel(p, p.panels[0], sizeId(p, 'M'));
-    expect(c.issues.some((i) => /Unknown name "hem_circ": hem_circ follows high_hip/.test(i.message))).toBe(true);
+    expect(c.issues.some((i) => /“hem_circ” isn't a measurement or a name this piece knows: hem_circ follows high_hip/.test(i.message))).toBe(true);
   });
 });
 

@@ -38,7 +38,7 @@ export function ExprField({ label, value, sizeId, sizeName, scope, units, onChan
   };
 
   return (
-    <div className={`field expr-field${overridden ? ' is-overridden' : ''}`}>
+    <div className={`field expr-field${overridden ? ' is-overridden' : ''}`} data-field={fieldKey}>
       <label>
         {label}
         {note && <span className="field-note"> · {note}</span>}

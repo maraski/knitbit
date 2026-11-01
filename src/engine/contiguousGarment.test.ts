@@ -115,7 +115,7 @@ describe('yoke names elsewhere', () => {
     r.waypoints[0].width = dim('yoke.back_w');
     const p = { ...fixtureProject(), panels: [r] };
     const c = computePanel(p, r, sizeId(p, 'M'));
-    expect(c.issues.some((i) => i.message === 'yoke.*: there is no contiguous yoke panel.')).toBe(true);
+    expect(c.issues.some((i) => i.message === 'Waits on the yoke: there is no contiguous yoke panel.')).toBe(true);
   });
 
   it('parity "same as the first row" keeps every width change even', () => {

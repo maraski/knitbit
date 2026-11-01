@@ -18,7 +18,7 @@ import { distributeAcross, distributeAuto } from './distribute';
 import { evaluate, scopeFrom } from './expr';
 import { rowsPerCm, stitchesPerCm } from './gauge';
 import { buildScope } from './measurements';
-import { cmText, type IssueFix } from './issues';
+import { ceil1, cmText, exprErrorText, field, fixOf, floor1, rowsCm, stsCm, YOKE_LABELS, type IssueFix } from './issues';
 import type { DimExpr, Id, NecklineShape, Project, StitchPattern, StrapGives, YokeSpec, YokeStart } from './model';
 import { dim, newPanel, type Panel } from './model';
 import { backNeckFor, bodiceNeck, FRONT_NECKS } from './templates';
@@ -262,7 +262,7 @@ export function shortRowsFitFix(pairs: number, side: number, first: number, step
     severity: 'error',
     code: 'yoke.short-rows-fit',
     param: 'srPairs',
-    fix: { text: `Make Short-row pairs at most ${most} (now ${pairs}), or a smaller Sts between turns.`, fields: [{ target: 'yoke', key: 'srPairs', label: 'Short-row pairs' }, { target: 'yoke', key: 'srStep', label: 'Sts between turns' }], now: String(pairs), need: `≤ ${most}` },
+    fix: fixOf(`Make Short-row pairs at most ${most} (now ${pairs}), or a smaller Sts between turns.`, [field.yoke('srPairs'), field.yoke('srStep')], { now: String(pairs), need: `≤ ${most}`, apply: { field: field.yoke('srPairs'), value: most, unit: '' } }),
   };
 }
 
@@ -278,7 +278,7 @@ export function belowSplitFix(R: number, Y: number, rpc: number, pairs: number):
     severity: 'error',
     code: 'yoke.short-rows-below-split',
     param: 'srPairs',
-    fix: { text: `Make Short-row pairs at most ${most} (now ${pairs}), or add ${deeper} to Extra depth.`, fields: [{ target: 'yoke', key: 'srPairs', label: 'Short-row pairs' }, { target: 'yoke', key: 'extraDepth', label: 'Extra depth' }], now: String(pairs), need: `≤ ${most}` },
+    fix: fixOf(`Make Short-row pairs at most ${most} (now ${pairs}), or add ${deeper} to Extra depth.`, [field.yoke('srPairs'), field.yoke('extraDepth')], { now: String(pairs), need: `≤ ${most}`, apply: { field: field.yoke('srPairs'), value: most, unit: '' } }),
   };
 }
 
@@ -383,7 +383,7 @@ export function generateYoke(project: Project, spec: YokeSpec, sizeId: Id): Yoke
     });
     r.ok = false;
   } else if (scope.back_neck_width && bn / spc < 0.75 * scope.back_neck_width) {
-    r.issues.push({ severity: 'warning', code: 'yoke.strap-narrow-neck', param: 'neckWidth', message: `The ${cmText(scope.strap_w)} strap leaves a ${cmText(bn / spc)} back neck, much narrower than back_neck_width (${cmText(scope.back_neck_width)}): check that the neck goes over the head. A narrower strap, or letting it give at the armhole, keeps the neck.` });
+    r.issues.push({ severity: 'warning', code: 'yoke.strap-narrow-neck', param: 'neckWidth', message: `The ${cmText(scope.strap_w)} strap leaves a ${cmText(bn / spc)} back neck, much narrower than back_neck_width (${cmText(scope.back_neck_width)}): check that the neck goes over the head. A narrower strap, or letting it give at the armhole, keeps the neck.`, fix: { text: `Make the strap narrower (Garment → Strap width), or set Strap gives at to Armhole to keep the neck.`, fields: [{ target: 'settings', key: 'strap', label: 'Strap width' }], now: cmText(bn / spc), need: `≥ ${cmText(0.75 * scope.back_neck_width)}` } });
   }
   return r;
 }
@@ -405,7 +405,7 @@ function workYoke(project: Project, spec: YokeSpec, sizeId: Id, scope: Record<st
     else {
       const r = evaluate(d.expr, scopeFrom(s));
       if (r.ok) value = r.value;
-      else issues.push({ severity: 'error', message: `${label}: ${r.error}` });
+      else issues.push({ severity: 'error', code: 'yoke.expr', param: key, message: `${YOKE_LABELS[key] ?? label}: ${exprErrorText(r.error)}`, fix: fixOf(`Correct the expression in ${YOKE_LABELS[key] ?? label}.`, [field.yoke(key)]) });
     }
     params[key] = { label, expr: d.expr, plugged: plugIn(d.expr, s), value, overridden, unit };
     return value;
@@ -420,7 +420,7 @@ function workYoke(project: Project, spec: YokeSpec, sizeId: Id, scope: Record<st
   // A boat neck's back depth (from the strap top); the other necks' back neck is back_neck_drop below the neck point.
   const backDepthCm = spec.neck.backDepth ? val('neckBackDepth', 'Back neck depth', spec.neck.backDepth, 'cm') : scope.back_neck_drop ?? 0;
   const bn = sts(neckCm);
-  if (!(bn > 0)) issues.push({ severity: 'error', message: 'The neck width gives no back neck stitches.' });
+  if (!(bn > 0)) issues.push({ severity: 'error', code: 'yoke.no-back-neck', param: 'neckWidth', message: `The neck width (${cmText(neckCm)}) gives no back neck stitches.`, fix: fixOf(`Make Neck width, cast on across the back at least ${cmText(ceil1(1 / spc))} (now ${cmText(neckCm)}).`, [field.yoke('neckWidth')], { now: cmText(neckCm), need: `≥ ${cmText(ceil1(1 / spc))}` }) });
   const wholeNeck = spec.start === 'neck';
   const closingSts = cardigan ? sts(scope.closing_r ?? 0) : 0;
   // Whole neck: the fronts are cast on too (a cardigan less the closing width, half each side).
@@ -456,9 +456,9 @@ function workYoke(project: Project, spec: YokeSpec, sizeId: Id, scope: Record<st
     const turns: number[] = [];
     for (let i = 0; i < pairs; i++) turns.push(side - first - i * step);
     const lastTurn = turns[turns.length - 1] ?? side;
-    if (pairs && lastTurn < 1) issues.push({ ...shortRowsFitFix(pairs, side, first, step), message: `Short rows: ${pairs} pairs ${step} sts apart don't fit in a front of ${side} sts (the last turn is past centre front). Fewer pairs, a smaller step or a wider front.` });
-    else if (pairs && lastTurn < cSide) issues.push({ severity: 'info', message: `Short rows: the last turns reach into the centre part (${cSide} sts each side of centre front).` });
-    if (pairs > 1 && step < 2) issues.push({ severity: 'info', message: `Short rows: turns 1 st apart. Fewer pairs or a wider front cast-on spread them more.` });
+    if (pairs && lastTurn < 1) issues.push({ ...shortRowsFitFix(pairs, side, first, step), message: `Short rows: ${pairs} pairs ${step} st${step === 1 ? '' : 's'} apart don't fit in a front of ${stsCm(side, spc)}: the last turn is past centre front.` });
+    else if (pairs && lastTurn < cSide) issues.push({ severity: 'info', code: 'yoke.short-rows-centre', message: `Short rows: the last turns reach into the centre part (${cSide} sts each side of centre front).` });
+    if (pairs > 1 && step < 2) issues.push({ severity: 'info', code: 'yoke.short-rows-close', message: `Short rows: turns 1 st apart. Fewer pairs or a wider front cast-on spread them more.` });
     const endRow = pairs > 0 ? 2 * pairs + 1 : 0;
     if (!cardigan && pairs > 0) {
       plain.add(1);
@@ -473,13 +473,14 @@ function workYoke(project: Project, spec: YokeSpec, sizeId: Id, scope: Record<st
   const bIncRows: number[] = [];
   for (let r = 1; r <= bRows; r += 2) if (!plain.has(r)) bIncRows.push(r);
   const bTotal = bPer * bIncRows.length;
-  if (bPer && (bPer < 2 || bPer > 4)) issues.push({ severity: 'info', message: `Back neck: ${bPer} increases per row (the method suggests 2 to 4).` });
+  if (bPer && (bPer < 2 || bPer > 4)) issues.push({ severity: 'info', code: 'yoke.back-neck-rate', message: `Back neck: ${bPer} increases per row (the method suggests 2 to 4).` });
 
   // ---- cap top: the markers move so each seam group widens to the cap top ----
   const capTop = Math.max(seam, Math.round(val('capTopSts', 'Cap top stitches', spec.cap.topSts, 'sts')));
   let k = (capTop - seam) / 2;
   if (!Number.isInteger(k)) {
-    issues.push({ severity: 'warning', message: `Cap top ${capTop} sts − seam ${seam} sts is odd; the markers move ${Math.floor(k)} st each side (cap top ${seam + 2 * Math.floor(k)} sts).` });
+    const even = seam + 2 * Math.floor(k);
+    issues.push({ severity: 'warning', code: 'yoke.cap-top-odd', param: 'capTopSts', message: `Cap top ${capTop} sts − seam ${seam} sts is odd; the markers move ${Math.floor(k)} st each side (cap top ${even} sts).`, fix: fixOf(`Make Cap top stitches ${even} or ${even + 2} (now ${capTop}): the seam stitches plus an even number.`, [field.yoke('capTopSts')], { now: String(capTop), need: `${even} or ${even + 2}`, apply: { field: field.yoke('capTopSts'), value: even, unit: 'sts' } }) });
     k = Math.floor(k);
   }
   const capTopSts = seam + 2 * k;
@@ -517,12 +518,12 @@ function workYoke(project: Project, spec: YokeSpec, sizeId: Id, scope: Record<st
     // The back after A rows is bn + 2A + B − 2k sts: A ≥ 1 needs a target (or seam length) this big.
     const fix: IssueFix =
       spec.shoulder.mode === 'length'
-        ? { text: `Make Shoulder seam length less Shorten at least ${cmText(Math.ceil(((1 - extra) / rpc) * 10) / 10)} (now ${cmText(params.shoulderLength.value - params.shorten.value)}), or narrow the Neck width.`, fields: [{ target: 'yoke', key: 'shoulderLength', label: 'Shoulder seam length' }, { target: 'yoke', key: 'neckWidth', label: 'Neck width, cast on across the back' }], now: cmText(params.shoulderLength.value - params.shorten.value), need: `≥ ${cmText(Math.ceil(((1 - extra) / rpc) * 10) / 10)}` }
+        ? fixOf(`Make Shoulder seam length less Shorten the seam by at least ${cmText(ceil1((1 - extra) / rpc))} (now ${cmText(params.shoulderLength.value - params.shorten.value)}), or Extra rows at least ${extra + 1 - A}.`, [field.yoke('shoulderLength'), field.yoke('shorten'), field.yoke('extraRows')], { now: cmText(params.shoulderLength.value - params.shorten.value), need: `≥ ${cmText(ceil1((1 - extra) / rpc))}`, apply: { field: field.yoke('extraRows'), value: extra + 1 - A, unit: 'rows' } })
         : (() => {
             const need = Math.ceil(((1 - 2 * extra - 2 * k + bn + bTotal) / spc) * 10) / 10;
-            return { text: `Make Back width after the markers move at least ${cmText(need)} (now ${cmText(params.backWidth.value)}), or narrow the Neck width.`, fields: [{ target: 'yoke', key: 'backWidth', label: 'Back width after the markers move' }, { target: 'yoke', key: 'neckWidth', label: 'Neck width, cast on across the back' }], now: cmText(params.backWidth.value), need: `≥ ${cmText(need)}` };
+            return fixOf(`Make Back width after the markers move at least ${cmText(need)} (now ${cmText(params.backWidth.value)}), narrow the Neck width, or make Extra rows at least ${extra + 1 - A}.`, [field.yoke('backWidth'), field.yoke('neckWidth'), field.yoke('extraRows')], { now: cmText(params.backWidth.value), need: `≥ ${cmText(need)}`, apply: { field: field.yoke('extraRows'), value: extra + 1 - A, unit: 'rows' } });
           })();
-    issues.push({ severity: 'error', code: 'yoke.shoulder-phase', param: spec.shoulder.mode === 'length' ? 'shoulderLength' : 'backWidth', fix, message: `The shoulder phase has ${A} rows: the back is already as wide as the target. Narrow the back neck or widen the target.` });
+    issues.push({ severity: 'error', code: 'yoke.shoulder-phase', param: spec.shoulder.mode === 'length' ? 'shoulderLength' : 'backWidth', fix, message: spec.shoulder.mode === 'length' ? `The shoulder phase has ${A} rows: the shoulder seam is too short to work.` : `The shoulder phase has ${A} rows: the back neck (${cmText(bn / spc)}) is already as wide as Back width after the markers move (${cmText(params.backWidth.value)}).` });
     A = Math.max(1, A);
   }
   if (plain.size && spec.shoulder.mode !== 'length' && !strap) {
@@ -530,7 +531,7 @@ function workYoke(project: Project, spec: YokeSpec, sizeId: Id, scope: Record<st
     while (incRowsTo(A) < need) A++;
   }
   const AincRows = incRowsTo(A);
-  if (bRows > A) issues.push({ severity: 'info', message: `Back neck increases (rows 1–${bRows}) run past the shoulder phase (${A} rows).` });
+  if (bRows > A) issues.push({ severity: 'info', code: 'yoke.back-neck-past-shoulders', message: `Back neck increases (rows 1–${bRows}) run past the shoulder phase (${A} rows).` });
 
   // ---- yoke depth (the split row); may deepen further below so the cap isn't mostly rapid ----
   let Y0: number;
@@ -556,7 +557,9 @@ function workYoke(project: Project, spec: YokeSpec, sizeId: Id, scope: Record<st
   if (perSide > 0) {
     if (spec.neck.shape === 'v') {
       const s = distributeAuto(perSide, { from: 1, to: R - 1 }, { side: 'rs', align: 'start' });
-      for (const w of s.warnings) issues.push({ severity: 'warning', message: `Front neck: ${w}` });
+      // Each increase on its own RS row before the cast-on row: R − 1 ≥ 2 × perSide − 1.
+      const deeper = ceil1((2 * perSide) / rpc);
+      for (const w of s.warnings) issues.push({ severity: 'warning', code: 'yoke.front-neck-rows', param: 'neckDepth', message: `Front neck: ${w}`, fix: fixOf(`Make Depth below the neck point at least ${cmText(deeper)} (now ${cmText(depthCm)}) so each of the ${perSide} increases has its own RS row.`, [field.yoke('neckDepth')], { now: cmText(depthCm), need: `≥ ${cmText(deeper)}`, apply: { field: field.yoke('neckDepth'), value: deeper, unit: 'cm' } }) });
       neckRows.push(...s.rows);
     } else {
       // Every row next to the centre (the last rows before the cast-on), then every other row above.
@@ -566,7 +569,8 @@ function workYoke(project: Project, spec: YokeSpec, sizeId: Id, scope: Record<st
       for (let j = fast, d = fast + 2; j < perSide; j++, d += 2) dists.push(d);
       if (dists[dists.length - 1] > R - 1) {
         const s = distributeAuto(perSide, { from: 1, to: R - 1 }, { side: 'any', align: 'start' });
-        if (!s.feasible) issues.push({ severity: 'error', message: `Front neck: ${perSide} increases per side do not fit in ${R - 1} rows.` });
+        const deeper = ceil1((perSide + 1) / rpc);
+        if (!s.feasible) issues.push({ severity: 'error', code: 'yoke.front-neck-fit', param: 'neckDepth', message: `Front neck: ${perSide} increases per side do not fit in ${rowsCm(R - 1, rpc)}.`, fix: fixOf(`Make Depth below the neck point at least ${cmText(deeper)} (now ${cmText(depthCm)}), or a wider Centre.`, [field.yoke('neckDepth'), field.yoke('neckCentre')], { now: cmText(depthCm), need: `≥ ${cmText(deeper)}`, apply: { field: field.yoke('neckDepth'), value: deeper, unit: 'cm' } }) });
         neckRows.push(...s.rows);
       } else neckRows.push(...dists.map((d) => R - d));
     }
@@ -575,7 +579,7 @@ function workYoke(project: Project, spec: YokeSpec, sizeId: Id, scope: Record<st
   // Cardigan: each front casts on its share of the centre at its front edge, less half the closing width (bands).
   const frontEdgeCo = cardigan && !wholeNeck ? Math.max(0, Math.round((centre - closingSts) / 2)) : 0;
   if (cardigan && project.edges?.frontBands.enabled && project.cardigan?.attach && Object.values(project.cardigan.attach).includes('integrated')) {
-    issues.push({ severity: 'warning', message: 'Integrated front bands are not worked into a contiguous yoke yet; the yoke has none.' });
+    issues.push({ severity: 'warning', code: 'yoke.integrated-bands', message: 'Integrated front bands are not worked into a contiguous yoke yet; the yoke has none.', fix: fixOf('Pick up or sew on the front bands instead (Garment → Edges → Front bands).', [field.settings('edges')]) });
   }
 
   // ---- body at the split (before body increases) and the underarm cast-on ----
@@ -602,16 +606,22 @@ function workYoke(project: Project, spec: YokeSpec, sizeId: Id, scope: Record<st
     let N: number;
     if (!spec.body.increases) {
       N = Math.round((bodyTarget - bodyYoke) / 2);
-      if (N < 0) notes.push({ severity: 'error', message: `The yoke body (${bodyYoke} sts) is already ${-2 * N} sts wider than the body target (${bodyTarget} sts): the underarm cast-on would be ${N}. Shorten the shoulders.` });
+      if (N < 0) {
+        const need = ceil1(bodyYoke / spc + (cardigan ? scope.closing_r ?? 0 : 0));
+        notes.push({ severity: 'error', code: 'yoke.body-too-wide', param: 'bodyWidth', message: `The yoke body (${stsCm(bodyYoke, spc)}) is already ${stsCm(-2 * N, spc)} wider than Body at the underarm (${cmText(bodyCm)}): the underarm cast-on would be ${N} sts.`, fix: fixOf(`Make Body at the underarm at least ${cmText(need)} (now ${cmText(bodyCm)}), or shorten the shoulders (a narrower Back width after the markers move or Shoulder seam length).`, [field.yoke('bodyWidth'), field.yoke(spec.shoulder.mode === 'length' ? 'shoulderLength' : 'backWidth')], { now: cmText(bodyCm), need: `≥ ${cmText(need)}` }) });
+      }
     } else {
       N = N0;
       const need = bodyTarget - bodyYoke - 2 * N;
       perEdge = Math.max(0, Math.ceil(need / 4));
-      if (need < 0) notes.push({ severity: 'warning', message: `With ${N} sts cast on at each underarm the body is ${-need} sts wider than its target (${bodyTarget} sts).` });
+      if (need < 0) {
+        const most = floor1(Math.max(0, Math.floor((bodyTarget - bodyYoke) / 2)) / spc);
+        notes.push({ severity: 'warning', code: 'yoke.body-wider', param: 'underarmCo', message: `With ${N} sts cast on at each underarm the body is ${stsCm(-need, spc)} wider than Body at the underarm (${cmText(bodyCm)}).`, fix: fixOf(`Make Underarm cast-on, each at most ${cmText(most)} (now ${cmText(N / spc)}), or a wider Body at the underarm.`, [field.yoke('underarmCo'), field.yoke('bodyWidth')], { now: cmText(N / spc), need: `≤ ${cmText(most)}`, apply: { field: field.yoke('underarmCo'), value: most, unit: 'cm' } }) });
+      }
       if (perEdge > zoneRows) {
         N = Math.ceil((bodyTarget - bodyYoke - 4 * zoneRows) / 2);
         perEdge = zoneRows;
-        notes.push({ severity: 'info', message: `Body increases fill the lower ${zoneRows} armhole rows; the underarm cast-on is raised from ${N0} to ${N} sts.` });
+        notes.push({ severity: 'info', code: 'yoke.underarm-raised', message: `Body increases fill the lower ${zoneRows} armhole rows; the underarm cast-on is raised from ${N0} to ${N} sts.` });
       }
     }
     N = Math.max(0, N);
@@ -619,7 +629,7 @@ function workYoke(project: Project, spec: YokeSpec, sizeId: Id, scope: Record<st
     if (perEdge > 0) {
       // Never in the short rows (their half rows don't reach every edge).
       const s = distributeAuto(perEdge, { from: Math.max(Y - zoneRows + 1, (shortRows?.endRow ?? 0) + 1), to: Y }, { side: 'any', align: 'end', order: 'longFirst' });
-      for (const w of s.warnings) notes.push({ severity: 'warning', message: `Body increases: ${w}` });
+      for (const w of s.warnings) notes.push({ severity: 'warning', code: 'yoke.body-increase-rows', param: 'bodyZone', message: `Body increases: ${w}`, fix: fixOf(`Spread them over more rows: a larger Body increases over (now ${zoneFrac}), or more Extra depth.`, [field.yoke('bodyZone'), field.yoke('extraDepth')], { now: String(zoneFrac) }) });
       bodyRows.push(...s.rows);
     }
     // Sleeve: rapid (every row), then slow (every second row: RS rows / every other round) to the split.
@@ -649,17 +659,30 @@ function workYoke(project: Project, spec: YokeSpec, sizeId: Id, scope: Record<st
   if (spec.depth.deepen && spec.cap.solve) {
     const limit = Y0 + rowsOf(15);
     while (!fits(plan) && plan.Y < limit) plan = planArmhole(plan.Y + 1);
-    if (plan.Y > Y0) issues.push({ severity: 'info', message: `Yoke deepened by ${plan.Y - Y0} rows (${((plan.Y - Y0) / rpc).toFixed(1)} cm) so the sleeve reaches its width with at most ${Math.round(maxRapid * 100)} % of the armhole rows rapid.` });
+    if (plan.Y > Y0) issues.push({ severity: 'info', code: 'yoke.deepened', message: `Yoke deepened by ${plan.Y - Y0} rows (${((plan.Y - Y0) / rpc).toFixed(1)} cm) so the sleeve reaches its width with at most ${Math.round(maxRapid * 100)} % of the armhole rows rapid.` });
   }
   const { Y, X, perEdge, N, bodyRows, sleeveTarget, C, D, dRows, zoneRows } = plan;
   issues.push(...plan.notes);
-  if (X < 2) issues.push({ severity: 'error', message: `The armhole has ${X} rows after the shoulder phase (${A} rows of ${Y}): shorten the shoulders or deepen the yoke.` });
+  if (X < 2) {
+    const add = ceil1((A + 2 - Y) / rpc);
+    const extraNow = params.extraDepth?.value ?? 0;
+    issues.push({ severity: 'error', code: 'yoke.armhole-short', param: 'extraDepth', message: `The armhole has ${rowsCm(X, rpc)} after the shoulder phase (${A} of the yoke's ${Y} rows).`, fix: fixOf(`Add ${cmText(add)} to Extra depth (now ${cmText(extraNow)}), or shorten the shoulders.`, [field.yoke('extraDepth'), field.yoke(spec.shoulder.mode === 'length' ? 'shoulderLength' : 'backWidth')], { now: cmText(extraNow), need: `≥ ${cmText(extraNow + add)}`, apply: { field: field.yoke('extraDepth'), value: Math.round((extraNow + add) * 10) / 10, unit: 'cm' } }) });
+  }
   if (!plan.reached) {
     const have = plan.sleeveMax + N;
-    issues.push({ severity: 'warning', message: `The sleeve reaches ${have} sts (${(have / spc).toFixed(1)} cm) at the underarm, ${sleeveTarget + N - have} sts short of its width: ${spec.cap.solve ? 'even with every armhole row rapid. Deepen the yoke or cast on more at the underarm' : 'lengthen the rapid phase (or let it solve)'}.` });
+    const coNeed = ceil1((sleeveFull - plan.sleeveMax) / spc);
+    issues.push({
+      severity: 'warning',
+      code: 'yoke.sleeve-short',
+      param: spec.cap.solve ? 'extraDepth' : 'rapidRows',
+      message: `The sleeve reaches ${stsCm(have, spc)} at the underarm, ${stsCm(sleeveTarget + N - have, spc)} short of Sleeve at the underarm${spec.cap.solve ? ', even with every armhole row rapid' : ''}.`,
+      fix: spec.cap.solve
+        ? fixOf(`Add Extra depth, or make Underarm cast-on, each at least ${cmText(coNeed)} (now ${cmText(N / spc)}).`, [field.yoke('extraDepth'), field.yoke('underarmCo')], { now: cmText(N / spc), need: `≥ ${cmText(coNeed)}` })
+        : fixOf(`Make Rapid rows longer (now ${rapidBase}), or tick Lengthen the rapid phase.`, [field.yoke('rapidRows')], { now: String(rapidBase) }),
+    });
   }
   let neckContinues: YokeResult['neckContinues'];
-  if (R > Y && shortRows) issues.push({ ...belowSplitFix(R, Y, rpc, shortRows.pairs), message: `The short rows end on row ${R}, below the underarm split (row ${Y}). Fewer pairs or a deeper yoke.` });
+  if (R > Y && shortRows) issues.push({ ...belowSplitFix(R, Y, rpc, shortRows.pairs), message: `The short rows end on row ${R}, ${rowsCm(R - Y, rpc)} below the underarm split (row ${Y}).` });
   else if (!wholeNeck && continuesPast(R, Y, cardigan, frontEdgeCo)) {
     const c = neckContinuation(R, Y, rpc, neckRows, centre, frontEdgeCo, cardigan);
     neckContinues = c.neckContinues;
@@ -668,8 +691,8 @@ function workYoke(project: Project, spec: YokeSpec, sizeId: Id, scope: Record<st
   const E = Math.max(0, Y - A - C - D);
   const bodySet = new Set(bodyRows);
   const dSet = new Set(dRows);
-  if (spec.cap.solve && C > rapidBase) issues.push({ severity: 'info', message: `Rapid cap rows lengthened from ${rapidBase} to ${C} so the sleeve reaches its width.` });
-  if (C > X / 2) issues.push({ severity: 'info', message: `Hint: the cap may look flat: ${C} of the ${X} armhole rows are rapid. A deeper yoke gives a rounder cap.` });
+  if (spec.cap.solve && C > rapidBase) issues.push({ severity: 'info', code: 'yoke.rapid-lengthened', message: `Rapid cap rows lengthened from ${rapidBase} to ${C} so the sleeve reaches its width.` });
+  if (C > X / 2) issues.push({ severity: 'info', code: 'yoke.cap-flat', message: `Hint: the cap may look flat: ${C} of the ${X} armhole rows are rapid. A deeper yoke gives a rounder cap.` });
 
   // ---- simulate ----
   const sym = incSymbols(spec);
@@ -755,17 +778,20 @@ function workYoke(project: Project, spec: YokeSpec, sizeId: Id, scope: Record<st
   for (const row of rows) {
     for (const zone of ZONES) {
       if (row.zones[zone] < 0) {
-        issues.push({ severity: 'error', message: `Row ${row.row}: the ${zoneName(zone)} has ${row.zones[zone]} sts.` });
+        issues.push({ severity: 'error', code: 'yoke.zone-negative', message: `Row ${row.row}: the ${zoneName(zone)} has ${row.zones[zone]} sts.`, fix: fixOf('Fewer Cap top stitches (the markers move less), or a wider Neck width, cast on across the back.', [field.yoke('capTopSts'), field.yoke('neckWidth')]) });
         break;
       }
     }
   }
-  if (k > 0 && (endOfA.leftFront <= k || endOfA.back <= 2 * k)) issues.push({ severity: 'error', message: `The markers can't move ${k} sts: the fronts have ${endOfA.leftFront} sts at the end of the shoulders.` });
-  if (rows.some((r) => r.total <= 0)) issues.push({ severity: 'error', message: 'A row has no stitches.' });
+  if (k > 0 && (endOfA.leftFront <= k || endOfA.back <= 2 * k)) {
+    const kMax = Math.max(0, Math.min(endOfA.leftFront - 1, Math.floor((endOfA.back - 1) / 2)));
+    issues.push({ severity: 'error', code: 'yoke.markers-move', param: 'capTopSts', message: `The markers can't move ${k} sts: the fronts have ${endOfA.leftFront} sts at the end of the shoulders.`, fix: fixOf(`Make Cap top stitches at most ${seam + 2 * kMax} (now ${capTopSts}), or work longer shoulders.`, [field.yoke('capTopSts')], { now: String(capTopSts), need: `≤ ${seam + 2 * kMax}`, apply: { field: field.yoke('capTopSts'), value: seam + 2 * kMax, unit: 'sts' } }) });
+  }
+  if (rows.some((r) => r.total <= 0)) issues.push({ severity: 'error', code: 'yoke.empty-row', message: 'A row has no stitches.', fix: fixOf('Check the cast-on: Neck width, cast on across the back and Seam stitches.', [field.yoke('neckWidth'), field.yoke('seamSts')]) });
 
   const last = rows[rows.length - 1]?.zones ?? z;
   const held = { leftSleeve: last.leftSleeve, body: last.leftFront + last.back + last.rightFront, rightSleeve: last.rightSleeve };
-  if (Object.values(held).some((v) => v <= 0)) issues.push({ severity: 'error', message: `Held stitches at the split: ${held.leftSleeve} / ${held.body} / ${held.rightSleeve}.` });
+  if (Object.values(held).some((v) => v <= 0)) issues.push({ severity: 'error', code: 'yoke.held-empty', message: `Nothing to hold at the split: sleeves ${held.leftSleeve} / body ${held.body} / sleeves ${held.rightSleeve} sts.`, fix: fixOf('Check Sleeve at the underarm, Body at the underarm and Underarm cast-on, each.', [field.yoke('sleeveWidth'), field.yoke('bodyWidth'), field.yoke('underarmCo')]) });
 
   // Phase table.
   const stsAt = (r: number) => (r <= 0 ? castOn : rows[Math.min(r, rows.length) - 1]?.total ?? castOn);
@@ -893,7 +919,7 @@ export function yokeNames(project: Project, sizeId: Id): { values: Record<string
   const panel = project.panels.find((p) => p.yoke);
   if (!panel) return { error: 'there is no contiguous yoke panel.' };
   const y = generateYoke(project, panel.yoke!, sizeId);
-  if (!y.ok || !y.rows.length) return { error: `the yoke can't be computed in this size (${y.issues.find((i) => i.severity === 'error')?.message ?? 'no rows'}).`, source: { panel, yoke: y } };
+  if (!y.ok || !y.rows.length) return { error: `the yoke can't be worked out in this size (${y.issues.find((i) => i.severity === 'error')?.message ?? 'no rows'}).`, source: { panel, yoke: y } };
   const spc = y.stitchesPerCm;
   const last = y.rows[y.rows.length - 1].zones;
   const N = y.underarmCo;

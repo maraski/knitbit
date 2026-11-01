@@ -187,7 +187,7 @@ describe('strap width: 2–5 cm straps in every size', () => {
           // The one expected limit: top-down, a square neck (9–10 cm deep, straight sides) with a 2 cm strap reaches
           // the armhole shaping, where the front is narrower than the opening (XS, S, 1X, 2X; 4X on the cardigan).
           const expected = method === 'top-down' && neck === 'square' && gives === 'neck' && w === 2;
-          const errs = errors(q).filter((e) => !(expected && /Neck wider than the panel at row \d+: .* To fix: widen the strap|The stitch count goes negative/.test(e)));
+          const errs = errors(q).filter((e) => !(expected && /Neck wider than the panel at row \d+: |The stitch count goes negative/.test(e)));
           expect(errs, `${w} cm`).toEqual([]);
           if (expected) expect(errors(q).length).toBeGreaterThan(0);
         }

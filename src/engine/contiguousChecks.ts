@@ -6,6 +6,7 @@ import { cachedPanel, type PanelCache } from './joins';
 import { buildScope } from './measurements';
 import type { Id, Project } from './model';
 import type { Issue } from './panel';
+import { ceil1, cmText, field, fixOf, type IssueFix } from './issues';
 
 export interface ContiguousCheck {
   panelId: Id;
@@ -24,7 +25,14 @@ export function contiguousChecks(project: Project, sizeId: Id, cache: PanelCache
   if (!y || !y.rows.length) return out;
   const scope = buildScope(project, sizeId);
   const tol = project.settings.seamToleranceCm;
-  const push = (severity: Issue['severity'], message: string, at = panel) => out.push({ panelId: at.id, panelName: at.name, issue: { severity, message, ref: { kind: 'panel' } } });
+  const push = (severity: Issue['severity'], code: string, message: string, fix?: IssueFix, at = panel) => out.push({ panelId: at.id, panelName: at.name, issue: { severity, code, message, ref: { kind: 'panel' }, ...(fix && { fix }) } });
+  const yf = (key: string) => ({ ...field.yoke(key), panelId: panel.id });
+  // Extra depth plus `add` cm, as a fix (Apply sets it in the failing sizes).
+  const deeper = (add: number, also: string) => {
+    const now = y.params.extraDepth?.value ?? 0;
+    const value = Math.round((now + add) * 10) / 10;
+    return fixOf(`Add ${cmText(add)} to Extra depth (now ${cmText(now)})${also}.`, [yf('extraDepth')], { now: cmText(now), need: `≥ ${cmText(value)}`, apply: { field: yf('extraDepth'), value, unit: 'cm' } });
+  };
 
   const raglan = !!y.raglan;
   // Widths at the end of the shoulders (info: the back follows the cross back by design; the shoulder width is a style).
@@ -32,11 +40,11 @@ export function contiguousChecks(project: Project, sizeId: Id, cache: PanelCache
   const cb = scope.cross_back_w ?? scope.cross_back;
   if (cb !== undefined && !raglan) {
     const d = y.derived.backEndOfACm - cb;
-    push('info', `End of the shoulders (row ${y.counts.A}): the back is ${cm(y.derived.backEndOfACm)}, ${d >= 0 ? `${cm(d)} wider` : `${cm(-d)} narrower`} than the cross back (${cm(cb)}).`);
+    push('info', 'yoke.fit-cross-back', `End of the shoulders (row ${y.counts.A}): the back is ${cm(y.derived.backEndOfACm)}, ${d >= 0 ? `${cm(d)} wider` : `${cm(-d)} narrower`} than the cross back (${cm(cb)}).`);
   }
   if (scope.cross_front !== undefined && !raglan) {
     const d = y.derived.frontEndOfACm - scope.cross_front;
-    push('info', `End of the shoulders: the fronts (with the neck between them) are ${cm(y.derived.frontEndOfACm)}, ${d >= 0 ? `${cm(d)} wider` : `${cm(-d)} narrower`} than the cross front (${cm(scope.cross_front)}).`);
+    push('info', 'yoke.fit-cross-front', `End of the shoulders: the fronts (with the neck between them) are ${cm(y.derived.frontEndOfACm)}, ${d >= 0 ? `${cm(d)} wider` : `${cm(-d)} narrower`} than the cross front (${cm(scope.cross_front)}).`);
   }
 
   // Sleeve at the underarm (held sleeve + underarm cast-on) against bicep + ease.
@@ -44,8 +52,8 @@ export function contiguousChecks(project: Project, sizeId: Id, cache: PanelCache
   if (scope.bicep !== undefined) {
     const target = scope.bicep + ease;
     const d = y.derived.sleeveCm - target;
-    if (d < -tol) push('warning', `The sleeve at the underarm is ${cm(y.derived.sleeveCm)} (${y.held.leftSleeve} + ${y.underarmCo} sts), ${cm(-d)} less than bicep + ease (${cm(target)}): it may be tight.`);
-    else if (d > Math.max(tol, 0.1 * target)) push('info', `The sleeve at the underarm is ${cm(y.derived.sleeveCm)}, ${cm(d)} more than bicep + ease (${cm(target)}).`);
+    if (d < -tol) push('warning', 'yoke.fit-sleeve-tight', `The sleeve at the underarm is ${cm(y.derived.sleeveCm)} (${y.held.leftSleeve} + ${y.underarmCo} sts), ${cm(-d)} less than bicep + ease (${cm(target)}): it may be tight.`, fixOf(`Make Sleeve at the underarm at least ${cmText(ceil1(target))} (now ${cmText(y.params.sleeveWidth?.value ?? y.derived.sleeveCm)}), or a larger Underarm cast-on, each.`, [yf('sleeveWidth'), yf('underarmCo')], { now: cm(y.derived.sleeveCm), need: `≥ ${cm(target - tol)}` }));
+    else if (d > Math.max(tol, 0.1 * target)) push('info', 'yoke.fit-sleeve-wide', `The sleeve at the underarm is ${cm(y.derived.sleeveCm)}, ${cm(d)} more than bicep + ease (${cm(target)}).`);
   }
 
   // Around the armhole: both armhole edges, the cap top and the underarm cast-on, against the body's scye. (A raglan's
@@ -53,13 +61,13 @@ export function contiguousChecks(project: Project, sizeId: Id, cache: PanelCache
   if (scope.scye_circumference !== undefined && !raglan) {
     const s = scope.scye_circumference;
     const d = y.derived.armholeCm - s;
-    if (d < -tol) push('warning', `Around the armhole (yoke edges + cap top + ${y.underarmCo} sts cast on) is ${cm(y.derived.armholeCm)}, ${cm(-d)} less than the scye circumference (${cm(s)}): the sleeve may be tight at the underarm (a deeper yoke, extra depth, or a larger underarm cast-on helps).`);
-    else if (d > 0.15 * s) push('info', `Around the armhole is ${cm(y.derived.armholeCm)}, ${cm(d)} more than the scye circumference (${cm(s)}): a deep armhole.`);
+    if (d < -tol) push('warning', 'yoke.fit-armhole-short', `Around the armhole (yoke edges + cap top + ${y.underarmCo} sts cast on) is ${cm(y.derived.armholeCm)}, ${cm(-d)} less than the scye circumference (${cm(s)}): the sleeve may be tight at the underarm.`, deeper(ceil1((-d - tol) / 2), ', or a larger Underarm cast-on, each'));
+    else if (d > 0.15 * s) push('info', 'yoke.fit-armhole-deep', `Around the armhole is ${cm(y.derived.armholeCm)}, ${cm(d)} more than the scye circumference (${cm(s)}): a deep armhole.`);
   }
 
   // Hint: a long shoulder seam with few rapid rows gives a narrow, pointy cap top.
   const { A, C } = y.counts;
-  if (!raglan && C < A / 2) push('info', `Hint: the cap may look pointy: the shoulder seam is ${A} rows but the rapid cap only ${C}. More rapid rows (or more seam stitches) round it.`);
+  if (!raglan && C < A / 2) push('info', 'yoke.cap-pointy', `Hint: the cap may look pointy: the shoulder seam is ${A} rows but the rapid cap only ${C}. More rapid rows (or more seam stitches) round it.`);
 
   if (y.raglan) {
     // The body at the split against its target (4 sts per increase row, so it can be up to 2 sts off), and how deep
@@ -68,16 +76,16 @@ export function contiguousChecks(project: Project, sizeId: Id, cache: PanelCache
     if (body !== undefined) {
       const closing = project.garment.opening === 'cardigan' ? scope.closing_r ?? 0 : 0;
       const d = y.derived.bodyCm + closing - body;
-      if (Math.abs(d) > Math.max(tol, 2 / y.stitchesPerCm + 1e-6)) push('warning', `The body at the underarm is ${cm(y.derived.bodyCm + closing)} (${y.held.body} + 2 × ${y.underarmCo} sts), ${d > 0 ? `${cm(d)} more` : `${cm(-d)} less`} than its target (${cm(body)}).`);
+      if (Math.abs(d) > Math.max(tol, 2 / y.stitchesPerCm + 1e-6)) push('warning', 'raglan.body-off', `The body at the underarm is ${cm(y.derived.bodyCm + closing)} (${y.held.body} + 2 × ${y.underarmCo} sts), ${d > 0 ? `${cm(d)} more` : `${cm(-d)} less`} than its target (${cm(body)}).`, fixOf(`${d > 0 ? 'A smaller' : 'A larger'} Underarm cast-on, each (now ${cmText(y.underarmCo / y.stitchesPerCm)})${d > 0 ? ', or a narrower Neck width, cast on across the back' : ', or a deeper raglan'}.`, [yf('underarmCo'), yf(d > 0 ? 'neckWidth' : 'extraDepth')], { now: cm(y.derived.bodyCm + closing), need: cm(body) }));
     }
     if (y.offShoulder) {
       // The band's top edge is off_shoulder_drop below the shoulder point; the front works every row but the short rows
       // (and a folded band's facing and turning round, which fold inside).
       const lower = (scope.off_shoulder_drop ?? 0) + (y.offShoulder.frontRows - (y.offShoulder.fold?.hiddenRows ?? 0)) / y.rowsPerCm;
-      if (scope.armhole_depth !== undefined && lower < scope.armhole_depth - tol) push('warning', `The raglan splits ${cm(scope.armhole_depth - lower)} higher than the armhole depth (${cm(scope.armhole_depth)} below the shoulder): it may bind at the underarm. Deepen it.`);
+      if (scope.armhole_depth !== undefined && lower < scope.armhole_depth - tol) push('warning', 'raglan.shallow-split', `The raglan splits ${cm(scope.armhole_depth - lower)} higher than the armhole depth (${cm(scope.armhole_depth)} below the shoulder): it may bind at the underarm.`, deeper(ceil1(scope.armhole_depth - tol - lower), ''));
       // It matters more here than most estimates: the band's and the ring's counts come from it.
       const est = project.measurements.find((m) => m.name === 'off_shoulder_circ')?.estimate;
-      if (est) push('info', 'off_shoulder_circ is still an estimate: measure it (arms down, around both upper arms and the torso at band height). The band and the ring are worked out from it.');
+      if (est) push('info', 'raglan.estimate', 'off_shoulder_circ is still an estimate: measure it (arms down, around both upper arms and the torso at band height). The band and the ring are worked out from it.');
     } else if (scope.armhole_depth !== undefined) {
       // From the cast-on (the back neck) up to the top of the neck, then down to the shoulder point: a round neck's
       // top is the neck point (shoulder_drop above the shoulder point); a boat neck's is the strap top, only the
@@ -89,7 +97,7 @@ export function contiguousChecks(project: Project, sizeId: Id, cache: PanelCache
       const rise = boat ? drop * Math.min(1, (sw - neckW) / Math.max(1, sw - (scope.back_neck_width ?? 0))) : drop;
       const backDepth = boat ? y.params.neckBackDepth?.value ?? scope.back_neck_drop ?? 0 : scope.back_neck_drop ?? 0;
       const lower = y.derived.backLengthCm - rise + backDepth;
-      if (lower < scope.armhole_depth - tol) push('warning', `The raglan splits ${cm(scope.armhole_depth - lower)} higher than the armhole depth (${cm(scope.armhole_depth)} below the shoulder): it may bind at the underarm. Deepen it.`);
+      if (lower < scope.armhole_depth - tol) push('warning', 'raglan.shallow-split', `The raglan splits ${cm(scope.armhole_depth - lower)} higher than the armhole depth (${cm(scope.armhole_depth)} below the shoulder): it may bind at the underarm.`, deeper(ceil1(scope.armhole_depth - tol - lower), ''));
     }
   }
 
@@ -107,14 +115,14 @@ export function contiguousChecks(project: Project, sizeId: Id, cache: PanelCache
     const fronts = top('front').length;
     // A cardigan front pair counts both halves; a body missing a panel can't be compared.
     if (top('back').length && fronts) {
-      if (have !== want) push('warning', `The body starts with ${have} sts (${bodies.map((x) => `${x.p.name} ${x.c!.counts[0]}`).join(', ')}), but the yoke holds ${y.held.body} + 2 × ${y.underarmCo} cast on = ${want}.`, bodies[0].p);
+      if (have !== want) push('warning', 'yoke.body-start', `The body starts with ${have} sts (${bodies.map((x) => `${x.p.name} ${x.c!.counts[0]}`).join(', ')}), but the yoke holds ${y.held.body} + 2 × ${y.underarmCo} cast on = ${want}.`, fixOf(`Make the body pieces' underarm widths follow the yoke again (the Back's and Front's top waypoint width), or re-add them from the yoke (Body and sleeves).`, [{ ...field.panel('waypoints', 'Waypoints'), panelId: bodies[0].p.id }], { now: `${have} sts`, need: `${want} sts` }), bodies[0].p);
     }
   }
   for (const role of ['leftSleeve', 'rightSleeve'] as const) {
     for (const x of top(role)) {
       const want = y.held[role] + N;
       const have = x.c!.counts[0] ?? 0;
-      if (have !== want) push('warning', `${x.p.name} starts with ${have} sts, but the yoke holds ${y.held[role]} + ${N} cast on = ${want}.`, x.p);
+      if (have !== want) push('warning', 'yoke.sleeve-start', `${x.p.name} starts with ${have} sts, but the yoke holds ${y.held[role]} + ${N} cast on = ${want}.`, fixOf(`Make ${x.p.name}'s top width follow the yoke again (its underarm waypoint width).`, [{ ...field.panel('waypoints', 'Waypoints'), panelId: x.p.id }], { now: `${have} sts`, need: `${want} sts` }), x.p);
     }
   }
   return out;

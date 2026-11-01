@@ -1,15 +1,17 @@
 import { useMemo, useState } from 'react';
 import { groupChecks, projectChecks, rootChecks, type CheckGroup } from '../../engine/checks';
 import type { Id, Project } from '../../engine/model';
+import { IssueFixLine, type IssueActions } from './IssueFix';
 
 interface Props {
   project: Project;
   sizeId: Id;
   onGo: (g: CheckGroup, sizeId: Id) => void;
+  actions?: IssueActions;
 }
 
 /** Collapsible list of everything odd or impossible, across all panels and sizes. */
-export function CheckPanel({ project, sizeId, onGo }: Props) {
+export function CheckPanel({ project, sizeId, onGo, actions }: Props) {
   const [open, setOpen] = useState(false);
   const [scope, setScope] = useState<'size' | 'all'>('all');
   const [notes, setNotes] = useState(false);
@@ -31,10 +33,13 @@ export function CheckPanel({ project, sizeId, onGo }: Props) {
 
   const row = (g: CheckGroup, knockOn = false) => {
     const here = g.sizes.find((s) => s.id === sizeId);
-    const fix = (here ?? g.sizes[0]).fix;
-    // The need differs by size: list it per size (this size first).
+    const shown = here ?? g.sizes[0];
+    const fix = shown.fix;
+    // The need differs by size: this size's, then the range over the affected sizes (in size order).
     const needs = g.sizes.filter((s) => s.fix?.need);
     const perSize = needs.length > 1 && new Set(needs.map((s) => s.fix!.need)).size > 1;
+    const needText = (s: (typeof needs)[number]) => `${s.fix!.need} (${s.name})`;
+    const range = !perSize ? undefined : `${fix?.fields[0]?.label ?? 'Needs'}: ${here?.fix?.need ? `${needText(here)}; ` : ''}${needs.length > 2 ? `${needText(needs[0])} … ${needText(needs[needs.length - 1])}` : needs.map(needText).join(' · ')}`;
     const knockOns = g.knockOns.length;
     const where = [...new Set(g.knockOns.filter((k) => k.issue.ref.kind !== 'join').map((k) => k.panelName)), ...(g.knockOns.some((k) => k.issue.ref.kind === 'join') ? ['joins'] : [])];
     return (
@@ -47,12 +52,7 @@ export function CheckPanel({ project, sizeId, onGo }: Props) {
             {g.sizes.length === project.sizes.length ? 'all sizes' : g.sizes.map((s) => s.name).join(', ')}
           </span>
         </div>
-        {fix?.text && (
-          <div className="issue-fix">
-            <strong>Fix:</strong> {fix.text}
-            {perSize && <span className="check-needs"> {fix.fields[0]?.label}: {[...(here?.fix?.need ? [here] : []), ...needs.filter((s) => s !== here)].map((s) => `${s.fix!.need} (${s.name})`).join(' · ')}</span>}
-          </div>
-        )}
+        {fix && <IssueFixLine fix={fix} issue={{ ...g.issue, fix }} panelId={g.panelId} sizeId={shown.id} actions={actions} needs={range} />}
         {knockOns > 0 && (
           <>
             <button className="link check-knock-toggle" onClick={() => toggle(g.key)}>

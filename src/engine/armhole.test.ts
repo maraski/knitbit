@@ -74,6 +74,6 @@ describe('sleeve cap follows the armhole', () => {
     const { p, front } = garment();
     front.waypoints.find((w) => w.name === 'armhole_end')!.height.expr = 'underarm.height + armhole_len * 0';
     const c = computePanel(p, front, sizeId(p, 'M'));
-    expect(c.issues.some((i) => /armhole_len/.test(i.message))).toBe(true);
+    expect(c.issues.some((i) => i.code === 'source.armhole' && /armhole can't be measured/.test(i.message))).toBe(true);
   });
 });

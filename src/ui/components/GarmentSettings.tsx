@@ -53,7 +53,7 @@ export function GarmentSettings({ project, update, sizeId }: Props & { sizeId: I
   return (
     <>
       <h4>How it’s built</h4>
-      <div className="field">
+      <div className="field" data-field="garment.method">
         <select value={choice.method === 'custom' ? 'custom' : choice.method} onChange={(e) => askMethod(e.target.value as Exclude<GarmentMethod, 'blank'>)} aria-label="Construction method">
           {choice.method === 'custom' && <option value="custom" disabled>Custom (your own pieces)</option>}
           {METHODS.filter((m) => m.id !== 'blank').map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}

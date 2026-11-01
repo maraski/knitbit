@@ -34,7 +34,7 @@ export function YokeProps({ ctx }: { ctx: PropsContext }) {
     <ExprField label={label} value={get(spec)} sizeId={sizeId} sizeName={sizeName} scope={scope} units={ctx.units} fieldKey={`yoke.${key}`} note={note} onChange={(d, k) => setYoke((s) => set(s, d), `yoke.${panel.id}.${k}`)} />
   );
   const num = (label: string, param: string, get: (s: YokeSpec) => DimExpr, set: (s: YokeSpec, d: DimExpr) => void) => (
-    <ParamField label={label} value={get(spec)} param={y?.params[param]} sizeId={sizeId} sizeName={sizeName} onChange={(d, k) => setYoke((s) => set(s, d), `yoke.${panel.id}.${param}.${k}`)} />
+    <ParamField label={label} value={get(spec)} param={y?.params[param]} sizeId={sizeId} sizeName={sizeName} fieldKey={`yoke.${param}`} onChange={(d, k) => setYoke((s) => set(s, d), `yoke.${panel.id}.${param}.${k}`)} />
   );
 
   return (
@@ -317,13 +317,13 @@ export function NeckWorked({ y, cardigan, rpc }: { y: NonNullable<PropsContext['
 }
 
 /** An expression in rows, stitches or a fraction (not cm), with its numbers plugged in and a per-size value. */
-export function ParamField({ label, value, param, sizeId, sizeName, onChange }: { label: string; value: DimExpr; param?: YokeParam; sizeId: string; sizeName: string; onChange: (d: DimExpr, key: string) => void }) {
+export function ParamField({ label, value, param, sizeId, sizeName, onChange, fieldKey }: { label: string; value: DimExpr; param?: YokeParam; sizeId: string; sizeName: string; onChange: (d: DimExpr, key: string) => void; fieldKey?: string }) {
   const overridden = sizeId in value.overrides;
   const [ov, setOv] = useState('');
   useEffect(() => setOv(overridden ? String(value.overrides[sizeId]) : ''), [overridden, value.overrides, sizeId]);
   const unit = param ? UNIT_LABEL[param.unit] : '';
   return (
-    <div className={`field expr-field${overridden ? ' is-overridden' : ''}`}>
+    <div className={`field expr-field${overridden ? ' is-overridden' : ''}`} data-field={fieldKey}>
       <label>{label}</label>
       <input className="expr" value={value.expr} spellCheck={false} onChange={(e) => onChange({ ...value, expr: e.target.value }, 'expr')} />
       {param && (

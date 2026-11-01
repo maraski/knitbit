@@ -309,7 +309,7 @@ function ShortRowSettings({ b, set }: { b: BustShaping; set: (fn: (x: BustShapin
           <option value="wrap-turn">Wrap & turn</option>
         </select>
       </div>
-      <div className="field">
+      <div className="field" data-field="bust.pairs">
         <label>Pairs</label>
         <input
           className="num"

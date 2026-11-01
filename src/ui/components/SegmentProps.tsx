@@ -32,7 +32,7 @@ function defaultFor(kind: SegmentMethod['kind']): SegmentMethod {
 function MethodEditor({ method, onChange, keyBase }: { method: SegmentMethod; onChange: (m: SegmentMethod, key?: string) => void; keyBase: string }) {
   return (
     <>
-      <div className="field">
+      <div className="field" data-field="method">
         <label>Method</label>
         <select value={method.kind} onChange={(e) => onChange(defaultFor(e.target.value as SegmentMethod['kind']))}>
           {Object.entries(METHOD_LABELS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}

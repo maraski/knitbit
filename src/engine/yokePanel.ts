@@ -6,6 +6,7 @@ import { generateYoke, ZONES, type YokeResult, type Zone } from './contiguous';
 import type { Id, Panel, Project } from './model';
 import type { ComputedPanel, ComputedWaypoint, Issue, Point } from './panel';
 import { roundRows } from './rounding';
+import { withPanelFields } from './issues';
 
 /** Names of the yoke's landmark rows (used like waypoints: alignment, labels, joins). */
 export const YOKE_WAYPOINTS = { neck: 'neck', ring: 'ring', shoulder: 'shoulder', capRapid: 'cap_rapid', capSlow: 'cap_slow', underarm: 'underarm' } as const;
@@ -53,7 +54,7 @@ export function computeYokePanel(project: Project, panel: Panel, sizeId: Id): Co
   const counts = [y.castOn, ...y.rows.map((r) => r.total)];
   const leftEdge = counts.map((n) => -n / 2);
   const rightEdge = counts.map((n) => n / 2);
-  const issues = yokeIssues(y);
+  const issues = withPanelFields(yokeIssues(y), panel.id);
   const { A, C, D } = y.counts;
   const os = y.offShoulder;
   const wps: ComputedWaypoint[] = [

@@ -88,6 +88,6 @@ describe('contiguous checks', () => {
       y.shortRows!.step = dim(0);
     });
     const all = projectChecks(p).filter((c) => c.sizeName === 'M').map((c) => c.issue.message);
-    expect(all.some((x) => /short rows end on row \d+, below the underarm split/.test(x))).toBe(true);
+    expect(all.some((x) => /short rows end on row \d+, .*below the underarm split/.test(x))).toBe(true);
   });
 });
