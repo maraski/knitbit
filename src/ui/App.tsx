@@ -272,7 +272,7 @@ export function App({ start }: { start: StartState }) {
 
   const ctx: PropsContext | null =
     panel && computed && size
-      ? { project, panel, computed, sizeId: size.id, sizeName: size.name, scope, units: project.units, update, select: setSelection, markers: markers!, selection }
+      ? { project, panel, computed, sizeId: size.id, sizeName: size.name, scope, units: project.units, update, select: setSelection, openPanel: (id) => { setPanelId(id); setSelection(PANEL_SELECTION); }, markers: markers!, selection }
       : null;
 
   return (
