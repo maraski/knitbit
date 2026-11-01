@@ -7,5 +7,6 @@
 .export-dialog .field input[type=checkbox] { width: auto; margin: 0; }
 .export-dialog .segmented { align-self: flex-start; }
 .export-dialog .inline { display: flex; gap: 12px; }
+.export-dialog .field > label.check.export-sub { padding-left: 20px; }
 .export-warn ul { margin: 4px 0 0; padding-left: 16px; }
 @media (max-width: 560px) { .export-grid { grid-template-columns: 1fr; } }

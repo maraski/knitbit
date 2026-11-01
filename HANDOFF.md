@@ -27,7 +27,7 @@ M9), `6ee297f` (M10 + bust/princess options), `89c2318` (painted stitches, shapi
 > README's *Garment options* table): cross back is followed (shoulder width is a style option); the yoke splits by
 > back length and deepens until the cap is at most half rapid; body increases low in the armhole with `underarm_co`;
 > edge settings never add or remove panels (explicit *Add strips* / *Add yoke, body and sleeves*); the yoke is drawn
-> from above. Not done: PDF charts and PNG export (E3–E5 of `docs/export-plan.md`; E1, page 1 and the size tables, and E2, schematics, are built), integrated
+> from above. Not done: PNG export and the extras (E4, E5 of `docs/export-plan.md`; E1 page 1 and the size tables, E2 schematics and E3 stitch charts are built), integrated
 > bands on a contiguous yoke, neckband knit with the panel, dragging back-neck increases on the chart.
 
 ## 1. Project goal and architecture
@@ -457,6 +457,21 @@ main chunk into a `panel-*.js` chunk, hence `export/views.ts` (App registers `Sc
 278.25 kB (+0.34 kB gzip). Tests mock `./render` (no DOM in Node). To check a PDF by eye: post the blob from the page
 to a small local HTTP receiver, render pages with a PDFKit Swift script (no pdftoppm here). Known, as in the app: a
 cardigan front's buttons sit over the rotated band label; on a contiguous cardigan the yoke's buttons aren't printed.
+
+E3 is built (2026-11-01, PR #23, branch `claude/export-e3-charts-8716d6`): `tiles.ts` (pure: `fitGrid` picks the cell
+size and row/column bands, `layoutTiles` the reading order, pages, overlap and links, skipping tiles with no
+stitches; `stitchLabels`, `tileRange`, `countRows`), `ChartSheet.tsx` (one tile in mm, colours passed in as a
+`Palette` read once with `getComputedStyle`; grid as one path), `sheetDom.tsx` (createRoot + flushSync into a detached
+div, then the glyph classes `glyph` / `glyph-fill` / `glyph-text` become attributes; since the merge with E2 the
+function is `sheetSvg` in `render.tsx`, re-exported by `sheetDom.tsx` and loaded on first use: a static import of
+`react-dom/client` from the chart code made Rolldown split the engine out of the main chunk into `panel-*.js`), `charts.tsx` (the renderer: orientation per piece, title, tile map, links, key). `plan.ts` gained
+`SectionDef.ownPages` (the charts start their own pages, so they can be landscape) and `ExportOptions.collapse`;
+`pdf.ts` gained `Writer.boxFor(orientation)`. Tests: `export/tiles.test.ts`, and `pdf.test.ts` renders the sheets with
+`react-dom/server` (sheetDom mocked) to check a 150 × 200 chart's tiles, the key, short rows, collapse and top-down.
+Main chunk unchanged (89.70 kB gzip); `pdf-*.js` 165 kB gzip. Checked by eye in the browser: a 150 × 200 chart
+(16 tiles + key), a seamed garment with bust short rows, a contiguous yoke. To look at a PDF from the preview
+without a download: POST the blob from `javascript_tool` to a small local Node server that writes it to disk, then
+render pages with PDFKit (a short Swift script).
 
 Old outline (kept for reference):
 1. Add `jspdf` + `svg2pdf.js` (exact versions pinned).
