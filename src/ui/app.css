@@ -284,8 +284,13 @@ button.primary { background: var(--fg); color: var(--panel); border-color: var(-
 .check-filters { display: flex; align-items: center; gap: 12px; margin-bottom: 6px; }
 .check-filters .check { margin: 0; }
 .check-list { list-style: none; padding: 0; margin: 0; }
-.check-list .issue { display: flex; gap: 10px; align-items: baseline; }
-.check-list .issue button { flex: 1; }
+.check-row { display: flex; gap: 10px; align-items: baseline; }
+.check-row button { flex: 1; }
+.issue-fix { margin-top: 2px; }
+.check-needs { opacity: 0.8; }
+.check-knock-toggle { display: block; margin-top: 3px; font-size: 11px; opacity: 0.85; }
+.check-knock-ons { margin: 4px 0 0 12px; }
+.issue-knock-on { opacity: 0.85; }
 .check-sizes { font-size: 11px; opacity: 0.8; white-space: nowrap; }
 table.events.editable tr { cursor: pointer; }
 table.events.editable tr.selected td { background: var(--accent-soft); }

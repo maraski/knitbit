@@ -192,7 +192,8 @@ removed; delete them in the console if you want the space back.
   - `grading.ts`: size and measurement operations (rename everywhere, increment rules, base size, zigzag check).
   - `symbols.ts`: the stitch symbol set and what each does as a shaping marker.
   - `manual.ts`: hand-editing shaping markers (move, add, remove, retype, reset).
-  - `checks.ts`: project-wide checks for the check panel; `fitChecks.ts`: the checks from the sizing data (below).
+  - `checks.ts`: project-wide checks for the check panel (grouping, knock-on nesting); `fitChecks.ts`: the checks from the
+    sizing data (below). `issues.ts`: the shared issue model (`IssueFix`, `FieldRef`, `issueKey`).
   - `bust.ts`: bust shaping (formulas with numbers plugged in, short-row wedges, horizontal and vertical darts).
   - `joins.ts`: measuring tagged edges, seam comparison, pick-up suggestions. `edges.ts`: edge length along the outline.
   - `waypointDrag.ts`: proportional waypoint height/width edits, linked panels, match.
@@ -1083,6 +1084,44 @@ Sleeves** pickers for the current size. Each region of each size follows the siz
 row's values become **manual values** of the new size (the existing per-size overrides, so you type over them in the
 grid), its per-size panel overrides are copied, and formulas recompute. Custom sizes are marked *custom*, are left out
 of the zigzag check, count as their row when comparing sizes, and can use region sizing like any size.
+
+## The Checks bar
+
+The Checks bar at the foot of the schematic lists every problem in every panel, join and size (`projectChecks` in
+`src/engine/checks.ts`). *All sizes* (the default) shows one row per problem with the sizes it occurs in and the
+current size's numbers; *This size* keeps the current size only; *Show notes* adds the info notes.
+
+**Root causes and knock-ons.** When a piece can't be computed, everything that needs it fails too: a yoke that can't
+be worked leaves the Back, Front and sleeves without their held stitches, and the joins that measure them without an
+edge. These are *knock-ons*: each reports one issue (*"Waits on Yoke: …"*, or *"… can't be measured until that panel
+can be computed"* on a join) with `causedBy` set to the root issue's key, instead of the old `yoke.*: …` and
+`Unknown name "yoke.back_w"` pairs. The Checks bar shows the root's row with *▸ +N knock-on problems in Back, Front, …*
+(click to expand); the properties of a waiting piece show the *Waits on* issue, which links to the root's panel. The
+same applies to a sleeve whose `armhole_len` can't be measured and a strip whose `edge_len` can't (the panel it
+measures fails). Only issues caused by a failed source are folded: a separate problem on the same piece keeps its own
+row.
+
+**Counting.** The pills count root causes per size: knock-ons whose root is in the list aren't counted again. Example
+(sample table, 22 × 30): New garment → Contiguous yoke, V, pullover, yoke *Depth below the neck point* = 25 cm shows
+**4 errors · 5 warnings** (one error row for 4XS–XS, with 10 knock-ons folded under it; the warnings are the yoke's
+own armhole/body notes) where it used to show 36 errors · 29 warnings.
+
+**Fix.** Some issues say what to change, under the message: the field (by its label in the properties), this size's
+value and what it needs, per size when the sizes differ (*Fix: Make Depth below the neck point at most 19 cm (now
+25 cm), or add 5.7 cm to Extra depth. Depth below the neck point: ≤ 19 cm (4XS) · ≤ 20.3 cm (3XS) · …*). So far: the
+yoke's neck or short rows ending below the split, short rows that don't fit in the front, the shoulder phase with no
+rows, and a neckline wider than the panel's top.
+
+**The issue model** (`Issue` in `panel.ts`; `message` and `ref` as always):
+
+| Field | Meaning |
+|---|---|
+| `code` | stable id of the kind of problem: `yoke.neck-below-split`, `yoke.short-rows-below-split`, `yoke.short-rows-fit`, `yoke.shoulder-phase`, `yoke.band-below-split`, `neckline.wider-than-top`, `knock-on.yoke` / `.armhole` / `.edge` / `.join` |
+| `fix` | `{ text, fields: FieldRef[], now?, need?, apply? }`: what to change; `fields` name the yoke param (`YokeResult.params` key), neckline field, waypoint …; `apply` is reserved for a one-click change |
+| `causedBy` | the root issue's key (`issueKey(panelId, issue)`: panel, ref, severity and the message with its numbers left out), for a knock-on |
+
+The yoke generators' `YokeIssue` carries `code`, `fix` and `param` (the `YokeResult.params` key to change), and the
+yoke panel passes them on.
 
 ## Checks from the sizing data
 

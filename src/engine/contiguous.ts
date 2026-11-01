@@ -18,6 +18,7 @@ import { distributeAcross, distributeAuto } from './distribute';
 import { evaluate, scopeFrom } from './expr';
 import { rowsPerCm, stitchesPerCm } from './gauge';
 import { buildScope } from './measurements';
+import { cmText, type IssueFix } from './issues';
 import type { DimExpr, Id, NecklineShape, Project, StitchPattern, YokeSpec, YokeStart } from './model';
 import { dim, newPanel, type Panel } from './model';
 import { backNeckFor, bodiceNeck, FRONT_NECKS } from './templates';
@@ -96,6 +97,11 @@ export interface PhaseSummary {
 export interface YokeIssue {
   severity: 'error' | 'warning' | 'info';
   message: string;
+  /** Stable id of the kind of problem (see `Issue.code`). */
+  code?: string;
+  /** The value to change: a key in `YokeResult.params`. */
+  param?: string;
+  fix?: IssueFix;
 }
 
 export interface YokeResult {
@@ -240,6 +246,46 @@ function incSymbols(spec: YokeSpec): { before: string; after: string } {
   return { before: 'm1r', after: 'm1l' };
 }
 
+// ---------- fixes for the generators' errors (shared with raglan.ts) ----------
+
+/** Short rows whose last turn is past centre front: the most pairs that fit (`side − first − (p − 1) × step ≥ 1`). */
+export function shortRowsFitFix(pairs: number, side: number, first: number, step: number): Omit<YokeIssue, 'message'> {
+  const most = side - first - 1 < 0 ? 0 : Math.floor((side - first - 1) / step) + 1;
+  return {
+    severity: 'error',
+    code: 'yoke.short-rows-fit',
+    param: 'srPairs',
+    fix: { text: `Make Short-row pairs at most ${most} (now ${pairs}), or a smaller Sts between turns.`, fields: [{ target: 'yoke', key: 'srPairs', label: 'Short-row pairs' }, { target: 'yoke', key: 'srStep', label: 'Sts between turns' }], now: String(pairs), need: `≤ ${most}` },
+  };
+}
+
+/**
+ * A front neck (or short rows) ending on row R, below the split on row Y: the deepest neck (or most pairs) that ends
+ * by row Y, or how much deeper the yoke must be. The neck closes on an odd row (R = its rows, made odd), the short
+ * rows on row 2 × pairs + 1.
+ */
+export function belowSplitFix(R: number, Y: number, rpc: number, shortRows: { pairs: number } | null, depthCm: number, boat: boolean): Omit<YokeIssue, 'message'> {
+  const deeper = cmText(Math.ceil(((R - Y) / rpc) * 10) / 10);
+  const extra = { target: 'yoke' as const, key: 'extraDepth', label: 'Extra depth' };
+  if (shortRows) {
+    const most = Math.max(0, Math.floor((Y - 1) / 2));
+    return {
+      severity: 'error',
+      code: 'yoke.short-rows-below-split',
+      param: 'srPairs',
+      fix: { text: `Make Short-row pairs at most ${most} (now ${shortRows.pairs}), or add ${deeper} to Extra depth.`, fields: [{ target: 'yoke', key: 'srPairs', label: 'Short-row pairs' }, extra], now: String(shortRows.pairs), need: `≤ ${most}` },
+    };
+  }
+  const label = boat ? 'Front depth, from the strap top' : 'Depth below the neck point';
+  const most = cmText(Math.floor(((Y % 2 === 1 ? Y : Y - 1) / rpc) * 10) / 10);
+  return {
+    severity: 'error',
+    code: 'yoke.neck-below-split',
+    param: 'neckDepth',
+    fix: { text: `Make ${label} at most ${most} (now ${cmText(depthCm)}), or add ${deeper} to Extra depth.`, fields: [{ target: 'yoke', key: 'neckDepth', label }, extra], now: cmText(depthCm), need: `≤ ${most}` },
+  };
+}
+
 // ---------- generator ----------
 
 export function generateYoke(project: Project, spec: YokeSpec, sizeId: Id): YokeResult {
@@ -310,7 +356,7 @@ export function generateYoke(project: Project, spec: YokeSpec, sizeId: Id): Yoke
     const turns: number[] = [];
     for (let i = 0; i < pairs; i++) turns.push(side - first - i * step);
     const lastTurn = turns[turns.length - 1] ?? side;
-    if (pairs && lastTurn < 1) issues.push({ severity: 'error', message: `Short rows: ${pairs} pairs ${step} sts apart don't fit in a front of ${side} sts (the last turn is past centre front). Fewer pairs, a smaller step or a wider front.` });
+    if (pairs && lastTurn < 1) issues.push({ ...shortRowsFitFix(pairs, side, first, step), message: `Short rows: ${pairs} pairs ${step} sts apart don't fit in a front of ${side} sts (the last turn is past centre front). Fewer pairs, a smaller step or a wider front.` });
     else if (pairs && lastTurn < cSide) issues.push({ severity: 'info', message: `Short rows: the last turns reach into the centre part (${cSide} sts each side of centre front).` });
     if (pairs > 1 && step < 2) issues.push({ severity: 'info', message: `Short rows: turns 1 st apart. Fewer pairs or a wider front cast-on spread them more.` });
     const endRow = pairs > 0 ? 2 * pairs + 1 : 0;
@@ -351,7 +397,15 @@ export function generateYoke(project: Project, spec: YokeSpec, sizeId: Id): Yoke
     A = Math.round((target + 2 * k - bn - bTotal) / 2) + extra;
   }
   if (A < 1) {
-    issues.push({ severity: 'error', message: `The shoulder phase has ${A} rows: the back is already as wide as the target. Narrow the back neck or widen the target.` });
+    // The back after A rows is bn + 2A + B − 2k sts: A ≥ 1 needs a target (or seam length) this big.
+    const fix: IssueFix =
+      spec.shoulder.mode === 'length'
+        ? { text: `Make Shoulder seam length less Shorten at least ${cmText(Math.ceil(((1 - extra) / rpc) * 10) / 10)} (now ${cmText(params.shoulderLength.value - params.shorten.value)}), or narrow the Neck width.`, fields: [{ target: 'yoke', key: 'shoulderLength', label: 'Shoulder seam length' }, { target: 'yoke', key: 'neckWidth', label: 'Neck width, cast on across the back' }], now: cmText(params.shoulderLength.value - params.shorten.value), need: `≥ ${cmText(Math.ceil(((1 - extra) / rpc) * 10) / 10)}` }
+        : (() => {
+            const need = Math.ceil(((1 - 2 * extra - 2 * k + bn + bTotal) / spc) * 10) / 10;
+            return { text: `Make Back width after the markers move at least ${cmText(need)} (now ${cmText(params.backWidth.value)}), or narrow the Neck width.`, fields: [{ target: 'yoke', key: 'backWidth', label: 'Back width after the markers move' }, { target: 'yoke', key: 'neckWidth', label: 'Neck width, cast on across the back' }], now: cmText(params.backWidth.value), need: `≥ ${cmText(need)}` };
+          })();
+    issues.push({ severity: 'error', code: 'yoke.shoulder-phase', param: spec.shoulder.mode === 'length' ? 'shoulderLength' : 'backWidth', fix, message: `The shoulder phase has ${A} rows: the back is already as wide as the target. Narrow the back neck or widen the target.` });
     A = Math.max(1, A);
   }
   // The shoulders need A increase rows; the half rows of a pullover's short rows make none.
@@ -493,7 +547,7 @@ export function generateYoke(project: Project, spec: YokeSpec, sizeId: Id): Yoke
     const have = plan.sleeveMax + N;
     issues.push({ severity: 'warning', message: `The sleeve reaches ${have} sts (${(have / spc).toFixed(1)} cm) at the underarm, ${sleeveTarget + N - have} sts short of its width: ${spec.cap.solve ? 'even with every armhole row rapid. Deepen the yoke or cast on more at the underarm' : 'lengthen the rapid phase (or let it solve)'}.` });
   }
-  if (R > Y) issues.push({ severity: 'error', message: shortRows ? `The short rows end on row ${R}, below the underarm split (row ${Y}). Fewer pairs or a deeper yoke.` : `The front neck closes on row ${R}, below the underarm split (row ${Y}). Make the neck shallower or the yoke deeper.` });
+  if (R > Y) issues.push({ ...belowSplitFix(R, Y, rpc, shortRows, depthCm, spec.neck.shape === 'boat'), message: shortRows ? `The short rows end on row ${R}, below the underarm split (row ${Y}). Fewer pairs or a deeper yoke.` : `The front neck closes on row ${R}, below the underarm split (row ${Y}). Make the neck shallower or the yoke deeper.` });
   const E = Math.max(0, Y - A - C - D);
   const bodySet = new Set(bodyRows);
   const dSet = new Set(dRows);
@@ -711,11 +765,11 @@ export const YOKE_NAMES = ['yoke.back_w', 'yoke.front_w', 'yoke.sleeve_w', 'yoke
  * A cardigan front is described as the whole front (both halves), as cardigan fronts are, so that each half rounds to
  * exactly the yoke's front plus its cast-on.
  */
-export function yokeNames(project: Project, sizeId: Id): { values: Record<string, number> } | { error: string } {
+export function yokeNames(project: Project, sizeId: Id): { values: Record<string, number> } | { error: string; source?: { panel: Panel; yoke: YokeResult } } {
   const panel = project.panels.find((p) => p.yoke);
   if (!panel) return { error: 'there is no contiguous yoke panel.' };
   const y = generateYoke(project, panel.yoke!, sizeId);
-  if (!y.ok || !y.rows.length) return { error: `the yoke can't be computed in this size (${y.issues.find((i) => i.severity === 'error')?.message ?? 'no rows'}).` };
+  if (!y.ok || !y.rows.length) return { error: `the yoke can't be computed in this size (${y.issues.find((i) => i.severity === 'error')?.message ?? 'no rows'}).`, source: { panel, yoke: y } };
   const spc = y.stitchesPerCm;
   const last = y.rows[y.rows.length - 1].zones;
   const N = y.underarmCo;

@@ -34,6 +34,17 @@ function landmark(id: string, name: string, row: number, sts: number, spc: numbe
   };
 }
 
+/** The generator's issues as the yoke panel reports them (its fix names the `param`; the panel is the ref). */
+export function yokeIssues(y: YokeResult): Issue[] {
+  return y.issues.map(({ severity, message, code, param, fix }) => ({
+    severity,
+    message,
+    ref: { kind: 'panel' },
+    ...(code ? { code } : {}),
+    ...(fix ? { fix } : param ? { fix: { text: '', fields: [{ target: 'yoke', key: param, label: y.params[param]?.label ?? param }] } } : {}),
+  }));
+}
+
 export function computeYokePanel(project: Project, panel: Panel, sizeId: Id): ComputedPanel {
   const y = generateYoke(project, panel.yoke!, sizeId);
   const spc = y.stitchesPerCm;
@@ -42,7 +53,7 @@ export function computeYokePanel(project: Project, panel: Panel, sizeId: Id): Co
   const counts = [y.castOn, ...y.rows.map((r) => r.total)];
   const leftEdge = counts.map((n) => -n / 2);
   const rightEdge = counts.map((n) => n / 2);
-  const issues: Issue[] = y.issues.map((i) => ({ severity: i.severity, message: i.message, ref: { kind: 'panel' } }));
+  const issues = yokeIssues(y);
   const { A, C, D } = y.counts;
   const os = y.offShoulder;
   const wps: ComputedWaypoint[] = [
