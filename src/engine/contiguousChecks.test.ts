@@ -82,7 +82,7 @@ describe('contiguous checks', () => {
     expect(msgs(garment(back), 'M').filter((x) => x.startsWith('warning'))).toEqual([]);
   });
 
-  it('whole-neck start: short rows that end below the split are an error', () => {
+  it("whole-neck start: the user's own short rows that end below the split are an error", () => {
     const p = garment((y) => {
       y.shortRows!.pairs = dim(60);
       y.shortRows!.step = dim(0);

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { backNeckPositions, defaultShortRows, STRAP_YOKE_BACK, STRAP_YOKE_NECK, yokeWithNeck, type YokeParam } from '../../engine/contiguous';
 import { generateBodyAndSleeves, missingYokePanels } from '../../engine/contiguousGarment';
 import { NECKLINES, necklinesFor, setNeckline } from '../../engine/garmentSetup';
+import { cmText } from '../../engine/issues';
 import { dim, type DimExpr, type NecklineShape, type YokeSpec } from '../../engine/model';
 import { computePanel } from '../../engine/panel';
 import { strapLinks, strapScope, yokeStrapReadout } from '../../engine/strap';
@@ -256,27 +257,68 @@ export function ShortRowsWorked({ y, cardigan }: { y: NonNullable<PropsContext['
   const sr = y.shortRows!;
   const z = y.castOnZones;
   const from = sr.fromRow ?? 1;
+  // A front neck deeper than the short rows: the fronts are open (worked flat) until the closing cast-on.
+  const fn = sr.frontNeck;
+  const flat = cardigan || !!fn;
   return (
     <div className="formula">
       {!y.offShoulder && <div>
         Cast on <b>{y.castOn}</b>: left front {z.leftFront} · seam {z.leftSleeve} · back {z.back} · seam {z.rightSleeve} · right front {z.rightFront}
-        {cardigan ? ', worked flat.' : ', join in the round; the round starts at the left back shoulder marker (between the back and the left seam).'}
+        {flat ? ', worked flat.' : ', join in the round; the round starts at the left back shoulder marker (between the back and the left seam).'}
       </div>}
       {sr.pairs > 0 ? (
         <div>
-          {cardigan
+          {flat
             ? `Row ${from} (RS): from the right front edge to ${sr.turns[0]} sts before the left front edge, turn. `
             : `Row ${from} (RS): from the marker to ${sr.turns[0]} sts before centre front, turn (no increases). `}
           Then German short rows, each turn {sr.step} st{sr.step === 1 ? '' : 's'} nearer centre front: turns at {sr.turns.join(', ')} sts from
-          {cardigan ? ' each front edge' : ' centre front'} ({sr.pairs} pairs, rows {from}–{sr.endRow - 1}).{' '}
-          {cardigan
+          {flat ? ' each front edge' : ' centre front'} ({sr.pairs} pairs, rows {from}–{sr.endRow - 1}).{' '}
+          {flat
             ? `Row ${sr.endRow} (RS): to the left front edge; then every row across.`
             : `Row ${sr.endRow} (RS): from the last turn back to the marker (no increases); then rounds.`}
         </div>
       ) : (
         <div>No short rows: the back isn't raised.</div>
       )}
+      {fn && <DeepNeckWorked y={y} cardigan={cardigan} />}
     </div>
+  );
+}
+
+/** A whole neck deeper than its short rows: how the depth is shared, and the front neck worked after the short rows. */
+function DeepNeckWorked({ y, cardigan }: { y: NonNullable<PropsContext['computed']['yoke']>; cardigan: boolean }) {
+  const sr = y.shortRows!;
+  const n = y.neck;
+  const rpc = y.rowsPerCm;
+  const cm = (rows: number) => cmText(Math.round((rows / rpc) * 10) / 10);
+  const depth = y.params.neckDepth?.value ?? 0;
+  const incRows = y.rows.filter((r) => r.neck).map((r) => r.row);
+  const nc = y.neckContinues;
+  const close = cardigan
+    ? n.frontEdgeCo > 0
+      ? <>cast on <b>{n.frontEdgeCo}</b> sts at each front edge (right front on row {n.row}, left front on row {n.row + 1})</>
+      : <>the fronts are straight from row {n.row}</>
+    : <>cast on <b>{n.centre}</b> sts at centre front at the end of row {n.row} and join in the round</>;
+  return (
+    <>
+      <div>
+        Front neck {cmText(depth)}: the back neck is {cmText(sr.frontNeck!.backDepth)} below the neck point, the short rows raise the back{' '}
+        <b>{cm(2 * sr.pairs)}</b> ({sr.pairs} pairs); the front neck&rsquo;s other <b>{cm(n.row - sr.endRow)}</b> (rows {sr.endRow + 1}–{n.row}) is worked below them:
+      </div>
+      <div>
+        cast on <b>{sr.frontNeck!.castOn}</b> sts each front (what the turns need), then{' '}
+        {n.perSide ? (
+          <>
+            <b>+{n.perSide}</b> each side inside the edge stitch
+            {incRows.length ? ` (rows ${incRows.join(', ')}${nc?.perSide ? `, and ${nc.perSide} more in the front body` : ''})` : nc?.perSide ? ` (${nc.perSide} in the front body)` : ''}
+          </>
+        ) : (
+          'no increases (the neck edges run straight)'
+        )}
+        , then {close}
+        {nc ? ' (in the front body: the split is row ' + y.counts.total + ')' : ''}.
+      </div>
+    </>
   );
 }
 

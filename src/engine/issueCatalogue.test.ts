@@ -113,6 +113,7 @@ function garments(): [string, Project][] {
   out.push(['seamed neck 1 cm deep', withFront(build('seamed'), (f) => ({ ...f, neckline: { ...f.neckline!, depth: dim(1) } }))]);
   out.push(['contiguous no shoulders', editYoke(build('contiguous'), (y) => void (y.shoulder.backWidth = dim(5)))]);
   out.push(['modified raglan 15 cm', editYoke(build('modified-raglan'), (y) => void (y.neck.depth = dim(15)))]);
+  out.push(['modified raglan 20 pairs', editYoke(build('modified-raglan'), (y) => void (y.shortRows!.pairs = dim(20)))]);
   out.push(['raglan shallow', editYoke(build('raglan'), (y) => void (y.depth.backLength = dim(10)))]);
   out.push(['off-shoulder band ease', editYoke(build('raglan', 'off-shoulder'), (y) => void (y.offShoulder = { ...(y.offShoulder ?? defaultOffShoulder()), bandEase: dim(-0.03) }))]);
   return out;
@@ -150,7 +151,7 @@ describe('plan examples', () => {
   const examples: [string, () => Project, string, string, boolean][] = [
     ['seamed neckline width +4 cm only', () => ALL.find(([n]) => n === 'seamed neck +4 cm')![1], 'neckline.wider-than-top', 'Opening width', true],
     ['contiguous shoulder phase with no rows', () => ALL.find(([n]) => n === 'contiguous no shoulders')![1], 'yoke.shoulder-phase', 'Back width after the markers move', true],
-    ['modified raglan 15 cm round neck', () => ALL.find(([n]) => n === 'modified raglan 15 cm')![1], 'yoke.short-rows-fit', 'Short-row pairs', true],
+    ['modified raglan, 20 short-row pairs', () => ALL.find(([n]) => n === 'modified raglan 20 pairs')![1], 'yoke.short-rows-fit', 'Short-row pairs', true],
     ['raglan shallow split', () => ALL.find(([n]) => n === 'raglan shallow')![1], 'raglan.shallow-split', 'Extra depth', true],
     ['band ease', () => ALL.find(([n]) => n === 'off-shoulder band ease')![1], 'raglan.band-ease-loose', 'Band ease', true],
   ];

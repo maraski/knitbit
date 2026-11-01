@@ -164,7 +164,9 @@ export function generateRaglan(project: Project, spec: YokeSpec, sizeId: Id): Yo
   }
   const shortRows = o ? o.shortRows : ny!.shortRows;
   const neck = o ? o.neck : ny!.neck;
-  const wholeNeck = !!shortRows;
+  // A whole neck deeper than its short rows has the back start's front neck after them (open until it closes).
+  const deepNeck = !!shortRows?.frontNeck;
+  const wholeNeck = !!shortRows && !deepNeck;
   const { perSide, centre, frontEdgeCo, row: R } = neck;
   const bn = neck.backNeck;
   // Every front neck increase row, also those past the contiguous generator's own split.
@@ -248,15 +250,15 @@ export function generateRaglan(project: Project, spec: YokeSpec, sizeId: Id): Yo
   if (bodyFast) issues.push({ severity: 'info', code: 'raglan.body-every-row', message: `Body: every other row isn't enough, so ${bodyFast} of its ${nb} increase rows are the rows between (increasing on the body every row there).` });
   if (sleeveFast) issues.push({ severity: 'info', code: 'raglan.sleeve-every-row', message: `Sleeves: every other row isn't enough, so ${sleeveFast} of their ${ns} increase rows are the rows between.` });
   let neckContinues: YokeResult['neckContinues'];
-  if (!o && !shortRows && continuesPast(R, Y, cardigan, frontEdgeCo)) {
+  if (!o && (!shortRows || (deepNeck && shortRows.endRow <= Y)) && continuesPast(R, Y, cardigan, frontEdgeCo)) {
     const c = neckContinuation(R, Y, rpc, neckRows, centre, frontEdgeCo, cardigan);
     neckContinues = c.neckContinues;
     issues.push(c.issue);
-  } else if (R > Y) {
+  } else if (deepNeck ? shortRows!.endRow > Y : R > Y) {
     const extraNow = params.extraDepth?.value ?? 0;
     const add = ceil1((R - Y) / rpc);
     const band = fixOf(`Add ${cmText(add)} to Extra depth (now ${cmText(extraNow)}), fewer Short-row pairs, or a shallower band (Garment → Edges → Neckband).`, [field.yoke('extraDepth'), field.yoke('srPairs'), field.settings('edges')], { now: cmText(extraNow), need: `≥ ${cmText(extraNow + add)}`, apply: { field: field.yoke('extraDepth'), value: Math.round((extraNow + add) * 10) / 10, unit: 'cm' } });
-    issues.push({ ...(o ? { severity: 'error' as const, code: 'yoke.band-below-split', param: 'extraDepth', fix: band } : belowSplitFix(R, Y, rpc, shortRows!.pairs)), message: o ? `The band${shortRows?.pairs ? ', increase round and short rows end' : ' and increase round end'} on row ${R}, ${rowsCm(R - Y, rpc)} below the underarm split (row ${Y}).` : `The short rows end on row ${R}, ${rowsCm(R - Y, rpc)} below the underarm split (row ${Y}).` });
+    issues.push({ ...(o ? { severity: 'error' as const, code: 'yoke.band-below-split', param: 'extraDepth', fix: band } : belowSplitFix(shortRows!.endRow, Y, rpc, shortRows!.pairs)), message: o ? `The band${shortRows?.pairs ? ', increase round and short rows end' : ' and increase round end'} on row ${R}, ${rowsCm(R - Y, rpc)} below the underarm split (row ${Y}).` : `The short rows end on row ${shortRows!.endRow}, ${rowsCm(shortRows!.endRow - Y, rpc)} below the underarm split (row ${Y}).` });
   }
   const bodySet = new Set(bodyRows);
   const sleeveSet = new Set(sleeveRows);
@@ -323,7 +325,7 @@ export function generateRaglan(project: Project, spec: YokeSpec, sizeId: Id): Yo
     const row: YokeRow = { row: r, phase, backNeck: false, neck, round: isRound(r), rs: isRS(r), markersMoved: false, zones: { ...z }, total: sum(z), incs, castOns };
     if (band) row.band = true;
     if (band && o?.fold) row.bandPart = foldPart(o.fold, r);
-    if (shortRows && r >= srFrom && r <= shortRows.endRow) Object.assign(row, shortRowSpan(shortRows, r - srFrom + 1, row, cardigan), plain.has(r) ? { plain: true } : {});
+    if (shortRows && r >= srFrom && r <= shortRows.endRow) Object.assign(row, shortRowSpan(shortRows, r - srFrom + 1, row, cardigan || deepNeck), plain.has(r) ? { plain: true } : {});
     rows.push(row);
   }
   if (rows.some((r) => r.total <= 0)) issues.push({ severity: 'error', code: 'yoke.empty-row', message: 'A row has no stitches.', fix: fixOf('Check the cast-on: Neck width, cast on across the back and Sleeve top at the cast-on.', [field.yoke('neckWidth'), field.yoke('sleeveTop')]) });
@@ -349,6 +351,8 @@ export function generateRaglan(project: Project, spec: YokeSpec, sizeId: Id): Yo
   }
   if (o) {
     if (shortRows?.pairs) add('neck', 'Short rows (back raise)', srFrom, Math.min(shortRows.endRow, Y), `${shortRows.pairs} pairs, German short rows, then in the round`);
+  } else if (deepNeck) {
+    add('neck', neckContinues ? 'Short rows, then front neck (continues into the body)' : 'Short rows, then front neck', 1, Math.min(R, Y), `${shortRows!.pairs} pairs, then ${perSide} per side${neckContinues ? ` (${perSide - neckContinues.perSide} in the raglan)` : cardigan ? `, cast on ${frontEdgeCo} at each front edge` : `, cast on ${centre}, then in the round`}`);
   } else if (shortRows) {
     if (shortRows.pairs) add('neck', 'Short rows (neck)', 1, Math.min(R, Y), `${shortRows.pairs} pairs, German short rows${cardigan ? '' : ', then in the round'}`);
   } else if (neckContinues) add('neck', 'Front neck, continues into the body', 1, Y, `${perSide - neckContinues.perSide} of ${perSide} per side`);
@@ -467,7 +471,7 @@ function offShoulderStart(project: Project, spec: YokeSpec, scope: Record<string
   const sr = spec.shortRows ?? defaultShortRows();
   const side = Math.min(ring.leftFront, ring.rightFront);
   const cSide = Math.floor(side / 2);
-  const pairs = Math.max(0, Math.round(val('srPairs', 'Short-row pairs', sr.pairs, '', { neck_depth: backRaise, back_depth: 0 })));
+  const pairs = Math.max(0, Math.round(val('srPairs', 'Short-row pairs', sr.pairs, '', { neck_depth: backRaise, back_depth: 0, sr_depth: backRaise })));
   const firstTurn = Math.max(1, Math.round(val('srFirst', 'First turn, sts past the raglan marker', sr.first, 'sts')));
   const step = Math.max(1, Math.round(val('srStep', 'Sts between turns', sr.step, 'sts', { front_side: side, centre_side: cSide, first_turn: firstTurn, pairs })));
   const turns: number[] = [];

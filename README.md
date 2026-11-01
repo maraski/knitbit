@@ -495,8 +495,8 @@ duplicate (⧉) or delete (×) any panel there. Options: knitting direction, nec
   is shaped. A back (or top-down top) added in the Pieces tab with *Back neck: Shaped* and a boat neckline gets its
   2 cm too.
 - *Contiguous yoke*: the wide neck is cast on across the back. The back depth replaces `back_neck_drop`: the
-  whole-neck start's short rows raise the back by front depth − back depth (`round(max(0, neck_depth − back_depth) /
-  row_h / 2)` pairs), and the back length from the neck to the underarm is `shoulder_drop × min(1, (shoulder_w −
+  whole-neck start's short rows raise the back by front depth − back depth (`round(max(0, sr_depth − back_depth) /
+  row_h / 2)` pairs; `sr_depth` is the front depth up to 4 cm, a deeper boat neck's increases do the rest), and the back length from the neck to the underarm is `shoulder_drop × min(1, (shoulder_w −
   neck_w) / (shoulder_w − back_neck_width)) + armhole_depth − back_depth`. A new boat yoke gets the 3 cm strap as its
   shoulder seam (9 rows at 30 rows / 10 cm; the cast-on narrows to fit, see *Strap width on the yoke*). Boat yokes saved
   before keep their own, shorter seam (about 2 rows, the cast-on `shoulder_w − 6` being already wider than the cross
@@ -964,8 +964,10 @@ the yoke's properties say which it is):
 
 - **The whole neck, short rows raise the back** = the **modified raglan** method (PetiteKnit style; no V neck): cast on left front,
   seam, back neck, seam, right front. The fronts are cast on as wide as the neck (*Front cast-on*, `neck_w` = the
-  neck width; per size). German short rows raise the back above the front: *pairs* = (front neck depth −
-  `back_neck_drop`) ÷ row height ÷ 2, the first turn *first* sts past each front shoulder marker, each next turn
+  neck width; per size). German short rows raise the back above the front: *pairs* = (`sr_depth` −
+  `back_neck_drop`) ÷ row height ÷ 2 (`round(max(0, sr_depth - back_depth) / row_h / 2)`), where `sr_depth` is the
+  front neck depth up to the shape's default (round `front_neck_drop`, square `front_neck_drop + 2`, boat 4 cm) and a
+  crew neck's (`front_neck_drop`) for a deeper neck; the first turn *first* sts past each front shoulder marker, each next turn
   *step* sts nearer centre front (by default spread from the first turn to the neck's centre part). No back neck
   increases and no front neck increases. A pullover is joined at the cast-on with the round starting at the left back
   shoulder marker: row 1 (RS) runs from there to the first turn, rows 2 to 2 × pairs go turn to turn, and the next
@@ -974,6 +976,27 @@ the yoke's properties say which it is):
   short-row row ends at the left front edge. The neck edge is the cast-on; a cardigan's front edges run from the
   short rows to the split. Without back neck increases the shoulder seam is a few rows longer to reach the cross
   back.
+
+  **A front neck deeper than the short rows** (e.g. 15 or 25 cm; anything more than about 2 rows deeper than the
+  short rows reach): the short rows only raise the back (as for the default neck), and the rest of the depth is the
+  back start's front neck. Each front is cast on with only what the turns need (*first* + 1 + 2 sts per further pair,
+  1 st apart where 2 don't fit in the neck's sloped part; a square neck's fronts take the fewest), the neck opening
+  between them is the rest of the neck width. After the last short row come the front-neck increases inside the edge
+  stitch, in the round neck's pattern (every row next to the centre, every other row above; a V on RS rows), as many
+  as the neck's sloped part still needs, then on row R (front depth − back depth, a RS row) the centre cast-on (a
+  pullover joins in the round there; it is flat, front open, until then, the short rows run edge to edge as a
+  cardigan's) or each cardigan front's front-edge cast-on (right on row R, left on R + 1). Deeper than the split, it
+  continues into the front body exactly as the back start does (below). An info and the properties show the split,
+  e.g. M, 15 cm round: *Front neck 15 cm: the back neck is 2.8 cm below the neck point and the short rows raise the
+  back 6 cm (9 pairs); the other 6 cm (rows 20–37): cast on 12 sts each front, cast on 9 sts at centre front and join
+  in the round (flat until then).* The neckband picks up the cast-on, both neck edges (each worked once in the short
+  rows, then every row) and the closing cast-on. The strap (*Strap gives at: Neck*) still drives *Front cast-on*
+  (`neck_w`): the fronts, the increases and the centre share the solved width. The Classic raglan's whole-neck option
+  works a deep neck the same way. A pair count you typed yourself (expression or per-size value) is kept as it is: too
+  many still errors (*don't fit in a front of … sts* / *end below the underarm split*) with its Fix and Apply; fewer
+  than the depth needs leave the rest to the increases. Saved yokes keep their stored pairs expression (the old
+  default, `round(max(0, neck_depth - back_depth) / row_h / 2)`, works every depth in short rows as before; Apply on
+  its *don't fit* error sets a count that fits, and the rest becomes increases).
 - **The back neck only** = the **contiguous** method (as the method's PDF, and every yoke saved before the choice
   existed): below.
 
@@ -993,7 +1016,8 @@ The properties show the numbers, e.g. M, round: *Neck row R = depth × row gauge
 
 V is all increases (no centre, or one stitch), square all centre, boat wide and shallow, mostly centre.
 
-**A neck deeper than the split** (back-neck start, contiguous or Classic raglan; e.g. a 25 cm V in 4XS–XS) carries on
+**A neck deeper than the split** (back-neck start, contiguous or Classic raglan, and the modified raglan's deep neck
+after its short rows; e.g. a 25 cm V in 4XS–XS) carries on
 into the front body, as a knitter works it. The yoke works the neck increases up to the split and splits as usual; the
 front stays open. An info says how: *The front neck continues 17 rows (5.7 cm) into the front body: 2 more increases
 each side, then join in the round* (a cardigan: *then cast on 2 sts at each front edge*), and the top and laid-flat
