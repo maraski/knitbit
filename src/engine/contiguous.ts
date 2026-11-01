@@ -182,8 +182,8 @@ export interface YokeResult {
 export const SLOPED_SHOULDER = 'sqrt(((back_shoulder_width - back_neck_width) / 2) ^ 2 + shoulder_drop ^ 2)';
 
 /** Short-row defaults: the fronts cast on as wide as the neck; pairs from the height the back is raised (`sr_depth` −
- * back neck depth: the front neck depth up to the shape's default, a deeper neck a crew neck's, the rest of it worked as
- * front-neck increases); turns from `first` sts past the shoulder marker, stepped evenly to the centre part. */
+ * back neck depth: the front neck depth up to the shape's default; a deeper neck only raises the back by the back neck
+ * depth, the rest of it worked as front-neck increases); turns from `first` sts past the shoulder marker, stepped evenly to the centre part. */
 export function defaultShortRows(): NonNullable<YokeSpec['shortRows']> {
   return {
     frontCo: dim('neck_w'),
@@ -474,10 +474,11 @@ function workYoke(project: Project, spec: YokeSpec, sizeId: Id, scope: Record<st
     // The centre part (lowest, never turned in): half each side, from the front edge.
     const centreAll = spec.neck.shape === 'square' ? FL + FR : spec.neck.shape === 'v' ? 0 : Math.min(FL + FR, sts(centreCm));
     let cSide = Math.max(0, Math.floor(centreAll / 2) - (cardigan ? Math.round(closingSts / 2) : 0));
-    // The short rows work the neck up to the shape's default depth; a deeper neck only a crew neck's (front_neck_drop).
+    // The short rows work the neck up to the shape's default depth; a deeper neck's only raise the back by the back neck
+    // depth, so the fronts are cast on narrow and the neck curves with increases below them.
     const shapeDepth = evaluate(FRONT_NECKS[bodiceNeck(spec.neck.shape)].depth, scopeFrom({ ...scope, neck_w: neckCm }));
     const dflt = shapeDepth.ok ? shapeDepth.value : depthCm;
-    const srDepth = depthCm <= dflt + 1e-9 ? depthCm : Math.min(dflt, scope.front_neck_drop ?? dflt);
+    const srDepth = depthCm <= dflt + 1e-9 ? depthCm : Math.min(dflt, 2 * backDepthCm);
     let pairs = Math.max(0, Math.round(val('srPairs', 'Short-row pairs', sr.pairs, '', { neck_depth: depthCm, back_depth: backDepthCm, sr_depth: srDepth })));
     const first = Math.max(1, Math.round(val('srFirst', 'First turn, sts past the shoulder marker', sr.first, 'sts')));
     // The default pairs that don't fit in the front (e.g. a square cardigan's, the closing width taking front stitches):
@@ -490,12 +491,9 @@ function workYoke(project: Project, spec: YokeSpec, sizeId: Id, scope: Record<st
     const end0 = pairs > 0 ? 2 * pairs + 1 : 0;
     const neckRows0 = rowsOf(Math.max(0, depthCm - backDepthCm));
     if (neckRows0 >= end0 + 2) {
-      // Turns 2 sts apart where they fit in the neck's sloped part (closer where they don't: a square neck's fronts
-      // take the fewest), inside the edge stitch.
-      const need = (st: number) => (pairs > 0 ? first + 1 + st * Math.max(0, pairs - 1) : 1);
-      const slope = full - cSide;
-      const st = pairs > 1 && need(2) > slope ? Math.max(1, Math.floor((slope - first - 1) / (pairs - 1))) : 2;
-      let castOn = Math.max(1, Math.min(full, need(st)));
+      // Turns 1 st apart, inside the edge stitch: the fronts are cast on as narrow as the turns allow, so the stitches
+      // they free are the round neck's increases (the neck curves instead of running straight).
+      let castOn = Math.max(1, Math.min(full, pairs > 0 ? first + pairs : 1));
       const R = neckRows0 % 2 ? neckRows0 : neckRows0 + 1;
       let n = Math.max(0, full - cSide - castOn);
       // Each increase on its own row after the short rows (a V: RS rows), before the closing row; any left over widen the
@@ -519,7 +517,9 @@ function workYoke(project: Project, spec: YokeSpec, sizeId: Id, scope: Record<st
     const lastTurn = turns[turns.length - 1] ?? side;
     if (pairs && lastTurn < 1) issues.push({ ...shortRowsFitFix(pairs, side, first, step), message: `Short rows: ${pairs} pairs ${step} st${step === 1 ? '' : 's'} apart don't fit in a front of ${stsCm(side, spc)}: the last turn is past centre front.` });
     else if (pairs && lastTurn < cSide) issues.push({ severity: 'info', code: 'yoke.short-rows-centre', message: `Short rows: the last turns reach into the centre part (${cSide} sts each side of centre front).` });
-    if (pairs > 1 && step < 2) issues.push({ severity: 'info', code: 'yoke.short-rows-close', message: `Short rows: turns 1 st apart. Fewer pairs or a wider front cast-on spread them more.` });
+    // (A deep neck's turns are 1 st apart by design: no note unless the spacing was typed.)
+    const typedStep = sr.step.expr.trim() !== defaultShortRows().step.expr || sizeId in sr.step.overrides;
+    if (pairs > 1 && step < 2 && (!deep || typedStep)) issues.push({ severity: 'info', code: 'yoke.short-rows-close', message: `Short rows: turns 1 st apart. Fewer pairs or a wider front cast-on spread them more.` });
     const endRow = pairs > 0 ? 2 * pairs + 1 : 0;
     if (!cardigan && pairs > 0 && !deep) {
       plain.add(1);

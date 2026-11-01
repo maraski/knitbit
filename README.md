@@ -965,8 +965,8 @@ the yoke's properties say which it is):
   seam, back neck, seam, right front. The fronts are cast on as wide as the neck (*Front cast-on*, `neck_w` = the
   neck width; per size). German short rows raise the back above the front: *pairs* = (`sr_depth` −
   `back_neck_drop`) ÷ row height ÷ 2 (`round(max(0, sr_depth - back_depth) / row_h / 2)`), where `sr_depth` is the
-  front neck depth up to the shape's default (round `front_neck_drop`, square `front_neck_drop + 2`, boat 4 cm) and a
-  crew neck's (`front_neck_drop`) for a deeper neck; the first turn *first* sts past each front shoulder marker, each next turn
+  front neck depth up to the shape's default (round `front_neck_drop`, square `front_neck_drop + 2`, boat 4 cm) and
+  2 × `back_neck_drop` for a deeper neck (its short rows only raise the back by the back neck depth); the first turn *first* sts past each front shoulder marker, each next turn
   *step* sts nearer centre front (by default spread from the first turn to the neck's centre part). No back neck
   increases and no front neck increases. A pullover is joined at the cast-on with the round starting at the left back
   shoulder marker: row 1 (RS) runs from there to the first turn, rows 2 to 2 × pairs go turn to turn, and the next
@@ -977,18 +977,19 @@ the yoke's properties say which it is):
   back.
 
   **A front neck deeper than the short rows** (e.g. 15 or 25 cm; anything more than about 2 rows deeper than the
-  short rows reach): the short rows only raise the back (as for the default neck), and the rest of the depth is the
-  back start's front neck. Each front is cast on with only what the turns need (*first* + 1 + 2 sts per further pair,
-  1 st apart where 2 don't fit in the neck's sloped part; a square neck's fronts take the fewest), the neck opening
-  between them is the rest of the neck width. After the last short row come the front-neck increases inside the edge
+  short rows reach): the short rows only raise the back, by the back neck depth (`back_neck_drop`; M: 4 pairs,
+  2.7 cm), and the rest of the depth is the back start's front neck, so the neck curves. Each front is cast on with
+  only what the turns need (*first* + *pairs* sts: the turns 1 st apart, which is intended here, so no *turns 1 st
+  apart* note unless you typed the spacing), the neck opening between them is the rest of the neck width. After the last short row come the front-neck increases inside the edge
   stitch, in the round neck's pattern (every row next to the centre, every other row above; a V on RS rows), as many
   as the neck's sloped part still needs, then on row R (front depth − back depth, a RS row) the centre cast-on (a
   pullover joins in the round there; it is flat, front open, until then, the short rows run edge to edge as a
   cardigan's) or each cardigan front's front-edge cast-on (right on row R, left on R + 1). Deeper than the split, it
   continues into the front body exactly as the back start does (below). An info and the properties show the split,
   e.g. M, 15 cm round: *Front neck 15 cm: the back neck is 2.8 cm below the neck point and the short rows raise the
-  back 6 cm (9 pairs); the other 6 cm (rows 20–37): cast on 12 sts each front, cast on 9 sts at centre front and join
-  in the round (flat until then).* The neckband picks up the cast-on, both neck edges (each worked once in the short
+  back 2.7 cm (4 pairs); the other 9.3 cm (rows 10–37): cast on 7 sts each front, 3 increases each side, then cast on
+  13 sts at centre front and join in the round (flat until then).* (increases on rows 33, 35 and 36). At 22 × 30 the
+  15 and 25 cm round necks get +2 to +4 increases each side (cardigan +2 to +5) in every size. The neckband picks up the cast-on, both neck edges (each worked once in the short
   rows, then every row) and the closing cast-on. The strap (*Strap gives at: Neck*) still drives *Front cast-on*
   (`neck_w`): the fronts, the increases and the centre share the solved width. The Classic raglan's whole-neck option
   works a deep neck the same way. A pair count you typed yourself (expression or per-size value) is kept as it is: too
