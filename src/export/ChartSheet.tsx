@@ -76,7 +76,7 @@ export interface SheetLayout {
 /** The gutters around the cells: row numbers both sides, repeats / phases on the left, counts on the right. */
 export function sheetGutters(chart: Chart): SheetLayout {
   const longest = (xs: string[]) => Math.max(0, ...xs.map((s) => textMm(s, SHEET.font)));
-  const counts = chart.rows.map((r) => `${r.count}${chart.zoneCounts?.[r.key] ? ` ${chart.zoneCounts[r.key].join(' · ')}` : ''}`);
+  const counts = chart.rows.map((r) => `${r.count}${chart.zoneCounts?.[r.key] ? ` (${chart.zoneCounts[r.key].join(' · ')})` : ''}`);
   const holes = Object.values(chart.buttonholeRows).map((b) => `buttonhole ${b.join(', ')}`);
   const rowW = Math.max(SHEET.rowLabel, longest(chart.rows.map((r) => r.label)) + 2);
   return {
@@ -139,7 +139,8 @@ export function ChartSheet({ chart, dcols, tile, cell: cs, gutters: g, palette: 
       fabric = -1;
     };
     for (const xi of [...xis, tile.cols.to + 1]) {
-      const d = dcols[xi];
+      // One past the tile's last column ends every run, even where the chart goes on to the left.
+      const d = xi > tile.cols.to ? undefined : dcols[xi];
       const v = d === undefined ? '' : 'col' in d ? row.cells[d.col] : row.cells[d.from];
       const runnable = v === PLAIN || v === HELD;
       if (!(runnable && run >= 0 && v === kind)) {
@@ -219,7 +220,7 @@ export function ChartSheet({ chart, dcols, tile, cell: cs, gutters: g, palette: 
     );
     if (counts.has(r.key)) {
       const zones = chart.zoneCounts?.[r.key];
-      labels.push(<text key={`c${ri}`} x={fmt(g.left + W + rowW)} y={y} fill={P.accent}>{`${r.count}${zones ? ` ${zones.join(' · ')}` : ''}`}</text>);
+      labels.push(<text key={`c${ri}`} x={fmt(g.left + W + rowW)} y={y} fill={P.accent}>{`${r.count}${zones ? ` (${zones.join(' · ')})` : ''}`}</text>);
     }
     const holes = !r.shortRow && chart.buttonholeRows[r.knitRow];
     if (holes) labels.push(<text key={`b${ri}`} x={fmt(g.left + W + g.right - textMm(`buttonhole ${holes.join(', ')}`, SHEET.font) - 1)} y={y} fill={P.accent}>{`buttonhole ${holes.join(', ')}`}</text>);

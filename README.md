@@ -217,7 +217,9 @@ removed; delete them in the console if you want the space back.
   `components/CloudStatus.tsx`, `ProjectsDialog.tsx`, `ConflictDialog.tsx` (the last two lazy).
 - `src/export/`: the PDF export, loaded only on Export (see *Export (PDF)*): `plan.ts` (page order), `tables.ts`
   (header facts and the size tables), `text.ts` (Helvetica-safe text), `fileName.ts`, `pdf.ts` (jsPDF + svg2pdf.js:
-  page frame and renderers). jsPDF and svg2pdf.js are imported only here. `ui/components/ExportDialog.tsx` is the dialog.
+  page frame and renderers), `tiles.ts` (cutting a chart into page tiles), `ChartSheet.tsx` (one tile as SVG),
+  `sheetDom.tsx` (renders it off-screen for svg2pdf), `charts.tsx` (the chart pages). jsPDF and svg2pdf.js are imported
+  only here. `ui/components/ExportDialog.tsx` is the dialog.
 - `firestore.rules`, `firebase.json`, `.env.example`: Firebase security rules and config (see *Cloud save setup*).
 - `samples/`: the sample sizing table (`sizing_table_ysolda_cm.csv`, and `.json` with the same data).
 - `src/engine/fixtures/`: test data: the old sample table, and schema-1 and schema-2 project files.
@@ -225,12 +227,13 @@ removed; delete them in the console if you want the space back.
 ## Export (PDF)
 
 **Export…** in the toolbar makes a PDF to knit from (the plan and the user's decisions: `docs/export-plan.md`). Built
-so far (milestone E1): page 1 and the size tables. Schematics (E2), stitch charts (E3), PNG (E4) and the extras (E5)
-come next.
+so far: page 1 and the size tables (milestone E1) and the stitch charts (E3). Schematics (E2), PNG (E4) and the extras
+(E5) come next.
 
 - **Dialog** (`ExportDialog.tsx`, lazy): tick sizes (the current size is ticked; *All*, *Just this size*), A4 or US
   Letter (remembered in `localStorage` `knitbit.export.v1`), and the sections built so far (body measurements,
-  finished measurements, key numbers per piece; the header is always there). It warns before exporting when a project,
+  finished measurements, key numbers per piece, stitch charts; the header is always there). With charts ticked,
+  *Collapse plain middle* starts from the Chart tab's setting. It warns before exporting when a project,
   size, piece or measurement name or a custom symbol has characters the PDF font can't draw (they print as "?").
 - **File name**: `<project>-<size>.pdf`, or `<project>-<n>-sizes.pdf`; characters not allowed in file names become `-`.
 - **Every page**: a header band (project · size(s), "p. N of M"), and a footer with the construction credit when the
@@ -251,6 +254,21 @@ come next.
      renamed waypoint still works; anything that can't be found prints "—".
   3. **Key numbers per piece**: cast-on (a top-down front: "pick up N"; a yoke: its cast-on), rows and length, a row
      per size. A cardigan pair is listed once ("mirrored"); a seamed sleeve "×2".
+- **Stitch charts** (per ticked size, after the schematics): every piece's chart from `buildChart` (a cardigan pair
+  once, the left front; a sleeve once), drawn as on the Chart tab: the app's glyphs, short rows (SR1…), repeats, a
+  front band's stripe, yoke zones, markers and phases, buttonholes, top-down charts with row 1 at the top. A chart
+  bigger than a page is cut into **tiles** (`tiles.ts`): cells 4.5 mm, shrunk toward 3.5 mm only when that saves
+  tiles; neighbouring tiles share one row and one stitch (printed lighter), so they line up laid side by side. Tiles
+  are read the way the chart is knitted: the first rows first, each band from the right (stitch 1). One tile per
+  page, portrait or landscape (whichever prints fewer tiles); tiles with no stitches at all (a centred yoke's
+  corners) aren't printed. Each tile has its rows and stitches in the title, a small map of the tiles (this one
+  black, unprinted ones grey), row numbers on both sides, stitch numbers above and below, the stitch count where it
+  changes and on its first row, and "Continues ← on p. N · ↑ on p. M" / "From → p. K" links. The piece's **key**
+  (the symbols it uses; custom symbols with their abbreviation) sits under the first tile, or on its own page right
+  after it. Colours are the app's tints, read once from the CSS variables and written as plain attributes; every
+  symbol is also a black glyph and held stitches are hatched, so a black-and-white print loses nothing. Grid lines
+  are one SVG path per tile, not a `<pattern>` (faster in svg2pdf). Speed: about 60 ms a tile, so a garment's charts
+  take 1–3 s (much slower in a background tab, where the browser slows timers).
 - **Text** is the PDF's built-in Helvetica (no font embedded): `−` prints as `-`, `≈` as `~`, and arrows (→ ← ↑ ↓)
   are drawn as small vector shapes with svg2pdf.js.
 - **Size**: jsPDF + svg2pdf.js are about 160 kB gzip, in their own chunk (`pdf-*.js`) loaded only when you export;

@@ -170,3 +170,42 @@ describe('numbering', () => {
     if (t.length > g.colSpans.length) expect(t[0].next.down).toBe(t[g.colSpans.length].page);
   });
 });
+
+describe('ChartSheet', () => {
+  it('draws the grid on every tile, also where the chart goes on to the left', async () => {
+    const { renderToStaticMarkup } = await import('react-dom/server');
+    const { createElement } = await import('react');
+    const { ChartSheet, readPalette, sheetGutters } = await import('./ChartSheet');
+    const chart = chartOf('back');
+    const g = fitGrid(chart.rows.length, chart.cols, { width: 60, height: 60 });
+    const tiles = layoutTiles(g, { firstPage: 1, topDown: false });
+    expect(g.colSpans.length).toBeGreaterThan(1);
+    for (const tile of tiles) {
+      const rows = chart.rows.slice(tile.rows.from, tile.rows.to + 1);
+      if (!rows.some((r) => r.cells.slice(tile.cols.from, tile.cols.to + 1).some((v) => v !== ''))) continue; // all outside the fabric
+      const markup = renderToStaticMarkup(createElement(ChartSheet, { chart, dcols: all(chart.cols), tile, cell: g.cell, gutters: sheetGutters(chart), palette: readPalette(), custom: [] }));
+      const grid = /<path d="([^"]*)" stroke="#c9c4b8"/.exec(markup);
+      expect(grid, `tile ${tile.index}`).not.toBeNull();
+      // Cell edges in every row with stitches.
+      const withSts = rows.filter((r) => r.cells.slice(tile.cols.from, tile.cols.to + 1).some((v) => v !== '')).length;
+      expect(grid![1].split('v').length - 1).toBeGreaterThan(withSts);
+    }
+  });
+});
+
+describe('empty tiles', () => {
+  it('get no page; the others close up and links pass over them', () => {
+    const g = fitGrid(60, 150, A4); // 1 band × several columns
+    const nx = g.colSpans.length;
+    expect(nx).toBeGreaterThan(2);
+    // The rightmost and leftmost tiles have no stitches (a centred yoke's corners).
+    const t = layoutTiles(g, { firstPage: 2, topDown: true, empty: (_b, c) => c === 0 || c === nx - 1 });
+    expect(t.length).toBe(nx - 2);
+    expect(t.map((x) => x.index)).toEqual(t.map((_, i) => i));
+    expect(t.map((x) => x.page)).toEqual(t.map((_, i) => 2 + i));
+    expect(t[0].column).toBe(1);
+    expect(t[0].next.right).toBeUndefined();
+    expect(t[t.length - 1].next.left).toBeUndefined();
+    expect(t[0].next.left).toBe(3);
+  });
+});

@@ -12,7 +12,7 @@ import type { Orientation, RenderContext, Writer } from './pdf';
 import type { Part } from './plan';
 import { renderSvg } from './sheetDom';
 import { pieceEntries } from './tables';
-import { fitGrid, layoutTiles, tileRange, tileTotal, type Tile, type TileGrid } from './tiles';
+import { fitGrid, layoutTiles, tileRange, type Tile, type TileGrid } from './tiles';
 
 const HEAD = 12; // title lines and the tile map, mm
 const FOOT = 9.5; // links and the note under the grid
@@ -24,15 +24,39 @@ interface Fit {
   grid: TileGrid;
 }
 
-/** Portrait or landscape, whichever needs fewer tiles (then the bigger cells, then portrait). */
-function chooseFit(w: Writer, rows: number, cols: number, g: SheetLayout): Fit {
+/** A tile with no stitches at all (the corners of a centred yoke): it isn't printed. */
+function emptyTile(chart: Chart, dcols: DisplayCol[], grid: TileGrid) {
+  return (band: number, column: number) => {
+    const r = grid.rowSpans[band];
+    const c = grid.colSpans[column];
+    for (let i = r.from; i <= r.to; i++) {
+      const cells = chart.rows[i].cells;
+      for (let xi = c.from; xi <= c.to; xi++) {
+        const d = dcols[xi];
+        if (cells['col' in d ? d.col : d.from] !== '') return false;
+      }
+    }
+    return true;
+  };
+}
+
+/** Printed tiles of a grid. */
+function printed(grid: TileGrid, empty: (band: number, column: number) => boolean): number {
+  let n = 0;
+  grid.rowSpans.forEach((_, b) => grid.colSpans.forEach((_, c) => (n += empty(b, c) ? 0 : 1)));
+  return n;
+}
+
+/** Portrait or landscape, whichever prints fewer tiles (then the bigger cells, then portrait). */
+function chooseFit(w: Writer, chart: Chart, dcols: DisplayCol[], g: SheetLayout): Fit {
   const fits = (['portrait', 'landscape'] as const).map((orientation) => {
     const box = w.boxFor(orientation);
     const area = { width: box.width - g.left - g.right, height: box.height - HEAD - g.top - g.bottom - FOOT };
-    return { orientation, grid: fitGrid(rows, cols, area) };
+    const grid = fitGrid(chart.rows.length, dcols.length, area);
+    return { orientation, grid, n: printed(grid, emptyTile(chart, dcols, grid)) };
   });
   const [p, l] = fits;
-  return tileTotal(l.grid) < tileTotal(p.grid) || (tileTotal(l.grid) === tileTotal(p.grid) && l.grid.cell > p.grid.cell + 1e-6) ? l : p;
+  return l.n < p.n || (l.n === p.n && l.grid.cell > p.grid.cell + 1e-6) ? l : p;
 }
 
 interface KeyEntry {
@@ -77,7 +101,7 @@ async function drawKey(w: Writer, chart: Chart, palette: Palette, custom: Custom
 }
 
 /** A small map of the tiles in the top right corner, this one filled (laid out as the chart is). */
-function drawMap(w: Writer, grid: TileGrid, tile: Tile, topDown: boolean, top: number) {
+function drawMap(w: Writer, grid: TileGrid, tile: Tile, topDown: boolean, top: number, empty: (band: number, column: number) => boolean) {
   const nx = grid.colSpans.length;
   const ny = grid.rowSpans.length;
   if (nx * ny <= 1) return;
@@ -92,9 +116,11 @@ function drawMap(w: Writer, grid: TileGrid, tile: Tile, topDown: boolean, top: n
       const x = right - (c + 1) * mw;
       const y = top + (topDown ? b : ny - 1 - b) * mh;
       const me = b === tile.band && c === tile.column;
+      // Tiles without stitches (not printed) are left grey and unframed.
       if (me) doc.setFillColor(30, 28, 24);
+      else if (empty(b, c)) doc.setFillColor(232, 229, 223);
       else doc.setFillColor(255, 255, 255);
-      doc.rect(x, y, mw, mh, 'FD');
+      doc.rect(x + 0.1, y + 0.1, mw - 0.2, mh - 0.2, empty(b, c) && !me ? 'F' : 'FD');
     }
   }
 }
@@ -119,13 +145,14 @@ async function drawPiece(w: Writer, ctx: RenderContext, label: string, sizeName:
   const custom = (ctx.project.symbols ?? []).map((s) => ({ ...s, abbr: w.clean(s.abbr) }));
   const dcols: DisplayCol[] = ctx.options.collapse ? collapseColumns(chart) : Array.from({ length: chart.cols }, (_, k) => ({ col: k }));
   const gutters = sheetGutters(chart);
-  const fit = chooseFit(w, chart.rows.length, dcols.length, gutters);
+  const fit = chooseFit(w, chart, dcols, gutters);
   const { grid, orientation } = fit;
   const box = w.boxFor(orientation);
   const firstH = (grid.rowSpans[0].to - grid.rowSpans[0].from + 1) * grid.cell;
   const roomUnder = box.height - HEAD - gutters.top - firstH - gutters.bottom - FOOT - 3;
   const keyOwnPage = keyLayout(w, chart, box.width).height > roomUnder;
-  const tiles = layoutTiles(grid, { firstPage: w.page + 1, topDown: chart.topDown, pagesAfterFirst: keyOwnPage ? 1 : 0 });
+  const empty = emptyTile(chart, dcols, grid);
+  const tiles = layoutTiles(grid, { firstPage: w.page + 1, topDown: chart.topDown, pagesAfterFirst: keyOwnPage ? 1 : 0, empty });
   const total = tiles.length;
   const panelStart = ctx.project.panels.find((p) => p.id === chart.panelId)?.startFrom ?? 'caston';
 
@@ -136,7 +163,7 @@ async function drawPiece(w: Writer, ctx: RenderContext, label: string, sizeName:
     w.text(`${label} chart · size ${sizeName} · ${tileRange(chart, dcols, tile)}`, left, top + 4, { size: 10, bold: true });
     const sub = total > 1 ? `tile ${tile.index + 1} of ${total}` : 'whole chart';
     w.text(`${sub} · RS rows read right to left, WS rows left to right`, left, top + 8.5, { size: 8, color: MUTED });
-    drawMap(w, grid, tile, chart.topDown, top);
+    drawMap(w, grid, tile, chart.topDown, top, empty);
 
     const node = <ChartSheet chart={chart} dcols={dcols} tile={tile} cell={grid.cell} gutters={gutters} palette={palette} custom={custom} />;
     const svg = renderSvg(node, palette.fg);

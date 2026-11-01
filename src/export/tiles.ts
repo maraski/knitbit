@@ -87,27 +87,36 @@ export interface Tile {
 
 /**
  * The tiles of a grid, in reading order, with their pages: one tile per page from `firstPage`, plus
- * `pagesAfterFirst` pages (the symbol key's) between the first tile and the second.
+ * `pagesAfterFirst` pages (the symbol key's) between the first tile and the second. Tiles `empty` says have no
+ * stitches (the corners of a centred yoke, say) get no page, and links pass over them.
  */
-export function layoutTiles(grid: TileGrid, opts: { firstPage: number; topDown: boolean; pagesAfterFirst?: number }): Tile[] {
+export function layoutTiles(grid: TileGrid, opts: { firstPage: number; topDown: boolean; pagesAfterFirst?: number; empty?: (band: number, column: number) => boolean }): Tile[] {
   const nx = grid.colSpans.length;
+  const ny = grid.rowSpans.length;
+  const kept = new Map<number, number>(); // band * nx + column → index among the printed tiles
+  for (let b = 0; b < ny; b++) for (let c = 0; c < nx; c++) if (!opts.empty?.(b, c)) kept.set(b * nx + c, kept.size);
   const pageOf = (band: number, column: number) => {
-    const i = band * nx + column;
+    const i = kept.get(band * nx + column)!;
     return opts.firstPage + i + (i > 0 ? (opts.pagesAfterFirst ?? 0) : 0);
   };
+  /** The nearest printed tile from (band, column) stepping by (db, dc). */
+  const near = (band: number, column: number, db: number, dc: number): number | undefined => {
+    for (let b = band + db, c = column + dc; b >= 0 && b < ny && c >= 0 && c < nx; b += db, c += dc) if (kept.has(b * nx + c)) return pageOf(b, c);
+    return undefined;
+  };
+  // Later rows are above a bottom-up chart, below a top-down one.
+  const later = opts.topDown ? 'down' : 'up';
+  const earlier = opts.topDown ? 'up' : 'down';
   const tiles: Tile[] = [];
   grid.rowSpans.forEach((rows, band) => {
     grid.colSpans.forEach((cols, column) => {
+      const index = kept.get(band * nx + column);
+      if (index === undefined) return;
       const next: Tile['next'] = {};
-      // Later rows are above a bottom-up chart, below a top-down one.
-      const later = opts.topDown ? 'down' : 'up';
-      const earlier = opts.topDown ? 'up' : 'down';
-      if (band + 1 < grid.rowSpans.length) next[later] = pageOf(band + 1, column);
-      if (band > 0) next[earlier] = pageOf(band - 1, column);
-      if (column + 1 < nx) next.left = pageOf(band, column + 1);
-      if (column > 0) next.right = pageOf(band, column - 1);
+      const links = { [later]: near(band, column, 1, 0), [earlier]: near(band, column, -1, 0), left: near(band, column, 0, 1), right: near(band, column, 0, -1) };
+      for (const [k, v] of Object.entries(links)) if (v !== undefined) next[k as keyof Tile['next']] = v;
       tiles.push({
-        index: band * nx + column,
+        index,
         band,
         column,
         rows,

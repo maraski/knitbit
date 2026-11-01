@@ -27,7 +27,7 @@ M9), `6ee297f` (M10 + bust/princess options), `89c2318` (painted stitches, shapi
 > README's *Garment options* table): cross back is followed (shoulder width is a style option); the yoke splits by
 > back length and deepens until the cap is at most half rapid; body increases low in the armhole with `underarm_co`;
 > edge settings never add or remove panels (explicit *Add strips* / *Add yoke, body and sleeves*); the yoke is drawn
-> from above. Not done: PDF schematics/charts and PNG export (E2–E5 of `docs/export-plan.md`; E1, page 1 and the size tables, is built), integrated
+> from above. Not done: PDF schematics and PNG export (E2, E4, E5 of `docs/export-plan.md`; E1, page 1 and the size tables, and E3, the stitch charts, are built), integrated
 > bands on a contiguous yoke, neckband knit with the panel, dragging back-neck increases on the chart.
 
 ## 1. Project goal and architecture
@@ -442,6 +442,20 @@ chunk (`pdf-*.js`, 498 kB / 159 kB gzip); main `index-*.js` +0.61 kB (+0.17 kB g
 and Rolldown now puts its CommonJS-interop helpers in a shared `rolldown-runtime-*.js` (0.58 kB / 0.36 kB gzip,
 preloaded) because jsPDF/svg2pdf's CommonJS deps need them too (a code-splitting group can't capture the runtime).
 Gotcha: the browser preview only saves a download from a real click, and only once per file name.
+
+E3 is built (2026-11-01, PR #23, branch `claude/export-e3-charts-8716d6`): `tiles.ts` (pure: `fitGrid` picks the cell
+size and row/column bands, `layoutTiles` the reading order, pages, overlap and links, skipping tiles with no
+stitches; `stitchLabels`, `tileRange`, `countRows`), `ChartSheet.tsx` (one tile in mm, colours passed in as a
+`Palette` read once with `getComputedStyle`; grid as one path), `sheetDom.tsx` (createRoot + flushSync into a detached
+div, then the glyph classes `glyph` / `glyph-fill` / `glyph-text` become attributes; E2's `render.tsx` can replace
+it), `charts.tsx` (the renderer: orientation per piece, title, tile map, links, key). `plan.ts` gained
+`SectionDef.ownPages` (the charts start their own pages, so they can be landscape) and `ExportOptions.collapse`;
+`pdf.ts` gained `Writer.boxFor(orientation)`. Tests: `export/tiles.test.ts`, and `pdf.test.ts` renders the sheets with
+`react-dom/server` (sheetDom mocked) to check a 150 × 200 chart's tiles, the key, short rows, collapse and top-down.
+Main chunk unchanged (89.70 kB gzip); `pdf-*.js` 165 kB gzip. Checked by eye in the browser: a 150 × 200 chart
+(16 tiles + key), a seamed garment with bust short rows, a contiguous yoke. To look at a PDF from the preview
+without a download: POST the blob from `javascript_tool` to a small local Node server that writes it to disk, then
+render pages with PDFKit (a short Swift script).
 
 Old outline (kept for reference):
 1. Add `jspdf` + `svg2pdf.js` (exact versions pinned).
