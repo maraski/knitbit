@@ -478,8 +478,15 @@ function workYoke(project: Project, spec: YokeSpec, sizeId: Id, scope: Record<st
     const shapeDepth = evaluate(FRONT_NECKS[bodiceNeck(spec.neck.shape)].depth, scopeFrom({ ...scope, neck_w: neckCm }));
     const dflt = shapeDepth.ok ? shapeDepth.value : depthCm;
     const srDepth = depthCm <= dflt + 1e-9 ? depthCm : Math.min(dflt, scope.front_neck_drop ?? dflt);
-    const pairs = Math.max(0, Math.round(val('srPairs', 'Short-row pairs', sr.pairs, '', { neck_depth: depthCm, back_depth: backDepthCm, sr_depth: srDepth })));
+    let pairs = Math.max(0, Math.round(val('srPairs', 'Short-row pairs', sr.pairs, '', { neck_depth: depthCm, back_depth: backDepthCm, sr_depth: srDepth })));
     const first = Math.max(1, Math.round(val('srFirst', 'First turn, sts past the shoulder marker', sr.first, 'sts')));
+    // The default pairs that don't fit in the front (e.g. a square cardigan's, the closing width taking front stitches):
+    // the most that fit, turns 1 st apart; the rest of the neck is worked below them. A count you typed stays (and errors).
+    const most = Math.max(0, full - first);
+    if (pairs > most && sr.pairs.expr.trim() === defaultShortRows().pairs.expr && !(sizeId in sr.pairs.overrides)) {
+      issues.push({ severity: 'info', code: 'yoke.short-rows-capped', param: 'srPairs', message: `Short rows: the default ${pairs} pairs don't fit in a front of ${stsCm(full, spc)}, so ${most} pairs, turns 1 st apart; the rest of the front neck is worked below them.` });
+      pairs = most;
+    }
     const end0 = pairs > 0 ? 2 * pairs + 1 : 0;
     const neckRows0 = rowsOf(Math.max(0, depthCm - backDepthCm));
     if (neckRows0 >= end0 + 2) {

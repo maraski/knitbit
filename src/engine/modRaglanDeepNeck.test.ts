@@ -167,6 +167,21 @@ describe('modified raglan deep neck: how it is worked', () => {
     }
   });
 
+  it('square cardigan: default pairs that do not fit the front are capped, the rest worked below them; typed ones still error', () => {
+    const p = build('cardigan', 'square');
+    const s = sizeId(p, '4XS');
+    const y = generateYoke(p, yokeOf(p).yoke!, s);
+    const capped = y.issues.find((i) => i.code === 'yoke.short-rows-capped')!;
+    expect(capped.severity).toBe('info');
+    const sr = y.shortRows!;
+    expect(sr.pairs).toBe(y.castOnZones.leftFront - sr.first);
+    expect(sr.step).toBe(1);
+    expect(sr.frontNeck).toBeDefined();
+    expect(y.ok).toBe(true);
+    const typed = editYoke(p, (x) => void (x.shortRows!.pairs = dim(String(y.params.srPairs.value))));
+    expect(generateYoke(typed, yokeOf(typed).yoke!, s).issues.some((i) => i.code === 'yoke.short-rows-fit')).toBe(true);
+  });
+
   it("a user's own pairs value is kept: too many still errors with the Short-row pairs fix", () => {
     const p = editYoke(withDepth(build('closed', 'round'), 15), (y) => void (y.shortRows!.pairs = dim(20)));
     const y = generateYoke(p, yokeOf(p).yoke!, sizeId(p, 'M'));

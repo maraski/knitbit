@@ -562,9 +562,8 @@ the back after the shoulders and the marker move is `neck + 2 × increase rows +
   leaves no neck …*, with the widest strap that fits); one that leaves a back neck under ¾ of `back_neck_width` is a
   warning (check that it goes over the head).
 - **Sample table** (22 × 30, every size, pullover and cardigan, round / V (contiguous) / square / boat, straps 2, 3, 4,
-  5 cm, both modes): the seam is exactly the strap's rows, and there are no errors, except those a whole-neck square
-  cardigan already has without the strap (its short rows don't fit in the smallest sizes; *Neck* mode widens the front
-  and clears them).
+  5 cm, both modes): the seam is exactly the strap's rows, and there are no errors (a whole-neck square cardigan's
+  default short rows that don't fit in the smallest sizes are capped, see the modified raglan's deep neck).
 
 **Set-in cap height follows the armhole.** `armhole_len` is the armhole the sleeve is sewn into, measured along the
 edges: the other side of a seam join that contains one of the sleeve's edges, or else the Front + Back panels' left
@@ -997,6 +996,9 @@ the yoke's properties say which it is):
   than the depth needs leave the rest to the increases. Saved yokes keep their stored pairs expression (the old
   default, `round(max(0, neck_depth - back_depth) / row_h / 2)`, works every depth in short rows as before; Apply on
   its *don't fit* error sets a count that fits, and the rest becomes increases).
+  When the *default* pairs don't fit in the front (a square cardigan in the small sizes: the closing width takes front
+  stitches), the yoke works the most that fit, turns 1 st apart, and the rest of the neck below them (an info says so);
+  a count you typed still errors.
 - **The back neck only** = the **contiguous** method (as the method's PDF, and every yoke saved before the choice
   existed): below.
 
