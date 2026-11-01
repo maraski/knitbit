@@ -12,7 +12,7 @@ vi.mock('svg2pdf.js', () => ({ svg2pdf: async (el: { kids: { attrs: Record<strin
 // The schematic itself needs a browser (render.tsx); here a stand-in fitted like the real one, about 60 cm across.
 vi.mock('./render', () => ({
   pieceSvg: async (_p: unknown, panel: { name: string }, _c: unknown, _s: unknown, width: number, _h: number, snap: (px: number) => number) => ({
-    svg: { kids: [{ attrs: { transform: `schematic ${panel.name}` } }], querySelectorAll: () => [] },
+    svg: { kids: [{ attrs: { transform: `schematic ${panel.name}` } }], querySelectorAll: () => [], getAttribute: () => null },
     pxPerCm: snap(width / 60),
   }),
 }));

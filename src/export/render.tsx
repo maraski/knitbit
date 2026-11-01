@@ -61,9 +61,9 @@ export function inlineStyles(svg: SVGSVGElement): void {
 /**
  * Render `node` (a view in export mode, whose root is an <svg>) off-screen and return the SVG with its styles inlined,
  * detached from the page. The host is in the document while it renders, out of sight, since a detached element has no
- * computed style.
+ * computed style. `crop` (px of margin): the SVG is cut to what it draws, its width and height in the same px.
  */
-export function renderSvg(node: ReactNode): SVGSVGElement {
+export function renderSvg(node: ReactNode, opts: { crop?: number } = {}): SVGSVGElement {
   const host = document.createElement('div');
   host.setAttribute('aria-hidden', 'true');
   host.style.cssText = 'position:fixed;left:-100000px;top:0;pointer-events:none;contain:strict;width:0;height:0;overflow:visible';
@@ -74,6 +74,15 @@ export function renderSvg(node: ReactNode): SVGSVGElement {
     const svg = host.querySelector('svg');
     if (!svg) throw new Error('Nothing to export: the view drew no SVG.');
     inlineStyles(svg);
+    if (opts.crop !== undefined) {
+      const b = svg.getBBox();
+      const m = opts.crop;
+      if (b.width > 0 && b.height > 0) {
+        svg.setAttribute('viewBox', `${b.x - m} ${b.y - m} ${b.width + 2 * m} ${b.height + 2 * m}`);
+        svg.setAttribute('width', String(b.width + 2 * m));
+        svg.setAttribute('height', String(b.height + 2 * m));
+      }
+    }
     return svg.cloneNode(true) as SVGSVGElement;
   } finally {
     root.unmount();
@@ -82,13 +91,15 @@ export function renderSvg(node: ReactNode): SVGSVGElement {
 }
 
 export interface Fitted {
+  /** Cut to what it draws: its width and height attributes are its size in drawing px. */
   svg: SVGSVGElement;
   /** Drawing px per cm of fabric, after `snap`. */
   pxPerCm: number;
 }
 
 /**
- * A piece's schematic as on the Schematic tab in One size mode (a yoke laid flat), fitted to `width` × `height` px.
+ * A piece's schematic as on the Schematic tab in One size mode (a yoke laid flat), fitted to `width` × `height` px,
+ * then cut to what it draws.
  */
 export async function pieceSvg(project: Project, panel: Panel, c: ComputedPanel, sizeId: Id, width: number, height: number, snap: (pxPerCm: number) => number, cache: PanelCache = new Map()): Promise<Fitted> {
   let node: ReactNode;
@@ -116,6 +127,6 @@ export async function pieceSvg(project: Project, panel: Panel, c: ComputedPanel,
       />
     );
   }
-  const svg = renderSvg(node);
+  const svg = renderSvg(node, { crop: 4 });
   return { svg, pxPerCm: Number(svg.getAttribute('data-px-per-cm')) || 1 };
 }

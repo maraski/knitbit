@@ -472,6 +472,19 @@ export function Schematic({ computed: c, direction, units, selection, onSelect, 
   const hem = gw[0];
   const topWp = gw[gw.length - 1];
   const finishedCm = (n: number, selvedge: number) => (n - selvedge) / spc;
+  const showWidth = (w: (typeof gw)[number], i: number) => i > 0 && !(w === topWp && c.neck) && !inNeck(w.row) && !c.yoke; // a yoke labels its own widths
+
+  // Width labels' baselines (and the short-row note's), pushed down apart where waypoints are close together, as
+  // they are at a small scale (printed).
+  const labelY = new Map<string, number>();
+  {
+    const ys = gw.flatMap((w, i) => (showWidth(w, i) ? [{ id: w.id, y: S(0, w.row).y + (labelBelow(w.row) || crowdedAbove(i) ? 13 : -5) }] : []));
+    const sr = c.bust?.shortRows;
+    if (sr?.pairs.length) ys.push({ id: 'srlabel', y: S(0, c.topDown ? sr.afterRow : sr.afterRow + sr.extraRows).y - 4 });
+    ys.sort((p, q) => p.y - q.y);
+    for (let k = 1; k < ys.length; k++) ys[k].y = Math.max(ys[k].y, ys[k - 1].y + 12);
+    for (const p of ys) labelY.set(p.id, p.y);
+  }
 
   // ---- several sizes at once ----
   if (mode === 'grid' && project) {
@@ -603,7 +616,6 @@ export function Schematic({ computed: c, direction, units, selection, onSelect, 
           const a = S(c.leftEdge[w.row], w.row);
           const b = S(c.rightEdge[w.row], w.row);
           const sel = isSel({ kind: 'waypoint', id: w.id });
-          const showWidth = i > 0 && !(w === topWp && c.neck) && !inNeck(w.row) && !c.yoke; // a yoke labels its own widths
           const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
           return (
             <g key={w.id} className={`wp${sel ? ' selected' : ''}`} onClick={click({ kind: 'waypoint', id: w.id })}>
@@ -625,8 +637,8 @@ export function Schematic({ computed: c, direction, units, selection, onSelect, 
                 </g>
               )}
 
-              {showWidth && vertical && (
-                <text x={mid.x} y={mid.y + (labelBelow(w.row) || crowdedAbove(i) ? 13 : -5)} className="dim-text" textAnchor="middle">
+              {showWidth(w, i) && vertical && (
+                <text x={mid.x} y={labelY.get(w.id)} className="dim-text" textAnchor="middle">
                   {len(finishedCm(w.actualStitches, w.selvedge), units)} · {sts(w.actualStitches)}
                 </text>
               )}
@@ -984,9 +996,10 @@ export function Schematic({ computed: c, direction, units, selection, onSelect, 
                 );
               });
             }
-            const top = S(rowCentre(c, base), c.topDown ? base : base + sr.extraRows);
+            // A cardigan front: centred on the piece, not on the garment's centre line (its front edge).
+            const top = S(c.half ? (c.leftEdge[base] + c.rightEdge[base]) / 2 : rowCentre(c, base), c.topDown ? base : base + sr.extraRows);
             parts.push(
-              <text key="srlabel" x={top.x} y={top.y - 4} textAnchor="middle" className="bust-label">
+              <text key="srlabel" x={top.x} y={labelY.get('srlabel') ?? top.y - 4} textAnchor="middle" className="bust-label">
                 +{sr.extraRows} short rows after row {sr.afterRow} · +{len(sr.extraRows / rpc, units)} at centre front
               </text>,
             );

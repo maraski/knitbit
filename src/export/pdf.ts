@@ -390,7 +390,7 @@ async function drawSchematics(w: Writer, part: Part, { project, cache }: RenderC
     const boxes = (['portrait', 'landscape'] as const).map((o) => {
       const [W, H] = o === 'portrait' ? [pw, ph] : [ph, pw];
       const room = H - frame - TITLE_H;
-      return { o, width: W - 2 * MARGIN, height: room - Math.min(table ? tableHeight(table) + 4 : 0, room * 0.4) };
+      return { o, width: W - 2 * MARGIN, height: room - 14 - Math.min(table ? tableHeight(table) : 0, room * 0.4) };
     });
     const fits = [];
     if (c?.ok) for (const b of boxes.filter((b) => b.height > 40)) fits.push({ ...b, ...(await pieceSvg(project, panel, c, sizeId, b.width / MM_PER_PX, b.height / MM_PER_PX, snap, cache)) });
@@ -412,9 +412,13 @@ async function drawSchematics(w: Writer, part: Part, { project, cache }: RenderC
       }
       continue;
     }
+    // At the drawing's own size (the scale is exact), centred across the page.
     forPdf(best.svg, w);
-    await svg2pdf(best.svg, w.doc, { x: left, y: w.y, width: best.width, height: best.height });
-    w.y += best.height + 4;
+    const dw = Math.min(width, Number(best.svg.getAttribute('width')) * MM_PER_PX || best.width);
+    const dh = Math.min(best.height, Number(best.svg.getAttribute('height')) * MM_PER_PX || best.height);
+    w.y += 4;
+    await svg2pdf(best.svg, w.doc, { x: left + (width - dw) / 2, y: w.y, width: dw, height: dh });
+    w.y += dh + 6;
     drawTable(w, table);
   }
 }

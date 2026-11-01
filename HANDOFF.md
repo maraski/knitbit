@@ -27,7 +27,7 @@ M9), `6ee297f` (M10 + bust/princess options), `89c2318` (painted stitches, shapi
 > README's *Garment options* table): cross back is followed (shoulder width is a style option); the yoke splits by
 > back length and deepens until the cap is at most half rapid; body increases low in the armhole with `underarm_co`;
 > edge settings never add or remove panels (explicit *Add strips* / *Add yoke, body and sleeves*); the yoke is drawn
-> from above. Not done: PDF schematics/charts and PNG export (E2–E5 of `docs/export-plan.md`; E1, page 1 and the size tables, is built), integrated
+> from above. Not done: PDF charts and PNG export (E3–E5 of `docs/export-plan.md`; E1, page 1 and the size tables, and E2, schematics, are built), integrated
 > bands on a contiguous yoke, neckband knit with the panel, dragging back-neck increases on the chart.
 
 ## 1. Project goal and architecture
@@ -442,6 +442,21 @@ chunk (`pdf-*.js`, 498 kB / 159 kB gzip); main `index-*.js` +0.61 kB (+0.17 kB g
 and Rolldown now puts its CommonJS-interop helpers in a shared `rolldown-runtime-*.js` (0.58 kB / 0.36 kB gzip,
 preloaded) because jsPDF/svg2pdf's CommonJS deps need them too (a code-splitting group can't capture the runtime).
 Gotcha: the browser preview only saves a download from a real click, and only once per file name.
+
+E2 is built (2026-11-01, branch `claude/export-e2-schematics-0264dc`, PR #22): `Schematic` gets `exportMode` (an
+explicit px box, the fit snapped by a callback, no hit areas or wrapper div; the scale in `data-px-per-cm`);
+`YokeFrontSheet` in `YokeFrontView.tsx` (the laid-flat schematic alone); `export/render.tsx` (`renderSvg`: createRoot +
+flushSync into a hidden div *in the document*, since a detached element has no computed style; copies fill, stroke,
+widths, dashes, opacity, font and text-anchor onto every element, drops `<title>`s and `style`, turns `rgba` alpha
+into opacities and `url("#x")` into `url(#x)`; `crop` cuts the SVG to its bounding box) and `pieceSvg`;
+`export/schematics.ts` (`printScale`, `waypointTable`, `yokeTable`); the `schematics` renderer at the end of `pdf.ts`
+(portrait vs landscape by the bigger snapped scale; `Writer.reorient` turns the part's first, empty page). In the
+PDF, text gets `font-family="helvetica"`, bold for weight ≥ 600, and loses its halo (svg2pdf paints `paint-order:
+stroke` on top). Gotchas: importing `Schematic` from any lazy chunk made Rolldown split the whole engine out of the
+main chunk into a `panel-*.js` chunk, hence `export/views.ts` (App registers `Schematic`); main `index-*.js` 277.52 →
+278.25 kB (+0.34 kB gzip). Tests mock `./render` (no DOM in Node). To check a PDF by eye: post the blob from the page
+to a small local HTTP receiver, render pages with a PDFKit Swift script (no pdftoppm here). Known, as in the app: a
+cardigan front's buttons sit over the rotated band label; on a contiguous cardigan the yoke's buttons aren't printed.
 
 Old outline (kept for reference):
 1. Add `jspdf` + `svg2pdf.js` (exact versions pinned).
