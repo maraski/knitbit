@@ -13,23 +13,26 @@ import { loadProject, serializeProject, type LoadResult } from '../engine/schema
 import { CheckPanel } from './components/CheckPanel';
 import { Properties, PropsLoading, type PropsContext } from './components/Properties';
 import { Schematic, type SchematicBands } from './components/Schematic';
+import { exportViews } from '../export/views';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import type { YokeButtons } from './components/YokeTopView';
-import { len } from './format';
 import { Sidebar } from './components/Sidebar';
 import { Toolbar } from './components/Toolbar';
 import { PanelDivider, PanelToggle, useSidePanels, type SidePanels } from './components/SidePanels';
 import { useCloud } from './cloud/useCloud';
 import { downloadText, pickTextFile, safeFilename } from './fileio';
 import { markerActions } from './markerActions';
-import { frontEdgeRows, panelJoins, type PanelCache } from '../engine/joins';
+import { schematicBands } from './schematicBands';
+import { panelJoins } from '../engine/joins';
 import { buttonPlan } from '../engine/buttons';
-import { bandOnFront, setButtonPosition } from '../engine/bands';
+import { setButtonPosition } from '../engine/bands';
 import { applyEdgeTreatments } from '../engine/edgeTreatments';
 import { PANEL_SELECTION, type Selection } from './selection';
 import { loadSample, migrationNotice, useProjectStore, type Notice, type StartState } from './store';
 
 // Screens other than the schematic load on first use, keeping them out of the initial download.
+exportViews.Schematic = Schematic;
+
 const LayoutView = lazy(() => import('./components/LayoutView').then((m) => ({ default: m.LayoutView })));
 const ChartView = lazy(() => import('./components/ChartView').then((m) => ({ default: m.ChartView })));
 const YokeTopView = lazy(() => import('./components/YokeTopView').then((m) => ({ default: m.YokeTopView })));
@@ -144,38 +147,11 @@ export function App({ start }: { start: StartState }) {
 
   // Cardigan: the band and buttons on the shown front (or the buttonholes on a band strip).
   const bands = useMemo((): SchematicBands | undefined => {
-    if (!panel || !size || !computed?.ok || (!panel.half && !panel.band)) return undefined;
-    const cache: PanelCache = new Map();
-    const plan = buttonPlan(project, size.id, cache);
-    const holes = (plan?.holes ?? []).filter((h) => h.panelId === panel.id).map((h) => ({ row: h.row, x: h.x, index: h.index }));
-    if (panel.band) return { bandX: [0, 0], integrated: false, label: '', edgeRows: 0, buttons: [], kind: 'hole', holes, holeWidth: plan?.holeWidth ?? 2 };
-    const half = computed.half!;
-    const onFront = bandOnFront(project, panel.half!.side);
-    const bandW = scope.band_w ?? 0;
-    let bandX: [number, number] = [0, 0];
-    if (onFront?.attach === 'integrated') {
-      const sel = panel.half!.cfSelvedge;
-      const start = half.keep === 'right' ? half.cfX + sel : half.cfX - sel - half.bandSts;
-      bandX = [start, start + half.bandSts];
-    } else if (onFront) {
-      const w = bandW * computed.stitchesPerCm;
-      bandX = half.keep === 'right' ? [half.cfX - w, half.cfX] : [half.cfX, half.cfX + w];
-    }
-    const edgeRows = onFront ? frontEdgeRows(computed) : 0;
-    const label = onFront ? `${onFront.attach === 'integrated' ? 'integrated ' : ''}band ${len(bandW, project.units)} · overlap ${len(scope.band_overlap ?? 0, project.units)}` : '';
-    const isHole = plan?.holeFrontId === panel.id;
-    const positions = plan?.positions ?? [];
-    return {
-      bandX,
-      integrated: onFront?.attach === 'integrated',
-      label,
-      edgeRows,
-      buttons: positions,
-      kind: isHole ? 'hole' : 'button',
-      holes,
-      holeWidth: plan?.holeWidth ?? 2,
-      onDrag: (index, h, key) => update((p) => applyEdgeTreatments(setButtonPosition(p, size.id, positions, index, h)), key),
-    };
+    if (!panel || !size || !computed) return undefined;
+    const b = schematicBands(project, panel, computed, size.id, scope);
+    if (!b || panel.band) return b;
+    const positions = b.buttons;
+    return { ...b, onDrag: (index, h, key) => update((p) => applyEdgeTreatments(setButtonPosition(p, size.id, positions, index, h)), key) };
   }, [project, panel, size, computed, scope, update]);
 
   const selectPanel = (id: Id | null) => {

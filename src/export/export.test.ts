@@ -4,6 +4,8 @@ import { buildGarment, type GarmentSpec } from '../engine/garmentSetup';
 import { fixtureProject, sizeId } from '../engine/testFixtures';
 import { namePart, pdfFileName, pngFileName } from './fileName';
 import { planExport, readySections } from './plan';
+import { printScale, scaleText, waypointTable, yokeTable } from './schematics';
+import { cachedPanel } from '../engine/joins';
 import { bodyTable, DASH, exportDate, finishedTable, headerInfo, pieceEntries, piecesTable } from './tables';
 import { helveticaText, splitArrows, unprintable } from './text';
 
@@ -41,9 +43,11 @@ describe('plan', () => {
   it('header first, then the size tables once; per-size sections only when built', () => {
     const p = garment();
     const parts = planExport(p, { sizeIds: [sizeId(p, 'L'), sizeId(p, 'M')], paper: 'a4', sections: readySections() });
-    expect(parts.map((x) => x.section)).toEqual(['header', 'body', 'finished', 'pieces']);
+    expect(parts.map((x) => x.section)).toEqual(['header', 'body', 'finished', 'pieces', 'schematics', 'schematics']);
     expect(parts[0].newPage).toBe(true);
-    expect(parts.slice(1).every((x) => !x.newPage)).toBe(true);
+    expect(parts.slice(1, 4).every((x) => !x.newPage)).toBe(true);
+    // Per size, in the project's order, each on a new page.
+    expect(parts.slice(4).map((x) => [x.sizeId, x.newPage])).toEqual([[sizeId(p, 'M'), true], [sizeId(p, 'L'), true]]);
     expect(planExport(p, { sizeIds: [], paper: 'a4', sections: ['finished', 'charts'] }).map((x) => x.section)).toEqual(['header', 'finished']);
   });
 });
@@ -104,5 +108,41 @@ describe('tables', () => {
     const c = garment({ method: 'contiguous', sleeve: 'contiguous' });
     const yoke = piecesTable(c, [sizeId(c, 'M')]).rows.find((r) => r.cells[0] === 'Yoke')!;
     expect(Number(yoke.cells[2])).toBeGreaterThan(20);
+  });
+});
+
+describe('schematics', () => {
+  it('print scale: the largest standard scale that fits', () => {
+    // 4 px per cm at 0.25 mm a px: 1 cm of fabric is 1 mm on paper, 1 : 10.
+    expect(printScale(4, 0.25).n).toBe(10);
+    expect(printScale(4.1, 0.25)).toEqual({ n: 10, pxPerCm: 4 });
+    expect(printScale(3.9, 0.25).n).toBe(12);
+    expect(printScale(100, 0.25).n).toBe(1);
+    expect(printScale(0.1, 0.25).n).toBe(400);
+    expect(scaleText(2.5)).toBe('1 : 2.5');
+  });
+
+  it('waypoint table in knitting order; top-down says so', () => {
+    const p = garment();
+    const back = p.panels.find((x) => x.name === 'Back')!;
+    const c = cachedPanel(p, back.id, sizeId(p, 'M'), new Map())!;
+    const t = waypointTable(c, p.units);
+    expect(t.rows.length).toBe(c.waypoints.length);
+    expect(t.rows[0].cells.slice(1, 3)).toEqual(['0', '0']);
+    const rows = t.rows.map((r) => Number(r.cells[1]));
+    expect(rows).toEqual([...rows].sort((a, b) => a - b));
+    expect(t.note).toMatch(/lower edge/);
+    const td = garment({ method: 'top-down' });
+    const f = td.panels.find((x) => x.name === 'Front')!;
+    expect(waypointTable(cachedPanel(td, f.id, sizeId(td, 'M'), new Map())!, td.units).note).toMatch(/top-down/);
+  });
+
+  it('yoke table: a row per phase ending at the split', () => {
+    const p = garment({ method: 'contiguous', sleeve: 'contiguous' });
+    const y = p.panels.find((x) => x.yoke)!;
+    const c = cachedPanel(p, y.id, sizeId(p, 'M'), new Map())!;
+    const t = yokeTable(c, p.units);
+    expect(t.rows.length).toBe(c.yoke!.phases.length);
+    expect(t.note).toContain(`split after row ${c.yoke!.counts.total}`);
   });
 });

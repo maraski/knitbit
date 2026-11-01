@@ -217,7 +217,11 @@ removed; delete them in the console if you want the space back.
   `components/CloudStatus.tsx`, `ProjectsDialog.tsx`, `ConflictDialog.tsx` (the last two lazy).
 - `src/export/`: the PDF export, loaded only on Export (see *Export (PDF)*): `plan.ts` (page order), `tables.ts`
   (header facts and the size tables), `text.ts` (Helvetica-safe text), `fileName.ts`, `pdf.ts` (jsPDF + svg2pdf.js:
-  page frame and renderers). jsPDF and svg2pdf.js are imported only here. `ui/components/ExportDialog.tsx` is the dialog.
+  page frame and renderers), `schematics.ts` (print scale, waypoint and yoke-phase tables), `render.tsx` (a view drawn
+  off-screen with its CSS inlined, for svg2pdf now and PNG later; its own small chunk), `views.ts` (the app hands it
+  `Schematic`, so the bundler keeps the engine in the main chunk). jsPDF and svg2pdf.js are imported only here.
+  `ui/components/ExportDialog.tsx` is the dialog; `ui/schematicBands.ts` is a cardigan front's band and buttons, shared
+  by the Schematic tab and the export.
 - `firestore.rules`, `firebase.json`, `.env.example`: Firebase security rules and config (see *Cloud save setup*).
 - `samples/`: the sample sizing table (`sizing_table_ysolda_cm.csv`, and `.json` with the same data).
 - `src/engine/fixtures/`: test data: the old sample table, and schema-1 and schema-2 project files.
@@ -225,12 +229,12 @@ removed; delete them in the console if you want the space back.
 ## Export (PDF)
 
 **Export…** in the toolbar makes a PDF to knit from (the plan and the user's decisions: `docs/export-plan.md`). Built
-so far (milestone E1): page 1 and the size tables. Schematics (E2), stitch charts (E3), PNG (E4) and the extras (E5)
-come next.
+so far: page 1 and the size tables (milestone E1) and a schematic page per piece (E2). Stitch charts (E3), PNG (E4)
+and the extras (E5) come next.
 
 - **Dialog** (`ExportDialog.tsx`, lazy): tick sizes (the current size is ticked; *All*, *Just this size*), A4 or US
   Letter (remembered in `localStorage` `knitbit.export.v1`), and the sections built so far (body measurements,
-  finished measurements, key numbers per piece; the header is always there). It warns before exporting when a project,
+  finished measurements, key numbers per piece, schematics; the header is always there). It warns before exporting when a project,
   size, piece or measurement name or a custom symbol has characters the PDF font can't draw (they print as "?").
 - **File name**: `<project>-<size>.pdf`, or `<project>-<n>-sizes.pdf`; characters not allowed in file names become `-`.
 - **Every page**: a header band (project · size(s), "p. N of M"), and a footer with the construction credit when the
@@ -251,6 +255,17 @@ come next.
      renamed waypoint still works; anything that can't be found prints "—".
   3. **Key numbers per piece**: cast-on (a top-down front: "pick up N"; a yoke: its cast-on), rows and length, a row
      per size. A cardigan pair is listed once ("mirrored"); a seamed sleeve "×2".
+- **Schematics**, after the tables, per ticked size (in the project's order), then per piece: one page each with the
+  piece and size, the scale ("scale 1 : 6") and the drawing, then a table under it. The drawing is the Schematic tab in
+  *One size* mode without handles, hover or selection (`Schematic` `exportMode`), in the app's colours, as vector paths
+  and Helvetica text. It's fitted to the page at the largest standard scale that fits (1 : 1, 1.5, 2, 2.5, 3, 4, 5, 6,
+  8, 10, 12, 15, 20 …), so a ruler on the paper times N gives the fabric; the page turns landscape when the drawing
+  prints bigger that way (a band strip). The table lists the waypoints in knitting order: row, height from the first
+  row and stitches ("n (target)" where shaping reaches a different count). A pair of cardigan fronts prints once, the
+  left front, marked "make 2, mirrored"; a seamed sleeve once, "make 2". A yoke prints laid flat (back above, front
+  below, as the yoke's Front view) with a table of its phases (rows, depth, stitches after, increases), the cast-on and
+  the split. A piece that can't be computed in a size gets a page saying why. Width labels and the short-row note are
+  pushed apart where waypoints are close, which happens at print scale (also in the app).
 - **Text** is the PDF's built-in Helvetica (no font embedded): `−` prints as `-`, `≈` as `~`, and arrows (→ ← ↑ ↓)
   are drawn as small vector shapes with svg2pdf.js.
 - **Size**: jsPDF + svg2pdf.js are about 160 kB gzip, in their own chunk (`pdf-*.js`) loaded only when you export;

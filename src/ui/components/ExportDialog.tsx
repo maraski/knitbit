@@ -81,7 +81,7 @@ export function ExportDialog({ project, sizeId, onClose }: Props) {
           <button className="icon" onClick={onClose} aria-label="Close" disabled={!!busy}>×</button>
         </div>
         <div className="modal-body">
-          <p className="hint">A working copy to knit from: the gauge and size tables for the sizes you tick.</p>
+          <p className="hint">A working copy to knit from: the gauge, the size tables and a schematic of every piece for the sizes you tick.</p>
           <div className="export-grid">
             <div className="field">
               <label>Sizes</label>
@@ -121,7 +121,7 @@ export function ExportDialog({ project, sizeId, onClose }: Props) {
                     {s.label}
                   </label>
                 ))}
-                <span className="hint">Schematics and stitch charts are coming next.</span>
+                <span className="hint">Stitch charts are coming next.</span>
               </div>
             </div>
           </div>

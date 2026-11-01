@@ -3,7 +3,7 @@
 Goal: print a project to knit from. One click makes a PDF with the gauge, the size table, every piece's schematic
 and its stitch chart for the sizes you pick, and any view on screen can be saved as a PNG.
 
-**Status: E1 built (2026-10-25): page frame, header, size tables (body, finished, key numbers); E2–E5 to do.** This replaces the short M11 outline in HANDOFF.md §5. The credit
+**Status: E1 built (2026-10-25): page frame, header, size tables. E2 built (2026-10-25): schematic pages (render.tsx, Schematic exportMode, yoke laid flat); E3–E5 to do.** This replaces the short M11 outline in HANDOFF.md §5. The credit
 footer is already in place: `exportFooter()` in [garment.ts](../src/engine/garment.ts), tested in
 [garment.test.ts](../src/engine/garment.test.ts), switched by `settings.exportCredit` (Garment tab, on by default).
 
