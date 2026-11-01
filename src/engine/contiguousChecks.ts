@@ -79,7 +79,16 @@ export function contiguousChecks(project: Project, sizeId: Id, cache: PanelCache
       const est = project.measurements.find((m) => m.name === 'off_shoulder_circ')?.estimate;
       if (est) push('info', 'off_shoulder_circ is still an estimate: measure it (arms down, around both upper arms and the torso at band height). The band and the ring are worked out from it.');
     } else if (scope.armhole_depth !== undefined) {
-      const lower = y.derived.backLengthCm - (scope.shoulder_drop ?? 0) + (scope.back_neck_drop ?? 0);
+      // From the cast-on (the back neck) up to the top of the neck, then down to the shoulder point: a round neck's
+      // top is the neck point (shoulder_drop above the shoulder point); a boat neck's is the strap top, only the
+      // strap's share of the drop above it, and its back depth is its own.
+      const drop = scope.shoulder_drop ?? 0;
+      const boat = panel.yoke!.neck.shape === 'boat';
+      const sw = scope.shoulder_w ?? 0;
+      const neckW = y.params.neckWidth?.value ?? scope.back_neck_width ?? 0;
+      const rise = boat ? drop * Math.min(1, (sw - neckW) / Math.max(1, sw - (scope.back_neck_width ?? 0))) : drop;
+      const backDepth = boat ? y.params.neckBackDepth?.value ?? scope.back_neck_drop ?? 0 : scope.back_neck_drop ?? 0;
+      const lower = y.derived.backLengthCm - rise + backDepth;
       if (lower < scope.armhole_depth - tol) push('warning', `The raglan splits ${cm(scope.armhole_depth - lower)} higher than the armhole depth (${cm(scope.armhole_depth)} below the shoulder): it may bind at the underarm. Deepen it.`);
     }
   }
