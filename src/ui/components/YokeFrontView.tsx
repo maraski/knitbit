@@ -442,14 +442,16 @@ function FrontSchematic({ y, g, S, labels, units }: { y: YokeResult; g: FrontGeo
     if (sr && sr.pairs && sr.endRow < y.counts.total) {
       const from = sr.fromRow ?? 1;
       const q = S('front', 0, g.rows[Math.min(sr.endRow, T)].y1);
-      const lines = [`rows ${from}–${sr.endRow}: German short rows${os ? ' (back raise)' : ''}`, ...(joinRow !== null ? [`rounds from row ${sr.endRow + 1}`] : [])];
+      const lines = [`rows ${from}–${sr.endRow}: German short rows${os ? ' (back raise)' : ''}`, ...(joinRow !== null && !sr.frontNeck ? [`rounds from row ${sr.endRow + 1}`] : [])];
       lines.forEach((s, i) => t(`sr${i}`, { x: q.x, y: q.y + 14 + 12 * i }, s, 'middle', 'yoke-note'));
-    } else if (!sr && neckRow && neckRow <= y.counts.total) {
+    }
+    // The closing row: the back start's, or a whole neck deeper than its short rows (the fronts open until then).
+    if ((!sr || sr.frontNeck) && !y.neckContinues && neckRow && neckRow <= y.counts.total) {
       const n = y.neck;
       const s = joinRow ? (n.centre > 0 ? `row ${neckRow}: cast on ${n.centre}, join in the round` : `row ${neckRow}: join in the round`) : n.frontEdgeCo > 0 ? `rows ${neckRow}–${neckRow + 1}: cast on ${n.frontEdgeCo} at each front edge` : '';
       const q = S('front', 0, g.rows[neckRow].y0);
       if (s) t('neck', { x: q.x, y: q.y - 6 }, s, 'middle', 'yoke-note');
-    } else if (!sr && y.neckContinues) {
+    } else if ((!sr || sr.frontNeck) && y.neckContinues) {
       // The neck is still open at the split: the front body works the rest (under the split note).
       const q = below('front');
       t('neck', { x: q.x, y: q.y + 13 }, `neck continues into the front body (${y.neckContinues.rows} rows)`, 'middle', 'yoke-note');

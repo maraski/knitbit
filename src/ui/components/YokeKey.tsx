@@ -71,7 +71,9 @@ export function YokeKey({ project, computed: c, units, fold, front = false }: { 
         ))}
       {y.counts.neckRow !== null && y.counts.neckRow <= y.counts.total && (!y.offShoulder || !!y.shortRows?.pairs) && (
         <div>
-          {y.shortRows
+          {y.shortRows?.frontNeck
+            ? `short rows: rows 1–${y.shortRows.endRow}, then the front neck · ${y.counts.joinRow ? 'neck joined in the round' : 'neck cast on at the front edges'} · row ${y.counts.neckRow}`
+            : y.shortRows
             ? `short rows${y.offShoulder ? ' (back raise)' : ''}: rows ${y.shortRows.fromRow ?? 1}–${y.counts.neckRow}${y.counts.joinRow !== null ? ', then rounds (start at the left back marker)' : ''}`
             : `${y.counts.joinRow ? 'neck joined in the round' : 'neck cast on at the front edges'} · row ${y.counts.neckRow}`}
         </div>

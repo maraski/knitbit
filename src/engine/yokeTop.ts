@@ -40,8 +40,9 @@ export function topGeometry(y: YokeResult, fold = true): TopGeometry {
   const spc = y.stitchesPerCm;
   const rowH = 1 / y.rowsPerCm;
   // The neck opening at the front is the back neck; neck increases and front cast-ons close it. A whole-neck start
-  // casts the fronts on too: no opening (a cardigan: the band space between its front edges).
-  let gap = y.shortRows ? y.neck.closingSts : y.castOnZones.back;
+  // casts the fronts on too: no opening (a cardigan: the band space between its front edges), unless the neck is deeper
+  // than its short rows (the fronts are cast on narrower).
+  let gap = y.shortRows?.frontNeck ? y.shortRows.frontNeck.opening : y.shortRows ? y.neck.closingSts : y.castOnZones.back;
   let lead = gap / 2;
   const neckR = (y.castOn + gap) / spc / (2 * Math.PI);
   // Short rows: drawn symmetrically, each pair between its two turns (the half rows at the start and end of a

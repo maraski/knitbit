@@ -117,8 +117,11 @@ export interface YokeResult {
   start: YokeStart;
   /** Whole-neck start: the short rows. `turns[i]` = stitches left unworked at each front's centre-front end by pair
    * i + 1; `endRow` = the last flat row of the section (the round starts after it on a pullover). `fromRow`: the
-   * section's first row (absent = row 1; an off-shoulder raglan's back raise starts after its band and increase round). */
-  shortRows: { pairs: number; first: number; step: number; turns: number[]; endRow: number; frontSts: number; fromRow?: number } | null;
+   * section's first row (absent = row 1; an off-shoulder raglan's back raise starts after its band and increase round).
+   * `frontNeck`: a front neck deeper than the short rows give: each front is cast on with `castOn` sts (what the turns
+   * need), `opening` sts apart at the cast-on (`backDepth`: the back neck's cm below the neck point); the rest of the neck is front-neck increases and the closing cast-on, as
+   * the back start's (`neck`), worked flat until then. */
+  shortRows: { pairs: number; first: number; step: number; turns: number[]; endRow: number; frontSts: number; fromRow?: number; frontNeck?: { castOn: number; opening: number; backDepth: number } } | null;
   seamSts: number;
   capTopSts: number;
   /** Stitches left at the split: each sleeve on hold, the body continues. */
@@ -178,12 +181,13 @@ export interface YokeResult {
 
 export const SLOPED_SHOULDER = 'sqrt(((back_shoulder_width - back_neck_width) / 2) ^ 2 + shoulder_drop ^ 2)';
 
-/** Short-row defaults: the fronts cast on as wide as the neck; pairs from the height the back is raised (front neck
- * depth − back neck depth); turns from `first` sts past the shoulder marker, stepped evenly to the centre part. */
+/** Short-row defaults: the fronts cast on as wide as the neck; pairs from the height the back is raised (`sr_depth` −
+ * back neck depth: the front neck depth up to the shape's default, a deeper neck a crew neck's, the rest of it worked as
+ * front-neck increases); turns from `first` sts past the shoulder marker, stepped evenly to the centre part. */
 export function defaultShortRows(): NonNullable<YokeSpec['shortRows']> {
   return {
     frontCo: dim('neck_w'),
-    pairs: dim('round(max(0, neck_depth - back_depth) / row_h / 2)'),
+    pairs: dim('round(max(0, sr_depth - back_depth) / row_h / 2)'),
     first: dim(3),
     step: dim('max(1, floor((front_side - centre_side - first_turn) / max(1, pairs - 1)))'),
   };
@@ -297,6 +301,24 @@ export function neckContinuation(R: number, Y: number, rpc: number, neckRows: nu
   return {
     neckContinues: { rows, perSide: n, centre, frontEdgeCo, increaseRows },
     issue: { severity: 'info', code: 'yoke.neck-continues', param: 'neckDepth', message: `The front neck continues ${rows} row${rows === 1 ? '' : 's'} (${cmText(Math.round((rows / rpc) * 10) / 10)}) into the front body: ${more}${close}.` },
+  };
+}
+
+/**
+ * Whole-neck start, a front neck deeper than the short rows give: how the depth is shared (the back neck below the neck
+ * point, the short rows' back raise, and the rest worked as front-neck increases and the closing cast-on).
+ */
+export function deepNeckNote(sr: NonNullable<YokeResult['shortRows']>, deep: { R: number; perSide: number; centre: number; frontEdgeCo: number }, depthCm: number, backDepthCm: number, rpc: number, cardigan: boolean): YokeIssue {
+  const cm = (rows: number) => cmText(Math.round((rows / rpc) * 10) / 10);
+  const raise = sr.pairs ? `the short rows raise the back ${cm(2 * sr.pairs)} (${sr.pairs} pair${sr.pairs === 1 ? '' : 's'})` : 'no short rows';
+  const from = sr.endRow + 1;
+  const incs = deep.perSide ? `${deep.perSide} increase${deep.perSide === 1 ? '' : 's'} each side, then ` : '';
+  const close = cardigan ? (deep.frontEdgeCo > 0 ? `cast on ${deep.frontEdgeCo} sts at each front edge` : 'the fronts are straight from there') : `cast on ${deep.centre} sts at centre front and join in the round`;
+  return {
+    severity: 'info',
+    code: 'yoke.neck-below-short-rows',
+    param: 'neckDepth',
+    message: `Front neck ${cmText(depthCm)}: the back neck is ${cmText(backDepthCm)} below the neck point and ${raise}; the other ${cm(deep.R - sr.endRow)} (rows ${from}–${deep.R}): cast on ${sr.frontNeck?.castOn ?? 0} sts each front, ${incs}${close}${cardigan ? '' : ' (flat until then)'}.`,
   };
 }
 
@@ -435,23 +457,62 @@ function workYoke(project: Project, spec: YokeSpec, sizeId: Id, scope: Record<st
       FR = fc - FL;
     }
   }
-  const castOnZones: ZoneCounts = { leftFront: FL, leftSleeve: seam, back: bn, rightSleeve: seam, rightFront: FR };
-  const castOn = sum(castOnZones);
 
   // ---- front neck depth and centre (both starts) ----
   const depthCm = val('neckDepth', 'Front neck depth', spec.neck.depth, 'cm');
   const centreCm = val('neckCentre', 'Front neck centre', spec.neck.centre, 'cm', { neck_w: neckCm, neck_depth: depthCm });
 
   // ---- whole neck: short rows ----
+  // A front neck deeper than the short rows give (`deep`): each front is cast on with what the turns need, and the rest
+  // of the neck is worked as the back start's: increases inside the edge stitch on the rows after the short rows, then
+  // the centre cast-on (a pullover is flat until then) or a cardigan's front-edge cast-ons.
   const plain = new Set<number>();
   let shortRows: YokeResult['shortRows'] = null;
+  let deep: { R: number; perSide: number; centre: number; frontEdgeCo: number; opening: number } | null = null;
   if (sr) {
-    const side = Math.min(FL, FR);
+    const full = Math.min(FL, FR);
     // The centre part (lowest, never turned in): half each side, from the front edge.
     const centreAll = spec.neck.shape === 'square' ? FL + FR : spec.neck.shape === 'v' ? 0 : Math.min(FL + FR, sts(centreCm));
-    const cSide = Math.max(0, Math.floor(centreAll / 2) - (cardigan ? Math.round(closingSts / 2) : 0));
-    const pairs = Math.max(0, Math.round(val('srPairs', 'Short-row pairs', sr.pairs, '', { neck_depth: depthCm, back_depth: backDepthCm })));
+    let cSide = Math.max(0, Math.floor(centreAll / 2) - (cardigan ? Math.round(closingSts / 2) : 0));
+    // The short rows work the neck up to the shape's default depth; a deeper neck only a crew neck's (front_neck_drop).
+    const shapeDepth = evaluate(FRONT_NECKS[bodiceNeck(spec.neck.shape)].depth, scopeFrom({ ...scope, neck_w: neckCm }));
+    const dflt = shapeDepth.ok ? shapeDepth.value : depthCm;
+    const srDepth = depthCm <= dflt + 1e-9 ? depthCm : Math.min(dflt, scope.front_neck_drop ?? dflt);
+    let pairs = Math.max(0, Math.round(val('srPairs', 'Short-row pairs', sr.pairs, '', { neck_depth: depthCm, back_depth: backDepthCm, sr_depth: srDepth })));
     const first = Math.max(1, Math.round(val('srFirst', 'First turn, sts past the shoulder marker', sr.first, 'sts')));
+    // The default pairs that don't fit in the front (e.g. a square cardigan's, the closing width taking front stitches):
+    // the most that fit, turns 1 st apart; the rest of the neck is worked below them. A count you typed stays (and errors).
+    const most = Math.max(0, full - first);
+    if (pairs > most && sr.pairs.expr.trim() === defaultShortRows().pairs.expr && !(sizeId in sr.pairs.overrides)) {
+      issues.push({ severity: 'info', code: 'yoke.short-rows-capped', param: 'srPairs', message: `Short rows: the default ${pairs} pairs don't fit in a front of ${stsCm(full, spc)}, so ${most} pairs, turns 1 st apart; the rest of the front neck is worked below them.` });
+      pairs = most;
+    }
+    const end0 = pairs > 0 ? 2 * pairs + 1 : 0;
+    const neckRows0 = rowsOf(Math.max(0, depthCm - backDepthCm));
+    if (neckRows0 >= end0 + 2) {
+      // Turns 2 sts apart where they fit in the neck's sloped part (closer where they don't: a square neck's fronts
+      // take the fewest), inside the edge stitch.
+      const need = (st: number) => (pairs > 0 ? first + 1 + st * Math.max(0, pairs - 1) : 1);
+      const slope = full - cSide;
+      const st = pairs > 1 && need(2) > slope ? Math.max(1, Math.floor((slope - first - 1) / (pairs - 1))) : 2;
+      let castOn = Math.max(1, Math.min(full, need(st)));
+      const R = neckRows0 % 2 ? neckRows0 : neckRows0 + 1;
+      let n = Math.max(0, full - cSide - castOn);
+      // Each increase on its own row after the short rows (a V: RS rows), before the closing row; any left over widen the
+      // fronts' cast-on.
+      let room = 0;
+      for (let r = end0 + 1; r < R; r++) if (spec.neck.shape !== 'v' || r % 2 === 1) room++;
+      if (n > room) {
+        castOn += n - room;
+        n = room;
+      }
+      const frontEdgeCo = cardigan ? Math.max(0, full - castOn - n) : 0;
+      const centre = cardigan ? 2 * frontEdgeCo + closingSts : FL + FR - 2 * castOn - 2 * n;
+      deep = { R, perSide: n, centre, frontEdgeCo, opening: centre + 2 * n };
+      FL = FR = castOn;
+      cSide = 1;
+    }
+    const side = Math.min(FL, FR);
     const step = Math.max(1, Math.round(val('srStep', 'Sts between turns', sr.step, 'sts', { front_side: side, centre_side: cSide, first_turn: first, pairs })));
     const turns: number[] = [];
     for (let i = 0; i < pairs; i++) turns.push(side - first - i * step);
@@ -460,12 +521,16 @@ function workYoke(project: Project, spec: YokeSpec, sizeId: Id, scope: Record<st
     else if (pairs && lastTurn < cSide) issues.push({ severity: 'info', code: 'yoke.short-rows-centre', message: `Short rows: the last turns reach into the centre part (${cSide} sts each side of centre front).` });
     if (pairs > 1 && step < 2) issues.push({ severity: 'info', code: 'yoke.short-rows-close', message: `Short rows: turns 1 st apart. Fewer pairs or a wider front cast-on spread them more.` });
     const endRow = pairs > 0 ? 2 * pairs + 1 : 0;
-    if (!cardigan && pairs > 0) {
+    if (!cardigan && pairs > 0 && !deep) {
       plain.add(1);
       plain.add(endRow);
     }
-    shortRows = { pairs, first, step, turns: turns.map((u) => Math.max(1, u)), endRow, frontSts: FL + FR };
+    shortRows = { pairs, first, step, turns: turns.map((u) => Math.max(1, u)), endRow, frontSts: FL + FR, ...(deep ? { frontNeck: { castOn: FL, opening: deep.opening, backDepth: backDepthCm } } : {}) };
   }
+  const castOnZones: ZoneCounts = { leftFront: FL, leftSleeve: seam, back: bn, rightSleeve: seam, rightFront: FR };
+  const castOn = sum(castOnZones);
+  // The fronts are open at the neck until a closing cast-on: the back start, or a whole neck deeper than its short rows.
+  const openFront = !wholeNeck || !!deep;
 
   // ---- phase B: back neck increases on RS rows over the first `rows` rows ----
   const bPer = Math.max(0, Math.round(val('backNeckPerRow', 'Back neck increases per row', spec.backNeck.perRow, 'sts')));
@@ -545,18 +610,22 @@ function workYoke(project: Project, spec: YokeSpec, sizeId: Id, scope: Record<st
 
   // ---- front neck (back start) ----
   // The fronts start at the neck points: the neck opening is the back neck. V: no centre; square: all centre.
-  // A whole-neck start has none of this: no neck increases and no cast-on; the short rows end on row R.
+  // A whole-neck start has none of this (no neck increases and no cast-on; the short rows end on row R), unless it is
+  // deeper than its short rows: then the increases follow them.
   const centreRaw = spec.neck.shape === 'square' ? bn : spec.neck.shape === 'v' ? 0 : Math.min(bn, sts(centreCm));
-  const perSide = wholeNeck ? 0 : strap?.perSide !== undefined ? Math.min(strap.perSide, Math.floor(bn / 2)) : Math.max(0, Math.floor((bn - centreRaw) / 2));
-  const centre = bn - 2 * perSide; // pullover cast-on at centre front
+  const perSide = deep ? deep.perSide : wholeNeck ? 0 : strap?.perSide !== undefined ? Math.min(strap.perSide, Math.floor(bn / 2)) : Math.max(0, Math.floor((bn - centreRaw) / 2));
+  const centre = deep ? deep.centre : bn - 2 * perSide; // pullover cast-on at centre front
   const depthRows = Math.max(1, rowsOf(depthCm));
   let R = depthRows;
   if (R % 2 === 0) R += 1; // the centre is cast on at the end of a RS row
-  if (shortRows) R = shortRows.endRow;
+  if (deep) R = deep.R;
+  else if (shortRows) R = shortRows.endRow;
+  // The first row a front neck increase can go on (after the short rows).
+  const lo = deep && shortRows ? shortRows.endRow + 1 : 1;
   const neckRows: number[] = [];
   if (perSide > 0) {
     if (spec.neck.shape === 'v') {
-      const s = distributeAuto(perSide, { from: 1, to: R - 1 }, { side: 'rs', align: 'start' });
+      const s = distributeAuto(perSide, { from: lo, to: R - 1 }, { side: 'rs', align: 'start' });
       // Each increase on its own RS row before the cast-on row: R − 1 ≥ 2 × perSide − 1.
       const deeper = ceil1((2 * perSide) / rpc);
       for (const w of s.warnings) issues.push({ severity: 'warning', code: 'yoke.front-neck-rows', param: 'neckDepth', message: `Front neck: ${w}`, fix: fixOf(`Make Depth below the neck point at least ${cmText(deeper)} (now ${cmText(depthCm)}) so each of the ${perSide} increases has its own RS row.`, [field.yoke('neckDepth')], { now: cmText(depthCm), need: `≥ ${cmText(deeper)}`, apply: { field: field.yoke('neckDepth'), value: deeper, unit: 'cm' } }) });
@@ -567,8 +636,8 @@ function workYoke(project: Project, spec: YokeSpec, sizeId: Id, scope: Record<st
       const dists: number[] = [];
       for (let d = 1; d <= fast; d++) dists.push(d);
       for (let j = fast, d = fast + 2; j < perSide; j++, d += 2) dists.push(d);
-      if (dists[dists.length - 1] > R - 1) {
-        const s = distributeAuto(perSide, { from: 1, to: R - 1 }, { side: 'any', align: 'start' });
+      if (dists[dists.length - 1] > R - lo) {
+        const s = distributeAuto(perSide, { from: lo, to: R - 1 }, { side: 'any', align: 'start' });
         const deeper = ceil1((perSide + 1) / rpc);
         if (!s.feasible) issues.push({ severity: 'error', code: 'yoke.front-neck-fit', param: 'neckDepth', message: `Front neck: ${perSide} increases per side do not fit in ${rowsCm(R - 1, rpc)}.`, fix: fixOf(`Make Depth below the neck point at least ${cmText(deeper)} (now ${cmText(depthCm)}), or a wider Centre.`, [field.yoke('neckDepth'), field.yoke('neckCentre')], { now: cmText(depthCm), need: `≥ ${cmText(deeper)}`, apply: { field: field.yoke('neckDepth'), value: deeper, unit: 'cm' } }) });
         neckRows.push(...s.rows);
@@ -577,14 +646,15 @@ function workYoke(project: Project, spec: YokeSpec, sizeId: Id, scope: Record<st
   }
   const neckSet = new Set(neckRows);
   // Cardigan: each front casts on its share of the centre at its front edge, less half the closing width (bands).
-  const frontEdgeCo = cardigan && !wholeNeck ? Math.max(0, Math.round((centre - closingSts) / 2)) : 0;
+  const frontEdgeCo = deep ? deep.frontEdgeCo : cardigan && !wholeNeck ? Math.max(0, Math.round((centre - closingSts) / 2)) : 0;
   if (cardigan && project.edges?.frontBands.enabled && project.cardigan?.attach && Object.values(project.cardigan.attach).includes('integrated')) {
     issues.push({ severity: 'warning', code: 'yoke.integrated-bands', message: 'Integrated front bands are not worked into a contiguous yoke yet; the yoke has none.', fix: fixOf('Pick up or sew on the front bands instead (Garment → Edges → Front bands).', [field.settings('edges')]) });
   }
 
   // ---- body at the split (before body increases) and the underarm cast-on ----
   const backAtSplit = bn + 2 * AincRows + bTotal - 2 * k;
-  const frontsAtSplit = wholeNeck ? FL + FR + 2 * (AincRows - k) : 2 * (1 + A + perSide - k) + (cardigan ? 2 * frontEdgeCo : centre);
+  const closing = cardigan ? 2 * frontEdgeCo : centre;
+  const frontsAtSplit = deep ? FL + FR + 2 * (AincRows - k + perSide) + closing : wholeNeck ? FL + FR + 2 * (AincRows - k) : 2 * (1 + A + perSide - k) + closing;
   const bodyYoke = backAtSplit + frontsAtSplit;
   const bodyCm = val('bodyWidth', 'Body at the underarm', spec.body.width, 'cm');
   const bodyTarget = sts(bodyCm - (cardigan ? scope.closing_r ?? 0 : 0));
@@ -682,12 +752,13 @@ function workYoke(project: Project, spec: YokeSpec, sizeId: Id, scope: Record<st
     });
   }
   let neckContinues: YokeResult['neckContinues'];
-  if (R > Y && shortRows) issues.push({ ...belowSplitFix(R, Y, rpc, shortRows.pairs), message: `The short rows end on row ${R}, ${rowsCm(R - Y, rpc)} below the underarm split (row ${Y}).` });
-  else if (!wholeNeck && continuesPast(R, Y, cardigan, frontEdgeCo)) {
+  if (shortRows && shortRows.endRow > Y) issues.push({ ...belowSplitFix(shortRows.endRow, Y, rpc, shortRows.pairs), message: `The short rows end on row ${shortRows.endRow}, ${rowsCm(shortRows.endRow - Y, rpc)} below the underarm split (row ${Y}).` });
+  else if (openFront && continuesPast(R, Y, cardigan, frontEdgeCo)) {
     const c = neckContinuation(R, Y, rpc, neckRows, centre, frontEdgeCo, cardigan);
     neckContinues = c.neckContinues;
     issues.push(c.issue);
   }
+  if (deep && shortRows) issues.push(deepNeckNote(shortRows, deep, depthCm, backDepthCm, rpc, cardigan));
   const E = Math.max(0, Y - A - C - D);
   const bodySet = new Set(bodyRows);
   const dSet = new Set(dRows);
@@ -753,7 +824,7 @@ function workYoke(project: Project, spec: YokeSpec, sizeId: Id, scope: Record<st
       }
     }
     // Front neck closes: pullover casts on the centre and joins; a cardigan casts on at each front edge.
-    if (r === R && !wholeNeck && !neckContinues) {
+    if (r === R && openFront && !neckContinues) {
       if (!cardigan) {
         const half = Math.floor(centre / 2);
         z.leftFront += half;
@@ -764,12 +835,12 @@ function workYoke(project: Project, spec: YokeSpec, sizeId: Id, scope: Record<st
         castOns.push({ zone: 'rightFront', count: frontEdgeCo, where: 'front-edge' });
       }
     }
-    if (cardigan && !wholeNeck && r === R + 1 && frontEdgeCo > 0 && r <= Y) {
+    if (cardigan && openFront && r === R + 1 && frontEdgeCo > 0 && r <= Y) {
       z.leftFront += frontEdgeCo;
       castOns.push({ zone: 'leftFront', count: frontEdgeCo, where: 'front-edge' });
     }
     const row: YokeRow = { row: r, phase, backNeck: bIndex >= 0, neck, round: isRound(r), rs: isRS(r), markersMoved, zones: { ...z }, total: sum(z), incs, castOns };
-    if (shortRows && r <= shortRows.endRow) Object.assign(row, shortRowSpan(shortRows, r, row, cardigan), isPlain ? { plain: true } : {});
+    if (shortRows && r <= shortRows.endRow) Object.assign(row, shortRowSpan(shortRows, r, row, cardigan || !!deep), isPlain ? { plain: true } : {});
     rows.push(row);
     if (r === A) endOfA = { ...z };
   }
@@ -801,7 +872,10 @@ function workYoke(project: Project, spec: YokeSpec, sizeId: Id, scope: Record<st
   };
   add('A', 'Shoulders', 1, A, '4 every row');
   if (bIncRows.length && bPer) add('B', 'Back neck', 1, Math.min(bIncRows[bIncRows.length - 1], Y), `${bPer} every 2nd row (with A)`);
-  if (shortRows) {
+  if (deep && shortRows) {
+    const close = cardigan ? `cast on ${frontEdgeCo} at each front edge` : `cast on ${centre}, then in the round`;
+    add('neck', neckContinues ? 'Short rows, then front neck (continues into the body)' : 'Short rows, then front neck', 1, Math.min(R, Y), `${shortRows.pairs} pairs, then ${perSide} per side${neckContinues ? ` (${perSide - neckContinues.perSide} in the yoke)` : `, ${close}`}`);
+  } else if (shortRows) {
     if (shortRows.pairs) add('neck', 'Short rows (neck)', 1, Math.min(R, Y), `${shortRows.pairs} pairs, German short rows${cardigan ? '' : ', then in the round'}`);
   } else if (neckContinues) add('neck', 'Front neck, continues into the body', 1, Y, `${perSide - neckContinues.perSide} of ${perSide} per side`);
   else if (perSide > 0 || R <= Y) add('neck', cardigan ? 'Front neck (open)' : 'Front neck, joined', 1, Math.min(R, Y), `${perSide} per side${cardigan ? '' : `, cast on ${centre}`}`);
@@ -810,7 +884,7 @@ function workYoke(project: Project, spec: YokeSpec, sizeId: Id, scope: Record<st
   add('E', 'Armhole, straight', A + C + D + 1, Y, perEdge ? `body: ${perEdge} per edge` : 'none');
 
   const seamCm = A / rpc;
-  const gapAtA = cardigan || wholeNeck ? 0 : R <= A ? 0 : Math.max(0, bn - 2 * neckRows.filter((r) => r <= A).length);
+  const gapAtA = cardigan || !openFront ? 0 : R <= A ? 0 : Math.max(0, centre + 2 * perSide - 2 * neckRows.filter((r) => r <= A).length);
   const across = perEdge / spc;
   const lowRows = zoneRows / rpc;
   const edgeLen = X / rpc - lowRows + Math.hypot(lowRows, across);

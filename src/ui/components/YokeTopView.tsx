@@ -427,7 +427,7 @@ function NeckNotes({ y, g, P, scale }: { y: YokeResult; g: TopGeometry; P: (x: n
     // Row 1 starts at the right front edge (a whole-neck pullover: at the round's start, the left back shoulder
     // marker) and runs clockwise seen from above.
     const rm = (ring1.r0 + ring1.r1) / 2;
-    const bor = y.shortRows && y.counts.joinRow !== null;
+    const bor = y.shortRows && !y.shortRows.frontNeck && y.counts.joinRow !== null;
     const a0 = boundaryAngle(ring1, bor ? zoneOffsets(ring1.zones)[2] : ring1.total);
     const span = Math.min(0.6, 36 / Math.max(1, rm * scale));
     const s0 = at(rm, a0 + span * 0.1);
@@ -453,11 +453,13 @@ function NeckNotes({ y, g, P, scale }: { y: YokeResult; g: TopGeometry; P: (x: n
     const from = sr.fromRow ?? 1;
     const ring = g.rings[Math.ceil((from - 1 + sr.endRow) / 2)];
     const q = at(ring.r0, Math.PI);
-    const lines = [`rows ${from}–${sr.endRow}: short rows${y.offShoulder ? ' (back raise)' : ''}`, ...(joinRow !== null ? [`rounds from row ${sr.endRow + 1}`] : [])];
+    const lines = [`rows ${from}–${sr.endRow}: short rows${y.offShoulder ? ' (back raise)' : ''}`, ...(joinRow !== null && !sr.frontNeck ? [`rounds from row ${sr.endRow + 1}`] : [])];
     lines.forEach((line, i) =>
       parts.push(<text key={`sr${i}`} x={q.x} y={q.y - 8 - 12 * (lines.length - 1 - i)} textAnchor="middle" className="yoke-note">{line}</text>),
     );
-  } else if (words && !sr && ringR && neckRow! <= y.counts.total) {
+  }
+  // The closing row: the back start's, or a whole neck deeper than its short rows.
+  if (words && (!sr || sr.frontNeck) && !y.neckContinues && ringR && neckRow! <= y.counts.total) {
     const n = y.neck;
     // Two short lines just above the closing row, so they stay inside the opening where it curves up.
     const lines = joinRow
