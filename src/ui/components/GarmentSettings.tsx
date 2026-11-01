@@ -1,10 +1,14 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { CONTIGUOUS_CREDIT, OPENINGS, parseTags, setOpening } from '../../engine/garment';
 import { changeMethod, garmentChoice, lengthsFor, METHODS, NECKLINES, necklinesFor, offShoulderNote, setNeckline, setSleeve, setSleeveLength, SLEEVES, sleevesFor, type GarmentMethod, type SleeveChoice } from '../../engine/garmentSetup';
 import { SLEEVE_LENGTHS } from '../../engine/sleeveLength';
 import type { FrontOpening, Id, Project, SleeveLength } from '../../engine/model';
 import { generateBodyAndSleeves, missingYokePanels } from '../../engine/contiguousGarment';
 import { EdgeSettings } from './EdgeSettings';
+import { PropsLoading } from './Properties';
+
+// The Shoulders section loads on first use, keeping it out of the startup code.
+const StrapSettings = lazy(() => import('./StrapSettings').then((m) => ({ default: m.StrapSettings })));
 
 interface Props {
   project: Project;
@@ -114,6 +118,9 @@ export function GarmentSettings({ project, update, sizeId }: Props & { sizeId: I
           </div>
         </div>
       )}
+      <Suspense fallback={<PropsLoading />}>
+        <StrapSettings project={project} sizeId={sizeId} update={update} />
+      </Suspense>
       <EdgeSettings project={project} sizeId={sizeId} update={update} />
       <h4>Project</h4>
       <TagsField project={project} update={update} />

@@ -831,9 +831,14 @@ function computePanelRaw(project: Project, panel: Panel, sizeId: Id): ComputedPa
         const sl = neckLeft[r]! - leftEdge[r];
         const sr = rightEdge[r] - neckRight[r]!;
         if (sl < -1e-9 || sr < -1e-9) {
+          // Say which values meet here: the opening against the panel's width at that row (e.g. a deep square neck
+          // reaching the armhole shaping), and the field that narrows the opening (with a strap: the strap width).
+          const at = `${((neckRight[r]! - neckLeft[r]!) / spc).toFixed(1)} cm`;
+          const there = `${((rightEdge[r] - leftEdge[r]) / spc).toFixed(1)} cm`;
+          const narrow = project.garment.strap ? 'widen the strap (Garment → Strap width)' : 'narrow the neckline opening width (and the neck_side width with it)';
           issues.push({
             severity: 'error',
-            message: `Neck wider than the shoulders at row ${r}: the ${sl < 0 ? 'left' : 'right'} side would have ${roundNearest(Math.min(sl, sr))} sts. Narrow the neck, widen the top, or move the shoulder shaping.`,
+            message: `Neck wider than the panel at row ${r}: the opening is ${at} where the panel is ${there}, so the ${sl < 0 ? 'left' : 'right'} side would have ${roundNearest(Math.min(sl, sr))} sts. To fix: ${narrow}, make the neck shallower, or widen the panel at that height.`,
             ref: { kind: 'neckline' },
           });
           reported = true;

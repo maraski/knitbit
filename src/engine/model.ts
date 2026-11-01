@@ -502,10 +502,26 @@ export type Construction = 'panels' | 'contiguous';
 /** 'closed': a pullover. 'cardigan': the front opens at centre front (fronts and bands worked flat). */
 export type FrontOpening = 'closed' | 'cardigan';
 
+/** What moves when the strap is set: the neck widens (the shoulder line stays), or the shoulder line moves in. */
+export type StrapGives = 'neck' | 'armhole';
+
+/**
+ * Shoulder strap (seamed and top-down bodices): the shoulder left between the neck and the armhole at the shoulder
+ * line, `strap_w` in expressions. The bodices' linked fields read it (see `strap.ts`); absent = no strap setting.
+ */
+export interface StrapSettings {
+  width: DimExpr;
+  gives: StrapGives;
+  /** Each piece's own values from before a field was linked (by panel id, then field key), restored when it unlinks. */
+  saved: Record<Id, Record<string, DimExpr>>;
+}
+
 /** Project-level garment options; they combine freely. */
 export interface GarmentOptions {
   construction: Construction;
   opening: FrontOpening;
+  /** Absent in older files and until the knitter sets a strap (a new boat neck sets one). */
+  strap?: StrapSettings;
 }
 
 export interface ProjectSettings {

@@ -1,10 +1,12 @@
 // Properties for a selected neckline. Loaded on first use.
 
+import { evaluateDim } from '../../engine/measurements';
 import type { DimExpr, Panel } from '../../engine/model';
 import { editPanel } from '../edit';
 import { signed, sts } from '../format';
 import { ExprField } from './ExprField';
 import { IssueList, TagEdge, type PropsContext } from './Properties';
+import { StrapLine, strapNote } from './StrapSettings';
 
 export function NecklineProps({ ctx }: { ctx: PropsContext }) {
   const { panel, update } = ctx;
@@ -13,10 +15,18 @@ export function NecklineProps({ ctx }: { ctx: PropsContext }) {
   const set = (fn: (n: NonNullable<Panel['neckline']>) => void, key: string | null = null) =>
     update((p) => editPanel(p, panel.id, (pn) => pn.neckline && fn(pn.neckline)), key);
   const setDim = (field: 'width' | 'depth' | 'centreWidth') => (d: DimExpr, key: string) => set((n) => void (n[field] = d), `neck.${panel.id}.${key}`);
-  const common = { sizeId: ctx.sizeId, sizeName: ctx.sizeName, scope: ctx.scope, units: ctx.units };
+  // The neckline's own names for its width and depth (the boat neck's and a wide neck's centre use them).
+  const own = (d: DimExpr) => {
+    const r = evaluateDim(d, ctx.sizeId, ctx.scope);
+    return r.ok ? r.value.value : 0;
+  };
+  const scope = { ...ctx.scope, neck_w: own(nk.width), neck_depth: own(nk.depth) };
+  const common = { sizeId: ctx.sizeId, sizeName: ctx.sizeName, scope, units: ctx.units };
+  const note = (f: 'neckline.width' | 'neckline.centre') => strapNote(ctx.project, panel, f);
   return (
     <div className="props">
       <h3>Neckline</h3>
+      <StrapLine project={ctx.project} panel={panel} sizeId={ctx.sizeId} units={ctx.units} update={update} />
       <div className="row2">
         <div className="field">
           <label>Shape</label>
@@ -35,9 +45,9 @@ export function NecklineProps({ ctx }: { ctx: PropsContext }) {
           </select>
         </div>
       </div>
-      <ExprField label="Opening width" value={nk.width} onChange={setDim('width')} fieldKey="width" {...common} detail={neck && <>→ {sts(neck.widthSts)}</>} />
+      <ExprField label="Opening width" value={nk.width} onChange={setDim('width')} fieldKey="width" {...common} note={note('neckline.width')} detail={neck && <>→ {sts(neck.widthSts)}</>} />
       <ExprField label="Depth (from top)" value={nk.depth} onChange={setDim('depth')} fieldKey="depth" {...common} detail={neck && <>→ {neck.depthRows} rows</>} />
-      <ExprField label="Centre width" value={nk.centreWidth} onChange={setDim('centreWidth')} fieldKey="centre" {...common} detail={neck && <>→ {sts(neck.centreSts)}</>} />
+      <ExprField label="Centre width" value={nk.centreWidth} onChange={setDim('centreWidth')} fieldKey="centre" {...common} note={note('neckline.centre')} detail={neck && <>→ {sts(neck.centreSts)}</>} />
       {nk.shape === 'v' && (
         <div className="field">
           <label>Side shaping on</label>
