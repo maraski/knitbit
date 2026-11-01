@@ -69,9 +69,10 @@ const BOAT_BACK_CENTRE = 'neck_w - 2 * min(3, neck_depth * 0.5)';
 export const BOAT_WIDTH = 'shoulder_w - 6';
 /**
  * Shoulder slope (neck_side height above the shoulder line). A boat neck's strap slopes only its share of the
- * shoulder drop, as the body's shoulder line does between the shoulder point and the neck.
+ * shoulder drop, as the body's shoulder line does between the shoulder point and the neck; at least 4 rows, so a
+ * narrow strap's one or two bind-off steps each side have their rows.
  */
-export const BOAT_RISE = 'shoulder_drop * min(1, (shoulder.width - neck_side.width) / max(1, shoulder_w - back_neck_width))';
+export const BOAT_RISE = 'max(4 * row_h, shoulder_drop * min(1, (shoulder.width - neck_side.width) / max(1, shoulder_w - back_neck_width)))';
 
 type NeckDefaults = { width: string; depth: string; centre: string; top: string; rise: string };
 

@@ -43,11 +43,15 @@ describe('plan', () => {
   it('header first, then the size tables once; per-size sections only when built', () => {
     const p = garment();
     const parts = planExport(p, { sizeIds: [sizeId(p, 'L'), sizeId(p, 'M')], paper: 'a4', sections: readySections() });
-    expect(parts.map((x) => x.section)).toEqual(['header', 'body', 'finished', 'pieces', 'schematics', 'schematics']);
+    expect(parts.map((x) => x.section)).toEqual(['header', 'body', 'finished', 'pieces', 'schematics', 'charts', 'schematics', 'charts']);
     expect(parts[0].newPage).toBe(true);
+    // The tables flow on.
     expect(parts.slice(1, 4).every((x) => !x.newPage)).toBe(true);
-    // Per size, in the project's order, each on a new page.
-    expect(parts.slice(4).map((x) => [x.sizeId, x.newPage])).toEqual([[sizeId(p, 'M'), true], [sizeId(p, 'L'), true]]);
+    // Per size, in the project's order: schematics on a new page, the charts start their own pages (portrait or landscape).
+    expect(parts.slice(4).map((x) => [x.section, x.sizeId, x.newPage])).toEqual([
+      ['schematics', sizeId(p, 'M'), true], ['charts', sizeId(p, 'M'), false],
+      ['schematics', sizeId(p, 'L'), true], ['charts', sizeId(p, 'L'), false],
+    ]);
     expect(planExport(p, { sizeIds: [], paper: 'a4', sections: ['finished', 'charts'] }).map((x) => x.section)).toEqual(['header', 'finished']);
   });
 });

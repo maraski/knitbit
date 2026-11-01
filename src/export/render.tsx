@@ -3,7 +3,7 @@
 // detached. svg2pdf.js and an SVG drawn on a canvas know nothing about the page's stylesheet, so after this the SVG
 // stands alone.
 
-import type { ReactNode } from 'react';
+import type { ReactElement, ReactNode } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { panelJoins, type PanelCache } from '../engine/joins';
@@ -129,4 +129,31 @@ export async function pieceSvg(project: Project, panel: Panel, c: ComputedPanel,
   }
   const svg = renderSvg(node, { crop: 4 });
   return { svg, pxPerCm: Number(svg.getAttribute('data-px-per-cm')) || 1 };
+}
+
+// A chart sheet (ChartSheet / KeySwatches, from charts.tsx): its colours are passed in as attributes already, so it
+// only needs the glyph classes from ui/glyphs.tsx (styled by app.css on screen) turned into attributes.
+/** Render a chart sheet (an <svg>) into a detached element and return it, glyph classes turned into attributes. */
+export function sheetSvg(node: ReactElement, ink: string): SVGSVGElement {
+  const host = document.createElement('div');
+  const root = createRoot(host);
+  flushSync(() => root.render(node));
+  const svg = host.querySelector('svg');
+  if (!svg) throw new Error('chart sheet did not render');
+  svg.remove();
+  root.unmount();
+  for (const el of svg.querySelectorAll('.glyph')) {
+    el.setAttribute('fill', 'none');
+    el.setAttribute('stroke', ink);
+    el.setAttribute('stroke-linecap', 'round');
+    el.setAttribute('stroke-linejoin', 'round');
+  }
+  for (const el of svg.querySelectorAll('.glyph-fill')) el.setAttribute('fill', ink);
+  for (const el of svg.querySelectorAll<SVGTextElement>('.glyph-text')) {
+    el.setAttribute('fill', ink);
+    el.setAttribute('font-weight', 'bold');
+    if (el.style.fontSize) el.setAttribute('font-size', String(parseFloat(el.style.fontSize)));
+    el.removeAttribute('style');
+  }
+  return svg;
 }

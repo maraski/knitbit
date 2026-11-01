@@ -220,9 +220,10 @@ removed; delete them in the console if you want the space back.
   (header facts and the size tables), `text.ts` (Helvetica-safe text), `fileName.ts`, `pdf.ts` (jsPDF + svg2pdf.js:
   page frame and renderers), `schematics.ts` (print scale, waypoint and yoke-phase tables), `render.tsx` (a view drawn
   off-screen with its CSS inlined, for svg2pdf now and PNG later; its own small chunk), `views.ts` (the app hands it
-  `Schematic`, so the bundler keeps the engine in the main chunk). jsPDF and svg2pdf.js are imported only here.
-  `ui/components/ExportDialog.tsx` is the dialog; `ui/schematicBands.ts` is a cardigan front's band and buttons, shared
-  by the Schematic tab and the export.
+  `Schematic`, so the bundler keeps the engine in the main chunk), `tiles.ts` (cutting a chart into page tiles),
+  `ChartSheet.tsx` (one tile as SVG), `sheetDom.tsx` (renders it off-screen for svg2pdf), `charts.tsx` (the chart
+  pages). jsPDF and svg2pdf.js are imported only here. `ui/components/ExportDialog.tsx` is the dialog;
+  `ui/schematicBands.ts` is a cardigan front's band and buttons, shared by the Schematic tab and the export.
 - `firestore.rules`, `firebase.json`, `.env.example`: Firebase security rules and config (see *Cloud save setup*).
 - `samples/`: the sample sizing table (`sizing_table_ysolda_cm.csv`, and `.json` with the same data).
 - `src/engine/fixtures/`: test data: the old sample table, and schema-1 and schema-2 project files.
@@ -230,12 +231,13 @@ removed; delete them in the console if you want the space back.
 ## Export (PDF)
 
 **Export…** in the toolbar makes a PDF to knit from (the plan and the user's decisions: `docs/export-plan.md`). Built
-so far: page 1 and the size tables (milestone E1) and a schematic page per piece (E2). Stitch charts (E3), PNG (E4)
-and the extras (E5) come next.
+so far: page 1 and the size tables (milestone E1), a schematic page per piece (E2) and the stitch charts (E3). PNG
+(E4) and the extras (E5) come next.
 
 - **Dialog** (`ExportDialog.tsx`, lazy): tick sizes (the current size is ticked; *All*, *Just this size*), A4 or US
   Letter (remembered in `localStorage` `knitbit.export.v1`), and the sections built so far (body measurements,
-  finished measurements, key numbers per piece, schematics; the header is always there). It warns before exporting when a project,
+  finished measurements, key numbers per piece, schematics, stitch charts; the header is always there). With charts
+  ticked, *Collapse plain middle* starts from the Chart tab's setting. It warns before exporting when a project,
   size, piece or measurement name or a custom symbol has characters the PDF font can't draw (they print as "?").
 - **File name**: `<project>-<size>.pdf`, or `<project>-<n>-sizes.pdf`; characters not allowed in file names become `-`.
 - **Every page**: a header band (project · size(s), "p. N of M"), and a footer with the construction credit when the
@@ -267,6 +269,21 @@ and the extras (E5) come next.
   below, as the yoke's Front view) with a table of its phases (rows, depth, stitches after, increases), the cast-on and
   the split. A piece that can't be computed in a size gets a page saying why. Width labels and the short-row note are
   pushed apart where waypoints are close, which happens at print scale (also in the app).
+- **Stitch charts** (per ticked size, after the schematics): every piece's chart from `buildChart` (a cardigan pair
+  once, the left front; a sleeve once), drawn as on the Chart tab: the app's glyphs, short rows (SR1…), repeats, a
+  front band's stripe, yoke zones, markers and phases, buttonholes, top-down charts with row 1 at the top. A chart
+  bigger than a page is cut into **tiles** (`tiles.ts`): cells 4.5 mm, shrunk toward 3.5 mm only when that saves
+  tiles; neighbouring tiles share one row and one stitch (printed lighter), so they line up laid side by side. Tiles
+  are read the way the chart is knitted: the first rows first, each band from the right (stitch 1). One tile per
+  page, portrait or landscape (whichever prints fewer tiles); tiles with no stitches at all (a centred yoke's
+  corners) aren't printed. Each tile has its rows and stitches in the title, a small map of the tiles (this one
+  black, unprinted ones grey), row numbers on both sides, stitch numbers above and below, the stitch count where it
+  changes and on its first row, and "Continues ← on p. N · ↑ on p. M" / "From → p. K" links. The piece's **key**
+  (the symbols it uses; custom symbols with their abbreviation) sits under the first tile, or on its own page right
+  after it. Colours are the app's tints, read once from the CSS variables and written as plain attributes; every
+  symbol is also a black glyph and held stitches are hatched, so a black-and-white print loses nothing. Grid lines
+  are one SVG path per tile, not a `<pattern>` (faster in svg2pdf). Speed: about 60 ms a tile, so a garment's charts
+  take 1–3 s (much slower in a background tab, where the browser slows timers).
 - **Text** is the PDF's built-in Helvetica (no font embedded): `−` prints as `-`, `≈` as `~`, and arrows (→ ← ↑ ↓)
   are drawn as small vector shapes with svg2pdf.js.
 - **Size**: jsPDF + svg2pdf.js are about 160 kB gzip, in their own chunk (`pdf-*.js`) loaded only when you export;
@@ -288,6 +305,7 @@ Waypoint dimensions and custom measurements are expressions. They evaluate to **
 | Armhole | `armhole_len`: the armhole a sleeve is sewn into (see Templates) |
 | Cuff band | `cuff_depth`: the cuff rib knit with the sleeves (cm; 0 when it is picked up later or off); see Sleeve lengths |
 | Cardigan bands | `band_w` (front band width), `band_overlap`, `closing_r` (width taken off the whole front); 0 without bands (see Cardigan bands and buttons) |
+| Shoulder strap | `strap_w` (cm): the garment's strap width, once it is set (see Shoulder strap width) |
 | Joined edges | `edge_len` (cm), `edge_rows`, `edge_pickup` (sts at the join's ratio): the edges a strip is joined to, e.g. a band's `edge_pickup * st_w` |
 | Contiguous yoke | `yoke.back_w`, `yoke.front_w`, `yoke.sleeve_w` (held stitches + underarm cast-on share, cm), `yoke.underarm_co` (cm), `yoke.depth` (neck to split, cm); a front neck deeper than the split: `yoke.neck_rows` (rows it continues below the split), `yoke.neck_per_side` (increases still to make, each side), `yoke.neck_centre` (the centre cast-on, sts; a cardigan's: both front-edge cast-ons and the closing), all 0 when the neck closes in the yoke; see Contiguous yoke |
 
@@ -424,7 +442,7 @@ duplicate (⧉) or delete (×) any panel there. Options: knitting direction, nec
 | Template | Waypoints (bottom to top) | Notes |
 |---|---|---|
 | **Back** | hem `hem_circ/2 + ease/2` at 0 → waist `waist/2 + ease/2 − waist_shift` at `hem_drop` → underarm `upper_chest/2 + ease/2` at `waist.height + waist_to_underarm` → armhole_bo at `underarm.height + 2 * row_h` (40 % of the armhole width change bound off in one go: the beginning of the next 2 rows) → armhole_end `cross_back_w + 1` at `armhole_depth × 0.45` → shoulder `shoulder_w` at `underarm.height + armhole_depth` (increases from armhole_end: the *widen to the shoulder width* option, on by default; off = straight up at the armhole_end width) → neck_side `back_neck_width` at `shoulder.height + shoulder_drop` (shoulder slope in bind-off steps) | Round back neck, `back_neck_drop`, centre `back_neck_width − 2`. With a boat neckline: the boat neck's width, 2 cm deep (see *Boat neck*) |
-| **Front** | as the back, waist `+ waist_shift`, underarm `+ bust_side_w`, armhole_end `cross_front + 1` (the same `shoulder_w` at the shoulder, so the shoulder seams match; without the widening the front ends at the back’s `cross_back_w + 1`) | Round: depth `front_neck_drop`, centre `back_neck_width × 0.4`. V: depth `front_neck_drop × 2`, no centre. Square: depth `front_neck_drop + 2`, whole width at once. Boat: `shoulder_w − 6` wide, 4 cm deep (see *Boat neck*) |
+| **Front** | as the back, waist `+ waist_shift`, underarm `+ bust_side_w`, armhole_end `cross_front + 1` (the same `shoulder_w` at the shoulder, so the shoulder seams match; without the widening the front ends at the back’s `cross_back_w + 1`) | Round: depth `front_neck_drop`, centre `back_neck_width × 0.4`. V: depth `front_neck_drop × 2`, no centre. Square: depth `front_neck_drop + 2`, whole width at once. Boat: out to a 3 cm strap (`shoulder_w − 6` wide), 4 cm deep (see *Boat neck*) |
 | **Sleeve, set-in** | cuff `wrist + ease.wrist` → underarm `bicep + ease.bicep` at `arm_length` → cap_bo 2 rows up (bind-off matching the body's, in one go) → cap_low → cap_high → cap_top `max(8, bicep × 0.22)`, its height **fitted to the armhole** | Bell cap: fast, steady, fast; cap decreases may fall on any row. 2x2 rib cuff section (5 cm) |
 | **Sleeve, drop shoulder** | cuff → top `armhole_depth × 2` at `arm_length` | Ribbed cuff |
 | **Sleeve, straight** | cuff = top `bicep + ease.bicep` | Rounded to the rib multiple so the count stays constant |
@@ -433,8 +451,9 @@ duplicate (⧉) or delete (×) any panel there. Options: knitting direction, nec
 
 **Boat neck.** A true boat neck reaches nearly to the shoulder edges, front and back alike:
 
-- *Width* `shoulder_w − 6`: a 3 cm shoulder strap each side, graded with the shoulder width. Front and back have
-  the same width (and the same top, `neck_side`), so the shoulder seams match.
+- *Width*: a 3 cm shoulder strap each side. A new boat neck turns on the garment's *Strap width* (3 cm, *gives at
+  Neck*, see *Shoulder strap width*): the neck is `shoulder.width − 2 × strap_w`, which is `shoulder_w − 6` until you
+  change the strap. Front and back have the same width (and the same top, `neck_side`), so the shoulder seams match.
 - *Depth*, measured down from the top of the strap: front `4`, back `2` (cm). Each is an expression with per-size values
   (the neckline properties of each panel; on a yoke, *Front depth* and *Back depth*).
 - *Shape*: gently curved. The centre `neck_w − 2 × min(3, neck_depth × 0.75)` is bound off (or held) at once and the
@@ -443,7 +462,8 @@ duplicate (⧉) or delete (×) any panel there. Options: knitting direction, nec
   width and depth.
 - *Shoulder slope*: the strap slopes only its share of the shoulder drop, as the body's shoulder line does between the
   shoulder point and the neck: `neck_side` sits `shoulder_drop × (shoulder.width − neck_side.width) / (shoulder_w −
-  back_neck_width)` above the shoulder line (about 1 cm for a 3 cm strap) instead of the whole `shoulder_drop`.
+  back_neck_width)` above the shoulder line (about 1 cm for a 3 cm strap) instead of the whole `shoulder_drop`, and at
+  least 4 rows (`max(4 * row_h, …)`), so a narrow strap's one or two bind-off steps each side have their rows.
 - *Top-down, shoulders first*: the back stays straight (cast on across the shoulders and the wide neck); only the front
   is shaped. A back (or top-down top) added in the Pieces tab with *Back neck: Shaped* and a boat neckline gets its
   2 cm too.
@@ -453,8 +473,41 @@ duplicate (⧉) or delete (×) any panel there. Options: knitting direction, nec
   neck_w) / (shoulder_w − back_neck_width)) + armhole_depth − back_depth`. The shoulder phase is short (about 3 cm of
   seam), as a 3 cm strap is.
 - Choosing *Boat* in the Garment tab sets the fronts, the back (and both tops) or the yoke to these defaults;
-  choosing another shape puts the round back neck and the full shoulder slope back. Projects saved with the earlier,
-  narrower boat neck (`back_neck_width + 6`) keep it until you choose *Boat* again.
+  choosing another shape puts the round back neck and the full shoulder slope back (and the strap becomes the round
+  neck's own, so nothing else moves). Projects saved with an earlier boat neck (`shoulder_w − 6` typed into the fields,
+  or the narrower `back_neck_width + 6`) keep it, with no strap setting, until you choose *Boat* again.
+
+### Shoulder strap width
+
+Seamed and top-down bodices (pullover and cardigan fronts): **Garment → Shoulders → Strap width** (cm, an expression
+with per-size values, `strap_w` in expressions) is the shoulder left between the neck and the armhole edge at the
+shoulder line, and **Strap gives at** says what moves when you change it (`src/engine/strap.ts`):
+
+| Gives at | What the bodices' fields read | So |
+|---|---|---|
+| **Neck** (default) | `neck_side` width `shoulder.width − 2 * strap_w`; the neckline's *Opening width* `neck_side.width`; a round or V neck's *Centre width* keeps the curve: `neck_w − back_neck_width * 0.6` (front round), `neck_w − 2` (back), `max(0, neck_w − back_neck_width)` (V) | the neck widens or narrows; the shoulder line and armholes stay; back and front necks are one width. The extra width is bound off at the centre (top-down: cast on), the shaping each side stays, so a wide V gets a flat bottom |
+| **Armhole** | the neck as it was; `shoulder` width `neck_side.width + 2 * strap_w`; `armhole_end` width `min(<its own>, shoulder.width)` (without the shoulder widening: `armhole_end` is `neck_side.width + 2 * strap_w` and the shoulder carries it up); `armhole_end` height `min(shoulder.height − (2 + max(0, shoulder.width − armhole_end.width) / st_w) * row_h, max(<its own>, armhole_bo.height + ((armhole_bo.width − armhole_end.width) / 2 / st_w + 1) * row_h))` | the shoulder line moves in or out. A narrow shoulder's armhole decreases carry on higher up the armhole as far as they need (racerback style); a wide one's increases above the cross back get their rows. The sleeve cap check reports the new armhole length |
+
+- **Turning it on moves nothing**: until it is set, the field shows the strap the pieces have now, `(shoulder_w −
+  back_neck_width) / 2` with the template defaults (or a plain number when every size has the same strap, or a fixed
+  value per size), and setting it writes the linked expressions in one undo step.
+- **Readout**: one line per piece in the Garment tab, and at the top of the neckline (and `neck_side` / `shoulder` /
+  `armhole_end` waypoint) properties: *strap 3 cm (7 sts) · neck 38.5 cm · shoulder 44.5 cm* in the selected size
+  (the strap's stitches each side at the shoulder line; neck = the `neck_side` width).
+- **Linked fields** are marked *from strap width*. Typing in one (or giving it a fixed value for a size) unlinks it: the
+  readout lists it with **Re-link to strap**. Changing *gives at* re-links the fields that were linked and gives the
+  ones it no longer drives their own values back (typed values stay); **Stop linking** gives every field its own value
+  back and removes the setting. Each field's value from before it was linked is kept in the project (`strap.saved`).
+- A method change links the new bodices; a neckline change keeps the strap (to or from *Boat*: the boat's 3 cm, or the
+  new shape's own strap).
+- **Narrow straps** (2–5 cm, tanks and vests) work in every sample size in both modes, seamed and top-down, pullover and
+  cardigan, round / V / square / boat, with one limit: a **top-down square neck with a 2 cm strap** reaches the armhole
+  shaping, where the front is narrower than the opening (XS, S, 1X, 2X; cardigan 2X, 4X). Its error says so: *Neck
+  wider than the panel at row 27: the opening is 37.3 cm where the panel is 36.4 cm … To fix: widen the strap
+  (Garment → Strap width), make the neck shallower, or widen the panel at that height.*
+- **Raglan** (classic) has no shoulder seam: the Garment tab says so and shows no setting. The **contiguous** and
+  **modified raglan** yokes take their seam from the yoke's neck and back widths (a strap setting for them is planned).
+- Projects without the setting (all older ones) are unchanged; `strap_w` only exists once it is set.
 
 **Set-in cap height follows the armhole.** `armhole_len` is the armhole the sleeve is sewn into, measured along the
 edges: the other side of a seam join that contains one of the sleeve's edges, or else the Front + Back panels' left
@@ -1218,7 +1271,9 @@ Saved files are `*.knitbit.json`. All lengths are in cm, whatever the display un
            "hem": "high_hip",                  // optional: high_hip | hip_seat_straight | hip_seat_curvy
            "broadBack": false },               // optional
   "garment": { "construction": "panels" | "contiguous",   // contiguous = top-down contiguous yoke (generator)
-               "opening": "closed" | "cardigan" },
+               "opening": "closed" | "cardigan",
+               "strap": { "width": Dim, "gives": "neck" | "armhole",   // optional: strap_w (see Shoulder strap width)
+                          "saved": { "<panelId>": { "neck_side.width": Dim, … } } } },   // fields' own values
   "tags": ["contiguous"],                      // free-form; "contiguous" is added/removed with that construction
   "edges": { "hem": Edge, "cuff": Edge, "neckband": Edge, "frontBands": Edge },   // optional (see Edge treatments)
   "cardigan": {                                // optional (see Cardigan bands and buttons)

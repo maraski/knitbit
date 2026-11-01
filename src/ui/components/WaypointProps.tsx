@@ -8,6 +8,8 @@ import { editPanel, editWaypoint } from '../edit';
 import { fmtNum, len, signed, sts } from '../format';
 import { ExprField } from './ExprField';
 import { IssueList, uniqueName, type PropsContext } from './Properties';
+import { StrapLine, strapNote } from './StrapSettings';
+import type { StrapField } from '../../engine/strap';
 
 function RoundingSteps({ r, label }: { r: RoundingResult; label?: string }) {
   if (!r.steps.length) return null;
@@ -47,6 +49,8 @@ export function WaypointProps({ ctx, wp }: { ctx: PropsContext; wp: Waypoint }) 
   const setDim = (field: 'height' | 'width' | 'left' | 'right') => (d: DimExpr, key: string) => set((w) => void (w[field] = d), `wp.${wp.id}.${key}`);
   const common = { sizeId: ctx.sizeId, sizeName: ctx.sizeName, scope: ctx.scope, units: ctx.units };
   const spc = ctx.computed.stitchesPerCm;
+  const note = (prop: 'width' | 'height') => strapNote(ctx.project, panel, `${wp.name}.${prop}` as StrapField);
+  const strapPoint = ['neck_side', 'shoulder', 'armhole_end'].includes(wp.name);
 
   // Garment order (bottom to top) of computed waypoints, to find the neighbour above / below.
   const garment = ctx.computed.topDown ? [...ctx.computed.waypoints].reverse() : ctx.computed.waypoints;
@@ -99,7 +103,8 @@ export function WaypointProps({ ctx, wp }: { ctx: PropsContext; wp: Waypoint }) 
         </p>
       )}
       <PartnerMatch ctx={ctx} wp={wp} />
-      <ExprField label="Height from start edge" value={wp.height} onChange={setDim('height')} fieldKey="height" {...common} detail={cw && <>→ row {cw.row}</>} />
+      {strapPoint && <StrapLine project={ctx.project} panel={panel} sizeId={ctx.sizeId} units={ctx.units} update={update} />}
+      <ExprField label="Height from start edge" value={wp.height} onChange={setDim('height')} fieldKey="height" {...common} note={note('height')} detail={cw && <>→ row {cw.row}</>} />
       {cw && <RoundingSteps r={cw.rowRounding} />}
 
       <label className="check">
@@ -125,6 +130,7 @@ export function WaypointProps({ ctx, wp }: { ctx: PropsContext; wp: Waypoint }) 
           onChange={setDim('width')}
           fieldKey="width"
           {...common}
+          note={note('width')}
           detail={cw && <>→ {sts(cw.stitches)}{ctx.panel.half ? ' this front' : ''}</>}
         />
       ) : (

@@ -11,6 +11,7 @@ import { conformToGarment, CONTIGUOUS_TAG, RAGLAN_TAG, setConstruction } from '.
 import { dropPanelFromJoins } from './joins';
 import type { EaseSettings, EdgeRef, EdgeTreatments, FrontOpening, Join, NecklineShape, Panel, Project, SleeveLength } from './model';
 import { dim, newId } from './model';
+import { applyStrap, BOAT_STRAP, defaultStrapWidth, setStrap } from './strap';
 import { sleeveLengthNeeds, sleeveLengthOf, SLEEVE_LENGTHS, sleeveName, withSleeveLength } from './sleeveLength';
 import { backNeckFor, bodice, bodiceNeck, FRONT_NECKS, sleeve, sleeveLengthsFor, TEMPLATE_MEASUREMENTS, topDownTop, type SleeveType, type TemplateId } from './templates';
 
@@ -252,6 +253,8 @@ export function buildGarment(base: Project, spec: GarmentSpec): Project {
   p = withMethodTags(p, spec.method);
   p = { ...p, ease: withEasePreset(p.ease, spec.ease), edges: spec.edges ? structuredClone(spec.edges) : undefined, cardigan: undefined };
   p = addPieces(p, spec.method, spec.neckline, spec.sleeve, lengthFor(spec.sleeve, spec.sleeveLength ?? 'long'), []);
+  // A boat neck's 3 cm is the strap (`base`'s strap setting, if any, isn't carried over).
+  p = applyStrap(p);
   // Only an off-shoulder band is knit with the panel: another neckline (the method's fallback too) takes the strip,
   // and an off-shoulder one with a neckband still picked up later gets its band pre-set (the dialog has done it).
   const shape = garmentChoice(p).neckline;
@@ -300,6 +303,8 @@ export function changeMethod(p: Project, method: Exclude<GarmentMethod, 'blank'>
     notes.push(`The neckline becomes round: this method has no ${necklineLabel(now.neckline)} neck.`);
     if (q.edges) q = { ...q, edges: edgesForNeckline(q.edges, 'round', now.neckline) };
   }
+  // The new bodices follow the strap setting (a boat neck gets one).
+  q = applyStrap(q, {}, notes);
   notes.push('Sizes, gauge, ease and edge settings stay. Undo goes back.');
   return q.edges ? applyEdgeTreatments(q) : q;
 }
@@ -312,6 +317,11 @@ export function changeMethod(p: Project, method: Exclude<GarmentMethod, 'blank'>
 export function setNeckline(p: Project, shape: NecklineShape): Project {
   const from = garmentChoice(p).neckline;
   if (shape === 'off-shoulder' && p.panels.some((x) => x.yoke)) p = ensureEstimates(p, OFF_SHOULDER_NEEDS).project;
+  // To or from a boat neck the strap takes the new shape's default too (3 cm, or the shape's own strap): unlinked
+  // here, set again below.
+  const strap = p.garment.strap;
+  const restrap = !!strap && (shape === 'boat') !== (from === 'boat');
+  if (restrap) p = setStrap(p, null);
   const panels = p.panels.map((x): Panel => {
     if (x.yoke) return { ...x, yoke: yokeWithNeck(x.yoke, shape) };
     if (!isBodice(x)) return x;
@@ -320,7 +330,10 @@ export function setNeckline(p: Project, shape: NecklineShape): Project {
     const waypoints = x.waypoints.map((w) => (w.name === 'neck_side' ? { ...w, height: dim(`shoulder.height + ${n.rise}`), width: dim(n.top) } : w));
     return { ...x, neckline, waypoints };
   });
-  const q: Project = { ...p, panels };
+  // The strap keeps driving the new shape's neck (a new boat neck gets a 3 cm strap).
+  let q: Project = { ...p, panels };
+  if (restrap) q = setStrap(q, { width: shape === 'boat' ? dim(BOAT_STRAP) : defaultStrapWidth(q), gives: strap!.gives });
+  else q = applyStrap(q, { reset: true });
   const os = (s: NecklineShape) => s === 'off-shoulder';
   if (!q.edges || os(shape) === os(from)) return q;
   // An off-shoulder band is knit first with the yoke: the neckband strip goes (with its joins). Back to another
