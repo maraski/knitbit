@@ -91,12 +91,40 @@ describe('modified raglan deep neck: how it is worked', () => {
     expect(note).toMatch(/^Front neck 15 cm: the back neck is [\d.]+ cm below the neck point and the short rows raise the back .* \(\d+ pairs\); the other .* cast on \d+ sts each front, (\d+ increases? each side, then )?cast on \d+ sts at centre front and join in the round \(flat until then\)\.$/);
   });
 
-  it('the short rows default to a crew neck when deeper: the same pairs at 15 and 25 cm as at the default depth', () => {
+  for (const opening of ['closed', 'cardigan'] as const) {
+    for (const depth of [15, 25]) {
+      it(`${depth} cm round ${opening}: the neck curves (turns 1 st apart, increases each side in every size), no turns-close note`, () => {
+        const base = build(opening, 'round');
+        const p = withDepth(base, depth);
+        for (const size of p.sizes) {
+          const y = generateYoke(p, yokeOf(p).yoke!, size.id);
+          const sr = y.shortRows!;
+          // The short rows only raise the back by the back neck depth.
+          expect(sr.pairs).toBe(Math.round((sr.frontNeck!.backDepth * y.rowsPerCm) / 2));
+          expect(sr.pairs).toBeLessThan(generateYoke(base, yokeOf(base).yoke!, size.id).shortRows!.pairs);
+          expect(sr.step).toBe(1);
+          expect(sr.frontNeck!.castOn).toBe(sr.first + sr.pairs);
+          expect(y.neck.perSide, size.name).toBeGreaterThan(0);
+          const inYoke = y.rows.filter((r) => r.neck).length;
+          expect(inYoke + (y.neckContinues?.perSide ?? 0)).toBe(y.neck.perSide);
+          expect(y.issues.some((i) => i.code === 'yoke.short-rows-close')).toBe(false);
+        }
+        expect(errors(p)).toEqual([]);
+      });
+    }
+  }
+
+  it('a typed Sts between turns of 1 still gets the turns-close note', () => {
+    const p = editYoke(withDepth(build('closed', 'round'), 15), (y) => void (y.shortRows!.step = dim(1)));
+    expect(generateYoke(p, yokeOf(p).yoke!, sizeId(p, 'M')).issues.some((i) => i.code === 'yoke.short-rows-close')).toBe(true);
+  });
+
+  it('a deeper neck: the short rows only raise the back by the back neck depth, the same pairs at 15 and 25 cm', () => {
     const base = build('closed', 'round');
     for (const size of base.sizes) {
       const pairs = (p: Project) => generateYoke(p, yokeOf(p).yoke!, size.id).shortRows!.pairs;
-      expect(pairs(withDepth(base, 15))).toBe(pairs(base));
-      expect(pairs(withDepth(base, 25))).toBe(pairs(base));
+      expect(pairs(withDepth(base, 25))).toBe(pairs(withDepth(base, 15)));
+      expect(pairs(withDepth(base, 15))).toBeLessThan(pairs(base));
     }
   });
 
