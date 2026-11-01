@@ -473,7 +473,7 @@ function offShoulderStart(project: Project, spec: YokeSpec, scope: Record<string
   const turns: number[] = [];
   for (let i = 0; i < pairs; i++) turns.push(side - firstTurn - i * step);
   const lastTurn = turns[turns.length - 1] ?? side;
-  if (pairs && lastTurn < 1) issues.push({ ...shortRowsFitFix(pairs, side, firstTurn, step), message: `Short rows: ${pairs} pairs ${step} sts apart don't fit in a front of ${side} sts: the last turn is past centre front.` });
+  if (pairs && lastTurn < 1) issues.push({ ...shortRowsFitFix(pairs, side, firstTurn, step), message: `Short rows: ${pairs} pairs ${step} st${step === 1 ? '' : 's'} apart don't fit in a front of ${side} sts: the last turn is past centre front.` });
   if (pairs > 1 && step < 2) issues.push({ severity: 'info', code: 'yoke.short-rows-close', message: `Short rows: turns 1 st apart. Fewer pairs spread them more.` });
   // The first row after the band and its increase round (row 1 without a band).
   const fromRow = noBand ? 1 : bandRows + 2;

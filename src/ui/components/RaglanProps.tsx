@@ -66,7 +66,7 @@ export function RaglanProps({ ctx }: { ctx: PropsContext }) {
     <ExprField label={label} value={get(spec)} sizeId={sizeId} sizeName={sizeName} scope={scope} units={ctx.units} fieldKey={`yoke.${key}`} onChange={(d, k) => setYoke((s) => set(s, d), `yoke.${panel.id}.${k}`)} />
   );
   const num = (label: string, param: string, get: (s: YokeSpec) => DimExpr, set: (s: YokeSpec, d: DimExpr) => void) => (
-    <ParamField label={label} value={get(spec)} param={y?.params[param]} sizeId={sizeId} sizeName={sizeName} onChange={(d, k) => setYoke((s) => set(s, d), `yoke.${panel.id}.${param}.${k}`)} />
+    <ParamField label={label} value={get(spec)} param={y?.params[param]} sizeId={sizeId} sizeName={sizeName} fieldKey={`yoke.${param}`} onChange={(d, k) => setYoke((s) => set(s, d), `yoke.${panel.id}.${param}.${k}`)} />
   );
   const sr = (s: YokeSpec) => (s.shortRows ??= defaultShortRows());
   const os = spec.neck.shape === 'off-shoulder';

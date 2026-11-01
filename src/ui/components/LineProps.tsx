@@ -214,7 +214,7 @@ function StitchField({ label, value, onChange, ctx }: { label: string; value: Di
   const [ov, setOv] = useState('');
   useEffect(() => setOv(fixed ? String(value.overrides[ctx.sizeId]) : ''), [fixed, value.overrides, ctx.sizeId]);
   return (
-    <div className={`field expr-field${fixed ? ' is-overridden' : ''}`}>
+    <div className={`field expr-field${fixed ? ' is-overridden' : ''}`} data-field="amount">
       <label>{label}</label>
       <input className="expr" value={value.expr} spellCheck={false} onChange={(e) => onChange({ ...value, expr: e.target.value }, 'expr')} title="Stitches; e.g. -8, or round(-3 / st_w) for 3 cm" />
       <div className="expr-result">

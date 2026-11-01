@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { DEFAULT_REGION_GAP } from '../../engine/fitChecks';
 import { FitSettings } from './FitSettings';
 import { ContiguousPanels, GarmentSettings } from './GarmentSettings';
@@ -47,6 +47,12 @@ export function Sidebar(props: Props) {
       /* ignore */
     }
   };
+  // Go to field on a garment or project setting (a check's fix): show its tab.
+  useEffect(() => {
+    const onTab = (e: Event) => setTab((e as CustomEvent<Tab>).detail);
+    window.addEventListener('knitbit:sidebar-tab', onTab);
+    return () => window.removeEventListener('knitbit:sidebar-tab', onTab);
+  }, []);
   return (
     <aside className="sidebar left">
       <nav className="tabs">
@@ -325,7 +331,7 @@ function ProjectSettings({ project, update }: Props) {
         The shaping between regions follows from the waypoints and is labelled on the schematic. Turning this off keeps your choices.
       </p>
       <h4>Checks</h4>
-      <div className="field">
+      <div className="field" data-field="settings.regionGap">
         <label>Flag a lower body more than … sizes from the upper body</label>
         <input
           className="num"
@@ -356,7 +362,7 @@ function ProjectSettings({ project, update }: Props) {
         <div className="hint">Use <code>ease</code> in expressions; a front or back panel usually takes <code>ease / 2</code>.</div>
       </div>
       <h4>Joins</h4>
-      <div className="field">
+      <div className="field" data-field="settings.tol">
         <label>Seam tolerance (cm)</label>
         <input className="num" type="number" step="0.1" min={0} value={project.settings.seamToleranceCm} onChange={(e) => update((p) => ({ ...p, settings: { ...p.settings, seamToleranceCm: Math.max(0, Number(e.target.value)) } }), 'settings.tol')} />
       </div>

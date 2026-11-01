@@ -914,11 +914,10 @@ function computePanelRaw(project: Project, panel: Panel, sizeId: Id): ComputedPa
         const sr = rightEdge[r] - neckRight[r]!;
         if (sl < -1e-9 || sr < -1e-9) {
           // Say which values meet here: the opening against the panel's width at that row (e.g. a deep square neck
-          // reaching the armhole shaping), and the field that narrows the opening (with a strap: the strap width).
+          // reaching the armhole shaping); the fix names the field that narrows the opening (with a strap: the strap).
           const at = `${((neckRight[r]! - neckLeft[r]!) / spc).toFixed(1)} cm`;
           const there = `${((rightEdge[r] - leftEdge[r]) / spc).toFixed(1)} cm`;
           const strap = !!project.garment.strap;
-          const narrow = strap ? 'widen the strap (Garment → Strap width)' : 'narrow the neckline opening width (and the width at the neck point, the top of the shoulder, with it)';
           // The opening narrower by the missing stitches each side fits.
           const need = cmText(Math.floor(((neck.widthSts + 2 * Math.min(sl, sr)) / spc) * 10) / 10);
           const now = cmText(neck.widthSts / spc);
@@ -928,7 +927,7 @@ function computePanelRaw(project: Project, panel: Panel, sizeId: Id): ComputedPa
             fix: strap
               ? fixOf(`Widen the strap (Garment → Strap width) so the opening is at most ${need} (now ${now}), or make the neck shallower.`, [field.settings('strap')], { now, need: `≤ ${need}` })
               : fixOf(`Make the neckline's Opening width at most ${need} (now ${now}), or widen the waypoint at the top of the shoulders.`, [field.neckline('width', panel.id)], { now, need: `≤ ${need}`, apply: { field: field.neckline('width', panel.id), value: Math.floor(((neck.widthSts + 2 * Math.min(sl, sr)) / spc) * 10) / 10, unit: 'cm' } }),
-            message: `Neck wider than the panel at row ${r}: the opening is ${at} where the panel is ${there}, so the ${sl < 0 ? 'left' : 'right'} side would have ${roundNearest(Math.min(sl, sr))} sts. To fix: ${narrow}, make the neck shallower, or widen the panel at that height.`,
+            message: `Neck wider than the panel at row ${r}: the opening is ${at} where the panel is ${there}, so the ${sl < 0 ? 'left' : 'right'} side would have ${roundNearest(Math.min(sl, sr))} sts.`,
             ref: { kind: 'neckline' },
           });
           reported = true;

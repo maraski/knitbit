@@ -378,7 +378,7 @@ export function generateYoke(project: Project, spec: YokeSpec, sizeId: Id): Yoke
     const turns: number[] = [];
     for (let i = 0; i < pairs; i++) turns.push(side - first - i * step);
     const lastTurn = turns[turns.length - 1] ?? side;
-    if (pairs && lastTurn < 1) issues.push({ ...shortRowsFitFix(pairs, side, first, step), message: `Short rows: ${pairs} pairs ${step} sts apart don't fit in a front of ${stsCm(side, spc)}: the last turn is past centre front.` });
+    if (pairs && lastTurn < 1) issues.push({ ...shortRowsFitFix(pairs, side, first, step), message: `Short rows: ${pairs} pairs ${step} st${step === 1 ? '' : 's'} apart don't fit in a front of ${stsCm(side, spc)}: the last turn is past centre front.` });
     else if (pairs && lastTurn < cSide) issues.push({ severity: 'info', code: 'yoke.short-rows-centre', message: `Short rows: the last turns reach into the centre part (${cSide} sts each side of centre front).` });
     if (pairs > 1 && step < 2) issues.push({ severity: 'info', code: 'yoke.short-rows-close', message: `Short rows: turns 1 st apart. Fewer pairs or a wider front cast-on spread them more.` });
     const endRow = pairs > 0 ? 2 * pairs + 1 : 0;

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { IssueFixLine, type IssueActions } from './IssueFix';
 import { regionTransitions } from '../../engine/regionShaping';
 import { sizeText } from './EstMark';
 import { JOIN_TAGS } from '../../engine/joins';
@@ -41,6 +42,8 @@ interface Props {
   compare?: ComputedPanel[];
   align?: AlignRef;
   project?: Project;
+  /** Go to field / Apply for the fixes in the "can't be drawn" box. */
+  issueActions?: IssueActions;
   /** Draw-a-line mode: two clicks give the ends (cm up from the lower edge, cm from the row's centre). */
   drawLine?: boolean;
   onDrawLine?: (a: { h: number; x: number }, b: { h: number; x: number }) => void;
@@ -98,7 +101,7 @@ interface MarkerDrag {
 
 const isStepLike = (e: ShapeEvent) => e.kind === 'bindoff' || e.kind === 'caston' || e.kind === 'turn';
 
-export function Schematic({ computed: c, direction, units, selection, onSelect, fitKey, fitOutlines, markers, joins = [], mode = 'single', compare = [], align = 'hem', project, drawLine = false, onDrawLine, onDragWaypoint, bands, exportMode }: Props) {
+export function Schematic({ computed: c, direction, units, selection, onSelect, fitKey, fitOutlines, markers, joins = [], mode = 'single', compare = [], align = 'hem', project, issueActions, drawLine = false, onDrawLine, onDragWaypoint, bands, exportMode }: Props) {
   const wpDrag = useRef<{ wpId: string; kind: 'height' | 'width'; part: 'width' | 'left' | 'right'; half0: number; key: string; x: number; y: number; moved: boolean; last: string } | null>(null);
   const [wpReadout, setWpReadout] = useState<{ sx: number; sy: number; text: string } | null>(null);
   const [drawPts, setDrawPts] = useState<{ first: { h: number; x: number; sx: number; sy: number } | null; cursor: { sx: number; sy: number } | null }>({ first: null, cursor: null });
@@ -226,7 +229,14 @@ export function Schematic({ computed: c, direction, units, selection, onSelect, 
     return (
       <div className="canvas-empty" ref={wrapRef}>
         <p>This panel can't be drawn in this size.</p>
-        <ul>{c.issues.filter((i) => i.severity === 'error').map((i, k) => <li key={k} className="err">{i.message}</li>)}</ul>
+        <ul>
+          {c.issues.filter((i) => i.severity === 'error').map((i, k) => (
+            <li key={k} className="err">
+              {i.message}
+              {i.fix && <IssueFixLine fix={i.fix} issue={i} panelId={c.panelId} sizeId={c.sizeId} actions={issueActions} />}
+            </li>
+          ))}
+        </ul>
       </div>
     );
   }

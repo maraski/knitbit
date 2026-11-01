@@ -193,7 +193,9 @@ removed; delete them in the console if you want the space back.
   - `symbols.ts`: the stitch symbol set and what each does as a shaping marker.
   - `manual.ts`: hand-editing shaping markers (move, add, remove, retype, reset).
   - `checks.ts`: project-wide checks for the check panel (grouping, knock-on nesting); `fitChecks.ts`: the checks from the
-    sizing data (below). `issues.ts`: the shared issue model (`IssueFix`, `FieldRef`, `issueKey`).
+    sizing data (below). `issues.ts`: the shared issue model (`IssueFix`, `FieldRef`, `issueKey`, the field labels).
+    `issueCatalogue.ts`: every issue code with its severity, cause and fix (the source of `docs/issues.md`).
+    `applyFix.ts`: a fix's one-click change (Apply) across the failing sizes.
   - `bust.ts`: bust shaping (formulas with numbers plugged in, short-row wedges, horizontal and vertical darts).
   - `joins.ts`: measuring tagged edges, seam comparison, pick-up suggestions. `edges.ts`: edge length along the outline.
   - `waypointDrag.ts`: proportional waypoint height/width edits, linked panels, match.
@@ -288,6 +290,31 @@ so far: page 1 and the size tables (milestone E1), a schematic page per piece (E
   are drawn as small vector shapes with svg2pdf.js.
 - **Size**: jsPDF + svg2pdf.js are about 160 kB gzip, in their own chunk (`pdf-*.js`) loaded only when you export;
   jsPDF's optional `html2canvas`, `canvg` and `dompurify` chunks are never loaded.
+
+## Checks
+
+The **Checks** bar under the canvas lists every problem in every size (*This size* narrows it), one row per problem
+with its sizes; the pills count root causes. A piece that waits on another one that can't be worked out (a body from a
+failing yoke, a sleeve measuring a broken armhole, a join) is a *knock-on*: it is folded under its root's row.
+
+Every error and warning says what to change: a **Fix** line names the field as the properties show it, this size's
+value and what it needs (cm first; when sizes need different values, this size's and the range over the others), e.g.
+*Make Short-row pairs at most 13 (now 18) · Short-row pairs: ≤ 13 (M); ≤ 10 (4XS) … ≤ 17 (3X)*.
+
+- **Go to …** selects the piece and size, opens its properties (or the Garment / Settings tab) and scrolls to the field,
+  outlining it briefly. It is on the Checks rows, in the properties' issue list and in the schematic's
+  *can't be drawn* box (a knock-on goes to its root's field).
+- **Apply** (only where one field clearly fixes it: yoke extra depth, neck depth, short-row pairs, band ease, neckline
+  depth / centre / width, shoulder extra rows, cap top, underarm cast-on…) sets the field in every size with that
+  problem: a per-size override for those sizes, or the expression itself when every size needs the same value. It is
+  one undo step, and a toast says what changed (*Set Extra depth to 6.9 cm … 16 cm in all sizes. Undo*). Nothing is
+  ever changed without the click.
+
+Severity: **error** = can't be knitted as written (no chart or pattern); **warning** = can be knitted, but probably not
+what you want (fit, rounding that changes a width, a false-looking shape); **info** (*notes*, hidden unless *Show notes*)
+= how it will be worked, or a choice the app made. Knock-ons take their root's severity and are counted once. Every code
+is listed in [docs/issues.md](docs/issues.md), generated from `src/engine/issueCatalogue.ts`; its test fails when a code
+is missing (`UPDATE_ISSUES_DOC=1 npx vitest run src/engine/issueCatalogue.test.ts` rewrites the page).
 
 ## Expression syntax
 
@@ -593,7 +620,7 @@ flat down to the join, then joined. In the round:
   the underarm stitches are cast on where the panels are joined);
 - the first flat row is a RS row, and RS/WS (and which edge a bind-off lands on) count from it.
 
-The app never joins panels itself. When two or more panels are set to join, the check panel warns if their round
+The app never joins panels itself. When two or more panels are set to join, the check panel reports an error if their round
 counts differ and notes when their side shaping falls on different rounds.
 
 ## Bust shaping

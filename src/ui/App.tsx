@@ -28,6 +28,12 @@ import { buttonPlan } from '../engine/buttons';
 import { setButtonPosition } from '../engine/bands';
 import { applyEdgeTreatments } from '../engine/edgeTreatments';
 import { PANEL_SELECTION, type Selection } from './selection';
+import { projectChecks } from '../engine/checks';
+import { applyAcrossSizes, applyFix, applySummary, canApply } from '../engine/applyFix';
+import type { FieldRef, FixApply } from '../engine/issues';
+import type { IssueActions } from './components/IssueFix';
+import { fieldSpot, flashField } from './fieldNav';
+import { len } from './format';
 import { loadSample, migrationNotice, useProjectStore, type Notice, type StartState } from './store';
 
 // Screens other than the schematic load on first use, keeping them out of the initial download.
@@ -270,9 +276,50 @@ export function App({ start }: { start: StartState }) {
     return () => window.removeEventListener('keydown', onKey);
   });
 
+  // Go to field: select the piece, size and selection (or the sidebar tab) that show a fix's field, then highlight it.
+  const goToField = (f: FieldRef, sid?: Id) => {
+    if (sid) setSizeId(sid);
+    const spot = fieldSpot(f);
+    if (f.target === 'measurement') {
+      setCenter('measurements');
+      setMeasSel(project.measurements.some((m) => m.name === f.key) ? f.key : null);
+      return;
+    }
+    if (spot.side === 'left') {
+      if (!side.panels.left) side.toggle('left');
+      window.dispatchEvent(new CustomEvent('knitbit:sidebar-tab', { detail: spot.tab }));
+    } else {
+      if (f.panelId && project.panels.some((p) => p.id === f.panelId)) setPanelId(f.panelId);
+      if (spot.selection) setSelection(spot.selection);
+      setCenter((v) => (v === 'measurements' ? 'schematic' : v));
+      if (!side.panels.right) side.toggle('right');
+    }
+    flashField(spot);
+  };
+  // Apply: the fix's change in every size with the same problem, one undo step, said in a toast.
+  const [toast, setToast] = useState<{ text: string; at: number } | null>(null);
+  useEffect(() => {
+    if (!toast) return;
+    const t = window.setTimeout(() => setToast(null), 10000);
+    return () => window.clearTimeout(t);
+  }, [toast]);
+  const formatValue = (v: number, unit: FixApply['unit']) => (unit === 'cm' ? len(v, project.units) : unit === 'rows' ? `${v} rows` : unit === 'sts' ? `${v} sts` : String(Math.round(v * 100) / 100));
+  const issueActions: IssueActions = {
+    goToField,
+    canApply: (i) => !!i.fix?.apply && canApply(project, i.fix.apply),
+    format: formatValue,
+    apply: (pid, issue) => {
+      const a = applyAcrossSizes(projectChecks(project), pid, issue);
+      const next = a && applyFix(project, a.field, a.values);
+      if (!a || !next) return;
+      update(() => next);
+      setToast({ text: applySummary(project, a.field, a.unit, a.values, formatValue), at: Date.now() });
+    },
+  };
+
   const ctx: PropsContext | null =
     panel && computed && size
-      ? { project, panel, computed, sizeId: size.id, sizeName: size.name, scope, units: project.units, update, select: setSelection, openPanel: (id) => { setPanelId(id); setSelection(PANEL_SELECTION); }, markers: markers!, selection }
+      ? { project, panel, computed, sizeId: size.id, sizeName: size.name, scope, units: project.units, update, select: setSelection, openPanel: (id) => { setPanelId(id); setSelection(PANEL_SELECTION); }, markers: markers!, selection, issueActions }
       : null;
 
   return (
@@ -463,6 +510,7 @@ export function App({ start }: { start: StartState }) {
                 compare={compare.map((sid) => computedFor(panel.id, sid))}
                 align={align}
                 project={project}
+                issueActions={issueActions}
                 bands={sizeMode === 'single' ? bands : undefined}
                 onDragWaypoint={(wpId, ch, sizeOnly, key) => {
                   const w = computed.waypoints.find((x) => x.id === wpId);
@@ -502,6 +550,7 @@ export function App({ start }: { start: StartState }) {
           <CheckPanel
             project={project}
             sizeId={size?.id ?? ''}
+            actions={issueActions}
             onGo={(g, sid) => {
               setPanelId(g.panelId);
               setSizeId(sid);
@@ -531,6 +580,21 @@ export function App({ start }: { start: StartState }) {
         </aside>
       </div>
       </ErrorBoundary>
+      {toast && (
+        <div className="toast" role="status" key={toast.at}>
+          <span>{toast.text}.</span>
+          <button
+            className="link"
+            onClick={() => {
+              store.undo();
+              setToast(null);
+            }}
+          >
+            Undo
+          </button>
+          <button className="link toast-close" aria-label="Close" onClick={() => setToast(null)}>×</button>
+        </div>
+      )}
       {cloud.dialog !== 'closed' && cloud.remote && (
         <Suspense fallback={null}>
           <ProjectsDialog

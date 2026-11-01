@@ -15,6 +15,7 @@ import { editPanel } from '../edit';
 import { len, signed, sts } from '../format';
 import type { Selection } from '../selection';
 import { ExprField } from './ExprField';
+import { IssueFixLine, type IssueActions } from './IssueFix';
 
 export interface PropsContext {
   project: Project;
@@ -28,6 +29,8 @@ export interface PropsContext {
   select: (s: Selection) => void;
   /** Show another panel (a knock-on issue's root cause). */
   openPanel?: (panelId: Id) => void;
+  /** Go to field / Apply for the issues' fixes. */
+  issueActions?: IssueActions;
   markers: MarkerActions;
   selection: Selection;
 }
@@ -201,7 +204,7 @@ function PanelProps({ ctx }: { ctx: PropsContext }) {
       </div>
       )}
       <div className="row3">
-        <div className="field">
+        <div className="field" data-field="panel.rounding">
           <label>Stitch count</label>
           <select
             value={panel.rounding.parity}
@@ -231,7 +234,7 @@ function PanelProps({ ctx }: { ctx: PropsContext }) {
         </Suspense>
       )}
 
-      <h4>Waypoints</h4>
+      <h4 data-field="panel.waypoints">Waypoints</h4>
       <ul className="wp-list">
         {[...(c.ok ? c.waypoints : [])].reverse().map((w) => (
           <li key={w.id}>
@@ -248,7 +251,7 @@ function PanelProps({ ctx }: { ctx: PropsContext }) {
         </p>
       )}
 
-      <h4>Pattern sections</h4>
+      <h4 data-field="panel.sections">Pattern sections</h4>
       <SectionsEditor ctx={ctx} />
 
       <h4>Neckline</h4>
@@ -282,7 +285,7 @@ function PanelProps({ ctx }: { ctx: PropsContext }) {
       <TagEdge ctx={ctx} edge={{ kind: 'bottom' }} label="lower edge" />
       <TagEdge ctx={ctx} edge={{ kind: 'top' }} label="upper edge" />
 
-      <h4>Shaping lines</h4>
+      <h4 data-field="panel.lines">Shaping lines</h4>
       {(panel.shapingLines ?? []).length > 0 && (
         <ul className="plain-list">
           {panel.shapingLines!.map((l) => {
@@ -483,7 +486,7 @@ export function IssueList({ issues, ctx }: { issues: Issue[]; ctx: PropsContext 
             <button className="link" onClick={() => (root ? ctx.openPanel?.(root.id) : ctx.select(i.ref.kind === 'panel' ? { kind: 'panel' } : i.ref))} title={root ? `Show ${root.name}` : undefined}>
               {i.message}
             </button>
-            {i.fix?.text && <div className="issue-fix"><strong>Fix:</strong> {i.fix.text}</div>}
+            {i.fix && <IssueFixLine fix={i.fix} issue={i} panelId={ctx.panel.id} sizeId={ctx.sizeId} actions={ctx.issueActions} />}
           </li>
         );
       })}
