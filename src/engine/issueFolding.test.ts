@@ -13,14 +13,20 @@ const editYoke = (p: Project, edit: (y: YokeSpec) => void): Project => ({
   ...p,
   panels: p.panels.map((x) => (x.yoke ? { ...x, yoke: (() => { const y = structuredClone(x.yoke!); edit(y); return y; })() } : x)),
 });
-const deepV = (method: 'contiguous' | 'raglan') => editYoke(build(method), (y) => void (y.neck.depth = dim(25)));
+// A yoke that fails in the smaller sizes: whole-neck short rows that end below the split (a deep front neck no longer
+// fails: it continues into the front body).
+const deepShortRows = (method: 'contiguous' | 'raglan') =>
+  editYoke(build(method, 'round'), (y) => {
+    y.start = 'neck';
+    y.shortRows = { frontCo: dim(40), pairs: dim(34), first: dim(1), step: dim(1) };
+  });
 const yokeOf = (p: Project) => p.panels.find((x) => x.yoke)!;
 const notInfo = (cs: Check[]) => cs.filter((c) => c.issue.severity !== 'info');
 
 describe('knock-on folding: a yoke that cannot be computed', () => {
-  for (const [method, failing] of [['contiguous', ['4XS', '3XS', '2XS', 'XS']], ['raglan', ['4XS', '3XS', '2XS', 'XS', 'S', 'M', 'L', '1X']]] as const) {
-    it(`${method}: a 25 cm V is one error row (the yoke's), its knock-ons folded under it`, () => {
-      const p = deepV(method);
+  for (const [method, failing] of [['contiguous', ['4XS', '3XS', '2XS']], ['raglan', ['4XS', '3XS', '2XS', 'XS', 'S', 'M']]] as const) {
+    it(`${method}: short rows below the split are one error row (the yoke's), its knock-ons folded under it`, () => {
+      const p = deepShortRows(method);
       const yoke = yokeOf(p);
       const checks = projectChecks(p);
       // No internal names reach the user.
@@ -30,7 +36,7 @@ describe('knock-on folding: a yoke that cannot be computed', () => {
       expect(errorRows).toHaveLength(1);
       const root = errorRows[0];
       expect(root.panelId).toBe(yoke.id);
-      expect(root.issue.code).toBe('yoke.neck-below-split');
+      expect(root.issue.code).toBe('yoke.short-rows-below-split');
       expect(root.sizes.map((s) => s.name)).toEqual(failing);
       // Back, Front, both sleeves, and the joins that measure the yoke and the body.
       const where = root.knockOns.map((k) => (k.issue.ref.kind === 'join' ? 'join' : k.panelName));
@@ -41,7 +47,7 @@ describe('knock-on folding: a yoke that cannot be computed', () => {
     });
 
     it(`${method}: a piece waiting on the yoke reports one issue, without the "Unknown name" waypoint errors`, () => {
-      const p = deepV(method);
+      const p = deepShortRows(method);
       const s = sizeId(p, '4XS');
       const yokeIssue = computePanel(p, yokeOf(p), s).issues.find((i) => i.severity === 'error')!;
       for (const name of ['Back', 'Front', 'Left sleeve', 'Right sleeve']) {
@@ -55,7 +61,7 @@ describe('knock-on folding: a yoke that cannot be computed', () => {
   }
 
   it('keeps an independent problem on the same piece as a root of its own', () => {
-    const p0 = deepV('contiguous');
+    const p0 = deepShortRows('contiguous');
     const p = { ...p0, panels: p0.panels.map((x) => (x.name === 'Back' ? { ...x, waypoints: x.waypoints.map((w, i) => (i === 0 ? { ...w, height: dim('no_such_name') } : w)) } : x)) };
     const back = computePanel(p, p.panels.find((x) => x.name === 'Back')!, sizeId(p, '4XS'));
     const errors = back.issues.filter((i) => i.severity === 'error');
@@ -66,7 +72,7 @@ describe('knock-on folding: a yoke that cannot be computed', () => {
   });
 
   it('sizes where the yoke works have no knock-ons', () => {
-    const p = deepV('contiguous');
+    const p = deepShortRows('contiguous');
     expect(projectChecks(p).filter((c) => c.sizeName === 'M' && c.issue.causedBy)).toEqual([]);
   });
 });
@@ -140,14 +146,22 @@ describe('fixes on the yoke and neckline errors', () => {
   const needCm = (i: Issue | undefined) => Number(/([\d.]+) cm/.exec(i!.fix!.need!)![1]);
 
   for (const method of ['contiguous', 'raglan'] as const) {
-    it(`${method}: neck below the split names the depth field and its limit, which works`, () => {
-      const p = deepV(method);
-      const i = err(p, '4XS', 'yoke.neck-below-split')!;
-      expect(i.fix).toMatchObject({ now: '25 cm', fields: [{ target: 'yoke', key: 'neckDepth', label: 'Depth below the neck point' }, { key: 'extraDepth', label: 'Extra depth' }] });
-      expect(i.fix!.text).toMatch(/^Make Depth below the neck point at most [\d.]+ cm \(now 25 cm\), or add [\d.]+ cm to Extra depth\.$/);
-      const fixed = editYoke(p, (y) => void (y.neck.depth.overrides[sizeId(p, '4XS')] = needCm(i)));
-      expect(err(fixed, '4XS', 'yoke.neck-below-split')).toBeUndefined();
+    it(`${method}: short rows below the split name the pairs field and its limit, which works`, () => {
+      const p = deepShortRows(method);
+      const i = err(p, '4XS', 'yoke.short-rows-below-split')!;
+      expect(i.fix).toMatchObject({ now: '34', fields: [{ target: 'yoke', key: 'srPairs', label: 'Short-row pairs' }, { key: 'extraDepth', label: 'Extra depth' }] });
+      expect(i.fix!.text).toMatch(/^Make Short-row pairs at most \d+ \(now 34\), or add [\d.]+ cm to Extra depth\.$/);
+      const most = Number(/≤ (\d+)/.exec(i.fix!.need!)![1]);
+      const fixed = editYoke(p, (y) => void (y.shortRows!.pairs.overrides[sizeId(p, '4XS')] = most));
+      expect(err(fixed, '4XS', 'yoke.short-rows-below-split')).toBeUndefined();
       expect(computePanel(fixed, yokeOf(fixed), sizeId(p, '4XS')).ok).toBe(true);
+    });
+
+    it(`${method}: a 25 cm V is no error: the neck continues into the front body`, () => {
+      const p = editYoke(build(method), (y) => void (y.neck.depth = dim(25)));
+      const i = computePanel(p, yokeOf(p), sizeId(p, '4XS')).issues.find((x) => x.code === 'yoke.neck-continues')!;
+      expect(i.severity).toBe('info');
+      expect(projectChecks(p).filter((c) => c.issue.severity === 'error')).toEqual([]);
     });
   }
 

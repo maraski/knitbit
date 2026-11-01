@@ -278,14 +278,21 @@ export function NeckWorked({ y, cardigan, rpc }: { y: NonNullable<PropsContext['
         Increases at each front edge: (neck width − centre) / 2 = ({n.backNeck} − {n.centre}) / 2 = <b>{n.perSide}</b>
         {n.perSide ? `, on rows ${y.rows.filter((r) => r.neck).map((r) => r.row).join(', ')}` : ''}.
       </div>
+      {y.neckContinues && (
+        <div>
+          The split is row {y.counts.total}: the neck is still open there. The front body works the last <b>{y.neckContinues.perSide}</b> increases each side
+          {y.neckContinues.perSide ? ` (rows ${y.neckContinues.increaseRows.map((r) => r + y.counts.total).join(', ')}, counting on from the yoke)` : ''} and closes the neck on row {n.row}
+          {cardigan ? '' : ', worked flat (the back too) until then'}.
+        </div>
+      )}
       {cardigan ? (
         <div>
-          Each front casts on (centre − closing_r) / 2 = ({n.centre} − {n.closingSts}) / 2 = <b>{n.frontEdgeCo}</b> sts at its front edge (right front on row {n.row}, left front on row {n.row + 1}); the
+          Each front casts on (centre − closing_r) / 2 = ({n.centre} − {n.closingSts}) / 2 = <b>{n.frontEdgeCo}</b> sts at its front edge ({y.neckContinues ? 'on the front body' : `right front on row ${n.row}, left front on row ${n.row + 1}`}); the
           fronts stay open, flat to the split.
         </div>
       ) : (
         <div>
-          Cast on <b>{n.centre}</b> sts at centre front at the end of row {n.row} (neck width − 2 × increases = {n.backNeck} − 2 × {n.perSide}) and join in the round.
+          Cast on <b>{n.centre}</b> sts at centre front at the end of row {n.row}{y.neckContinues ? ' (on the front body)' : ''} (neck width − 2 × increases = {n.backNeck} − 2 × {n.perSide}) and join in the round.
         </div>
       )}
     </div>

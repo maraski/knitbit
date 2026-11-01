@@ -60,11 +60,21 @@ describe('contiguous checks', () => {
 
   it('reports the generator problems (rows that do not fit, counts) through the yoke panel', () => {
     const p = garment((y) => {
+      y.shortRows!.pairs = dim(30);
+      y.shortRows!.step = dim(2);
+    });
+    const all = projectChecks(p).filter((c) => c.sizeName === 'M' && c.issue.severity === 'error').map((c) => c.issue.message);
+    expect(all.some((x) => /^Short rows: 30 pairs 2 sts apart don't fit/.test(x))).toBe(true);
+  });
+
+  it('a front neck deeper than the split is no error: an info on the yoke, the front body works the rest', () => {
+    const p = garment((y) => {
       back(y);
       y.neck = { ...y.neck, shape: 'v', depth: dim(40) };
     });
-    const all = projectChecks(p).filter((c) => c.sizeName === 'M').map((c) => c.issue.message);
-    expect(all.some((x) => /front neck closes on row \d+, below the underarm split/.test(x))).toBe(true);
+    const m = projectChecks(p).filter((c) => c.sizeName === 'M');
+    expect(m.filter((c) => c.issue.severity === 'error')).toEqual([]);
+    expect(m.some((c) => c.panelName === 'Yoke' && /^The front neck continues \d+ rows \([\d.]+ cm\) into the front body/.test(c.issue.message))).toBe(true);
   });
 
   it('has no warnings for the defaults in M (both starts)', () => {

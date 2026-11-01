@@ -76,6 +76,11 @@ export function YokeKey({ project, computed: c, units, fold, front = false }: { 
             : `${y.counts.joinRow ? 'neck joined in the round' : 'neck cast on at the front edges'} · row ${y.counts.neckRow}`}
         </div>
       )}
+      {y.neckContinues && (
+        <div>
+          neck continues into the front body ({y.neckContinues.rows} rows{y.neckContinues.perSide ? `, ${y.neckContinues.perSide} more increases each side` : ''})
+        </div>
+      )}
       <div>
         Split after row <b>{y.counts.total}</b>: sleeves {y.held.leftSleeve} sts on hold, body {y.held.body} + 2 × {y.underarmCo} cast on
       </div>

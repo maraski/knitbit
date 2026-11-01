@@ -94,7 +94,8 @@ function yokeEdge(c: ComputedPanel, e: EdgeKey, perRow: number): Omit<EdgeMeasur
     // Whole-neck start: the neck is the cast-on (the short rows turn inside the fabric, not at its edge).
     return { rows: 0, stitches: y.castOn, lengthCm: y.castOn / spc, pickup: y.castOn, parts: [`cast-on ${y.castOn} sts (the whole neck)`] };
   }
-  const slopeRows = Math.max(0, Math.min(R, Y) - 1);
+  // A neck deeper than the split: the slopes run to the split (the front body carries on with them).
+  const slopeRows = Math.max(0, y.neckContinues ? Y : Math.min(R, Y) - 1);
   const perSide = y.rows.filter((r) => r.neck).length;
   const castOns = y.rows.filter((r) => r.row >= R).flatMap((r) => r.castOns).reduce((a, co) => a + co.count, 0);
   const slopeCm = Math.hypot(slopeRows / rpc, perSide / spc);
@@ -170,7 +171,25 @@ export function measureEdge(
 
   if (c.yoke && (e.kind === 'front' || e.kind === 'neck')) {
     const m = yokeEdge(c, e, perRow);
-    return 'error' in m ? blankMeasure(label, m.error) : { ok: true, label, ...m, rowRange: null };
+    if ('error' in m) return blankMeasure(label, m.error);
+    if (e.kind === 'neck' && c.yoke.neckContinues) {
+      // The neck carries on into the front body: its neck edges (and the centre or front-edge cast-ons) are part of it.
+      const fronts = project.panels.filter((p) => p.fromYoke === 'front').map((p) => measureEdge(project, { panelId: p.id, edge: { kind: 'neck' } }, sizeId, ratio, cache));
+      if (!fronts.length) return { ok: true, label, ...m, parts: [...m.parts, 'the rest of the neck is worked on the front body (not made yet)'], rowRange: null };
+      const bad = fronts.find((f) => !f.ok);
+      if (bad) return { ...bad, label };
+      return {
+        ok: true,
+        label,
+        rows: m.rows + fronts.reduce((a, f) => a + f.rows, 0),
+        stitches: m.stitches + fronts.reduce((a, f) => a + f.stitches, 0),
+        lengthCm: m.lengthCm + fronts.reduce((a, f) => a + f.lengthCm, 0),
+        pickup: m.pickup + fronts.reduce((a, f) => a + f.pickup, 0),
+        parts: [...m.parts, ...fronts.map((f) => `${f.label}: ${f.parts.join(', ')}`)],
+        rowRange: null,
+      };
+    }
+    return { ok: true, label, ...m, rowRange: null };
   }
 
   if (e.kind === 'front') {

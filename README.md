@@ -289,7 +289,7 @@ Waypoint dimensions and custom measurements are expressions. They evaluate to **
 | Cuff band | `cuff_depth`: the cuff rib knit with the sleeves (cm; 0 when it is picked up later or off); see Sleeve lengths |
 | Cardigan bands | `band_w` (front band width), `band_overlap`, `closing_r` (width taken off the whole front); 0 without bands (see Cardigan bands and buttons) |
 | Joined edges | `edge_len` (cm), `edge_rows`, `edge_pickup` (sts at the join's ratio): the edges a strip is joined to, e.g. a band's `edge_pickup * st_w` |
-| Contiguous yoke | `yoke.back_w`, `yoke.front_w`, `yoke.sleeve_w` (held stitches + underarm cast-on share, cm), `yoke.underarm_co` (cm), `yoke.depth` (neck to split, cm); see Contiguous yoke |
+| Contiguous yoke | `yoke.back_w`, `yoke.front_w`, `yoke.sleeve_w` (held stitches + underarm cast-on share, cm), `yoke.underarm_co` (cm), `yoke.depth` (neck to split, cm); a front neck deeper than the split: `yoke.neck_rows` (rows it continues below the split), `yoke.neck_per_side` (increases still to make, each side), `yoke.neck_centre` (the centre cast-on, sts; a cardigan's: both front-edge cast-ons and the closing), all 0 when the neck closes in the yoke; see Contiguous yoke |
 
 Examples:
 
@@ -518,7 +518,9 @@ Vertical bust darts start at the waist.
    underarm, **half on the front and half on the back**, a whole number of stitches per side so both match. The
    armholes increase from `armhole_end` (`armhole_depth × 0.6` back, `× 0.75` front above the underarm) to there.
 4. **In the round** below the underarm (pullovers): the round starts only when the underarms are joined **and** the
-   neck is closed; a deep V that closes below the underarm keeps the body flat until then (noted in the checks).
+   neck is closed; a deep V that closes below the underarm keeps the body flat until then (noted in the checks). The
+   check that joined panels have the same rounds counts them from the latest first round (where the neck closes), so
+   a deep neck doesn't warn.
 5. Bust and waist shaping as usual.
 
 The set adds two ordinary, editable joins: *Front shoulders picked up from the back* (pick up, with the stitch count)
@@ -834,7 +836,7 @@ nothing a second time:
 | Panel | Starts with (`underarm` width) | Below |
 |---|---|---|
 | Back | the yoke's back + half the underarm cast-on each side (`yoke.back_w`) | waist and hem as the bodice template |
-| Front (pullover) | both fronts + the centre cast-on + half the cast-on each side (`yoke.front_w`) | the same, with bust shaping |
+| Front (pullover) | both fronts + the centre cast-on + half the cast-on each side (`yoke.front_w`; the whole front, also while the neck is still open) | the same, with bust shaping |
 | Left / Right front (cardigan) | each front + its half of the cast-on; `yoke.front_w` describes the whole front, so each half rounds to exactly that | a mirrored pair, as in Panels mode |
 | Left / right sleeve | the held sleeve + the whole underarm cast-on (`yoke.sleeve_w`) | tapering to `wrist + ease.wrist` at `arm_length` |
 
@@ -877,13 +879,32 @@ The properties show the numbers, e.g. M, round: *Neck row R = depth × row gauge
 - **pullover:** cast on the centre (13 sts) at the end of row R and join in the round; the yoke is in rounds after;
 - **cardigan:** each front casts on (centre − `closing_r`) / 2 at its front edge (the right front on row R, the left
   front on row R + 1) and the fronts stay open, flat to the split.
+- **deeper than the split:** see below.
 
-V is all increases (no centre, or one stitch), square all centre, boat wide and shallow, mostly centre. A neck that would close
-below the split is an error.
+V is all increases (no centre, or one stitch), square all centre, boat wide and shallow, mostly centre.
+
+**A neck deeper than the split** (back-neck start, contiguous or Classic raglan; e.g. a 25 cm V in 4XS–XS) carries on
+into the front body, as a knitter works it. The yoke works the neck increases up to the split and splits as usual; the
+front stays open. An info says how: *The front neck continues 17 rows (5.7 cm) into the front body: 2 more increases
+each side, then join in the round* (a cardigan: *then cast on 2 sts at each front edge*), and the top and laid-flat
+views and the key label it *neck continues into the front body (17 rows)*. The result's `neckContinues` holds the rows
+below the split, the increases per side still to make, their rows (counted from the body's row 1), the centre and a
+cardigan's front-edge cast-on; the `yoke.neck_*` names carry them to the body.
+The Front (or each cardigan front) from the yoke then has a neck at its top without adding one: the yoke's shape,
+`yoke.neck_rows` deep, as wide as the opening at the split, with the increases on the yoke's planned rows, then the
+centre cast-on (a cardigan: the front-edge cast-on at each front edge). A pullover body is worked flat (back and front
+together, the front open) until the neck closes, then in the round; the Back's properties and the Front's say from
+which row. Saved projects pick this up as they are (the neck is worked out per size; a size whose neck closes in the
+yoke is unchanged). A Front with a neckline of its own keeps it. Notes: bust short rows that start while the front is
+still open (*each side turns on its own*); a warning when the neck is still open less than 2 cm above the hem.
+A cardigan whose neck closes on the split row itself (the left front's cast-on would be the row after it) casts on
+both fronts on the body's first row. Whole-neck short rows that end below the split are still an error (the modified
+raglan's deep neck is a later milestone).
 
 **Cardigan edges on a contiguous yoke.** The yoke has a neck edge (cast-on, two neck slopes, and the centre or
 front-edge cast-ons) and, on a cardigan, a left and a right front edge (`{ "kind": "front", "side": "left" }`) from
-the neck cast-on down to the split. The neckband is picked up around the yoke's neck; a band runs up the front
+the neck cast-on down to the split. The neckband is picked up around the yoke's neck (a neck deeper than the split:
+the yoke's slopes down to the split plus the front body's neck edges and cast-ons, so the pick-up count spans both); a band runs up the front
 panel's edge and on up the yoke's front edge to the neck (a continuous band: up the right front, around the yoke
 neck, down the left). Buttons are spaced over the whole front edge, hem to neck: those above the front panels are
 drawn on the yoke's top view, at the front edges, and can be dragged there. Integrated bands aren't worked into a
@@ -902,8 +923,8 @@ contiguous yoke yet (a warning says so).
   *the cap may look flat* when most armhole rows are rapid;
 - *warning:* a body or sleeve panel that no longer starts with the held stitches plus the underarm cast-on (after
   editing its widths);
-- from the generator: rows that don't fit (shoulders, armhole, neck below the split, body increases), zero or
-  negative counts, the sleeve or body not reaching its width, odd cap tops, and how far the yoke was deepened.
+- from the generator: rows that don't fit (shoulders, armhole, short rows below the split, body increases), zero or
+  negative counts, a neck that continues into the front body (info), the sleeve or body not reaching its width, odd cap tops, and how far the yoke was deepened.
 
 **Bust from the top.** The front's bust point is `underarm.height + yoke.depth − (hps_to_apex − bust_apex_corr)` up
 from the hem: measured down from the neck point, where the fronts begin. Short rows add the length; the bust helper
@@ -912,7 +933,7 @@ doesn't add side width at the underarm (the yoke sets it).
 Body increases bring the body at the underarm (cast-ons included) to `upper_chest + ease`; without them the underarm
 cast-on is (body target − yoke body) / 2. The result lists every row's zone counts, increases (with positions and
 symbols), cast-ons and marker moves, a phase table, the held edges, and warnings (e.g. a sleeve that can't reach its
-width, a cap that is mostly rapid, a neck that closes below the split).
+width, a cap that is mostly rapid, a neck that continues into the front body).
 
 
 ## Raglan yoke (generator)
@@ -1102,21 +1123,22 @@ measures fails). Only issues caused by a failed source are folded: a separate pr
 row.
 
 **Counting.** The pills count root causes per size: knock-ons whose root is in the list aren't counted again. Example
-(sample table, 22 × 30): New garment → Contiguous yoke, V, pullover, yoke *Depth below the neck point* = 25 cm shows
-**4 errors · 5 warnings** (one error row for 4XS–XS, with 10 knock-ons folded under it; the warnings are the yoke's
-own armhole/body notes) where it used to show 36 errors · 29 warnings.
+(sample table, 22 × 30): modified raglan, round, 34 short-row pairs on a 40 cm front cast-on shows one error row for
+4XS–2XS (the short rows end below the split) with the Back, Front, sleeves and joins folded under it. (A 25 cm V on
+the contiguous yoke, the example this was built with, is no longer an error at all: the neck continues into the
+front body, 0 errors · 5 warnings, the warnings the yoke's own armhole/body notes.)
 
 **Fix.** Some issues say what to change, under the message: the field (by its label in the properties), this size's
 value and what it needs, per size when the sizes differ (*Fix: Make Depth below the neck point at most 19 cm (now
 25 cm), or add 5.7 cm to Extra depth. Depth below the neck point: ≤ 19 cm (4XS) · ≤ 20.3 cm (3XS) · …*). So far: the
-yoke's neck or short rows ending below the split, short rows that don't fit in the front, the shoulder phase with no
+yoke's short rows ending below the split, short rows that don't fit in the front, the shoulder phase with no
 rows, and a neckline wider than the panel's top.
 
 **The issue model** (`Issue` in `panel.ts`; `message` and `ref` as always):
 
 | Field | Meaning |
 |---|---|
-| `code` | stable id of the kind of problem: `yoke.neck-below-split`, `yoke.short-rows-below-split`, `yoke.short-rows-fit`, `yoke.shoulder-phase`, `yoke.band-below-split`, `neckline.wider-than-top`, `knock-on.yoke` / `.armhole` / `.edge` / `.join` |
+| `code` | stable id of the kind of problem: `yoke.neck-continues` (info), `body.flat-until-neck` (info), `body.neck-near-hem`, `bust.open-front` (info), `yoke.short-rows-below-split`, `yoke.short-rows-fit`, `yoke.shoulder-phase`, `yoke.band-below-split`, `neckline.wider-than-top`, `knock-on.yoke` / `.armhole` / `.edge` / `.join` |
 | `fix` | `{ text, fields: FieldRef[], now?, need?, apply? }`: what to change; `fields` name the yoke param (`YokeResult.params` key), neckline field, waypoint …; `apply` is reserved for a one-click change |
 | `causedBy` | the root issue's key (`issueKey(panelId, issue)`: panel, ref, severity and the message with its numbers left out), for a knock-on |
 

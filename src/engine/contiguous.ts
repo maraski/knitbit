@@ -131,6 +131,10 @@ export interface YokeResult {
   /** The front neck as worked: depth in rows (before making it a RS row), the cast-on row, increases per side,
    * the centre (pullover cast-on), and a cardigan's cast-on at each front edge less the closing width. */
   neck: { depthRows: number; row: number; perSide: number; backNeck: number; centre: number; closingSts: number; frontEdgeCo: number };
+  /** A back-start front neck deeper than the split: the front body works the rest. `rows` from the split to the
+   * closing row (the body's rows 1..rows), the increases per side still to make on the body's `increaseRows`, then the
+   * pullover's centre cast-on or a cardigan's cast-on at each front edge. Absent when the neck closes in the yoke. */
+  neckContinues?: { rows: number; perSide: number; centre: number; frontEdgeCo: number; increaseRows: number[] };
   derived: {
     seamCm: number;
     backEndOfACm: number;
@@ -260,30 +264,48 @@ export function shortRowsFitFix(pairs: number, side: number, first: number, step
 }
 
 /**
- * A front neck (or short rows) ending on row R, below the split on row Y: the deepest neck (or most pairs) that ends
- * by row Y, or how much deeper the yoke must be. The neck closes on an odd row (R = its rows, made odd), the short
- * rows on row 2 × pairs + 1.
+ * Short rows ending on row R, below the split on row Y (whole-neck start): the most pairs that end by row Y (the short
+ * rows end on row 2 × pairs + 1), or how much deeper the yoke must be. (A front neck deeper than the split isn't an
+ * error: it continues into the front body, see `neckContinuation`.)
  */
-export function belowSplitFix(R: number, Y: number, rpc: number, shortRows: { pairs: number } | null, depthCm: number, boat: boolean): Omit<YokeIssue, 'message'> {
+export function belowSplitFix(R: number, Y: number, rpc: number, pairs: number): Omit<YokeIssue, 'message'> {
   const deeper = cmText(Math.ceil(((R - Y) / rpc) * 10) / 10);
-  const extra = { target: 'yoke' as const, key: 'extraDepth', label: 'Extra depth' };
-  if (shortRows) {
-    const most = Math.max(0, Math.floor((Y - 1) / 2));
-    return {
-      severity: 'error',
-      code: 'yoke.short-rows-below-split',
-      param: 'srPairs',
-      fix: { text: `Make Short-row pairs at most ${most} (now ${shortRows.pairs}), or add ${deeper} to Extra depth.`, fields: [{ target: 'yoke', key: 'srPairs', label: 'Short-row pairs' }, extra], now: String(shortRows.pairs), need: `≤ ${most}` },
-    };
-  }
-  const label = boat ? 'Front depth, from the strap top' : 'Depth below the neck point';
-  const most = cmText(Math.floor(((Y % 2 === 1 ? Y : Y - 1) / rpc) * 10) / 10);
+  const most = Math.max(0, Math.floor((Y - 1) / 2));
   return {
     severity: 'error',
-    code: 'yoke.neck-below-split',
-    param: 'neckDepth',
-    fix: { text: `Make ${label} at most ${most} (now ${cmText(depthCm)}), or add ${deeper} to Extra depth.`, fields: [{ target: 'yoke', key: 'neckDepth', label }, extra], now: cmText(depthCm), need: `≤ ${most}` },
+    code: 'yoke.short-rows-below-split',
+    param: 'srPairs',
+    fix: { text: `Make Short-row pairs at most ${most} (now ${pairs}), or add ${deeper} to Extra depth.`, fields: [{ target: 'yoke', key: 'srPairs', label: 'Short-row pairs' }, { target: 'yoke', key: 'extraDepth', label: 'Extra depth' }], now: String(pairs), need: `≤ ${most}` },
   };
+}
+
+/**
+ * A back-start front neck that closes on row R, below the split on row Y: the yoke works its increases up to the split
+ * and the front body carries on with the rest, renumbered from the body's row 1, then the centre cast-on (a pullover
+ * joins in the round there) or a cardigan's front-edge cast-ons. Its info says so.
+ */
+export function neckContinuation(R: number, Y: number, rpc: number, neckRows: number[], centre: number, frontEdgeCo: number, cardigan: boolean): { neckContinues: NonNullable<YokeResult['neckContinues']>; issue: YokeIssue } {
+  const increaseRows = neckRows.filter((r) => r > Y && r < R).map((r) => r - Y).sort((a, b) => a - b);
+  // A cardigan closing on the split row itself: both front-edge cast-ons move to the body's first row.
+  const rows = Math.max(1, R - Y);
+  const n = increaseRows.length;
+  const more = n ? `${n} more increase${n === 1 ? '' : 's'} each side, then ` : '';
+  const close = cardigan ? (frontEdgeCo > 0 ? `cast on ${frontEdgeCo} sts at each front edge` : 'the fronts are straight from there') : centre > 0 ? `cast on ${centre} sts and join in the round` : 'join in the round';
+  return {
+    neckContinues: { rows, perSide: n, centre, frontEdgeCo, increaseRows },
+    issue: { severity: 'info', code: 'yoke.neck-continues', param: 'neckDepth', message: `The front neck continues ${rows} row${rows === 1 ? '' : 's'} (${cmText(Math.round((rows / rpc) * 10) / 10)}) into the front body: ${more}${close}.` },
+  };
+}
+
+/** The back-start front neck isn't closed at the split: it closes below it, or a cardigan's left front-edge cast-on (the
+ * row after the right's) would fall after it. */
+export function continuesPast(R: number, Y: number, cardigan: boolean, frontEdgeCo: number): boolean {
+  return R > Y || (cardigan && R === Y && frontEdgeCo > 0);
+}
+
+/** Stitches the front body still adds to the front at the split (the neck's remaining increases and its cast-ons). */
+export function neckRest(nc: YokeResult['neckContinues'], cardigan: boolean): number {
+  return !nc ? 0 : 2 * nc.perSide + (cardigan ? 2 * nc.frontEdgeCo : nc.centre);
 }
 
 // ---------- generator ----------
@@ -547,7 +569,13 @@ export function generateYoke(project: Project, spec: YokeSpec, sizeId: Id): Yoke
     const have = plan.sleeveMax + N;
     issues.push({ severity: 'warning', message: `The sleeve reaches ${have} sts (${(have / spc).toFixed(1)} cm) at the underarm, ${sleeveTarget + N - have} sts short of its width: ${spec.cap.solve ? 'even with every armhole row rapid. Deepen the yoke or cast on more at the underarm' : 'lengthen the rapid phase (or let it solve)'}.` });
   }
-  if (R > Y) issues.push({ ...belowSplitFix(R, Y, rpc, shortRows, depthCm, spec.neck.shape === 'boat'), message: shortRows ? `The short rows end on row ${R}, below the underarm split (row ${Y}). Fewer pairs or a deeper yoke.` : `The front neck closes on row ${R}, below the underarm split (row ${Y}). Make the neck shallower or the yoke deeper.` });
+  let neckContinues: YokeResult['neckContinues'];
+  if (R > Y && shortRows) issues.push({ ...belowSplitFix(R, Y, rpc, shortRows.pairs), message: `The short rows end on row ${R}, below the underarm split (row ${Y}). Fewer pairs or a deeper yoke.` });
+  else if (!wholeNeck && continuesPast(R, Y, cardigan, frontEdgeCo)) {
+    const c = neckContinuation(R, Y, rpc, neckRows, centre, frontEdgeCo, cardigan);
+    neckContinues = c.neckContinues;
+    issues.push(c.issue);
+  }
   const E = Math.max(0, Y - A - C - D);
   const bodySet = new Set(bodyRows);
   const dSet = new Set(dRows);
@@ -613,7 +641,7 @@ export function generateYoke(project: Project, spec: YokeSpec, sizeId: Id): Yoke
       }
     }
     // Front neck closes: pullover casts on the centre and joins; a cardigan casts on at each front edge.
-    if (r === R && !wholeNeck) {
+    if (r === R && !wholeNeck && !neckContinues) {
       if (!cardigan) {
         const half = Math.floor(centre / 2);
         z.leftFront += half;
@@ -633,7 +661,6 @@ export function generateYoke(project: Project, spec: YokeSpec, sizeId: Id): Yoke
     rows.push(row);
     if (r === A) endOfA = { ...z };
   }
-  if (cardigan && R === Y && frontEdgeCo > 0) issues.push({ severity: 'warning', message: 'The left front edge cast-on falls after the split.' });
 
   // ---- results ----
   for (const row of rows) {
@@ -661,7 +688,8 @@ export function generateYoke(project: Project, spec: YokeSpec, sizeId: Id): Yoke
   if (bIncRows.length && bPer) add('B', 'Back neck', 1, Math.min(bIncRows[bIncRows.length - 1], Y), `${bPer} every 2nd row (with A)`);
   if (shortRows) {
     if (shortRows.pairs) add('neck', 'Short rows (neck)', 1, Math.min(R, Y), `${shortRows.pairs} pairs, German short rows${cardigan ? '' : ', then in the round'}`);
-  } else if (perSide > 0 || R <= Y) add('neck', cardigan ? 'Front neck (open)' : 'Front neck, joined', 1, Math.min(R, Y), `${perSide} per side${cardigan ? '' : `, cast on ${centre}`}`);
+  } else if (neckContinues) add('neck', 'Front neck, continues into the body', 1, Y, `${perSide - neckContinues.perSide} of ${perSide} per side`);
+  else if (perSide > 0 || R <= Y) add('neck', cardigan ? 'Front neck (open)' : 'Front neck, joined', 1, Math.min(R, Y), `${perSide} per side${cardigan ? '' : `, cast on ${centre}`}`);
   add('C', 'Cap, rapid', A + 1, A + C, '4 every row');
   add('D', 'Cap, slow', A + C + 1, A + C + D, '4 every 2nd row');
   add('E', 'Armhole, straight', A + C + D + 1, Y, perEdge ? `body: ${perEdge} per edge` : 'none');
@@ -690,12 +718,13 @@ export function generateYoke(project: Project, spec: YokeSpec, sizeId: Id): Yoke
     bodyIncs: { perEdge, rows: bodyRows },
     endOfA,
     neck: { depthRows, row: R, perSide, backNeck: bn, centre, closingSts, frontEdgeCo },
+    ...(neckContinues ? { neckContinues } : {}),
     derived: {
       seamCm,
       backEndOfACm: endOfA.back / spc,
       frontEndOfACm: (endOfA.leftFront + endOfA.rightFront + gapAtA) / spc,
       sleeveCm: (held.leftSleeve + N) / spc,
-      bodyCm: (held.body + 2 * N) / spc,
+      bodyCm: (held.body + 2 * N + neckRest(neckContinues, cardigan)) / spc,
       armholeCm: 2 * edgeLen + (capTopSts + N) / spc,
       backLengthCm: Y / rpc,
     },
@@ -756,14 +785,19 @@ export function yokePanel(shape: NecklineShape = 'round', start?: YokeStart): Pa
 
 // ---------- names for the panels that continue from the yoke ----------
 
-/** `yoke.*` names: each held part plus its share of the underarm cast-on, as widths (cm), and the yoke depth. */
-export const YOKE_NAMES = ['yoke.back_w', 'yoke.front_w', 'yoke.sleeve_w', 'yoke.underarm_co', 'yoke.depth'] as const;
+/** `yoke.*` names: each held part plus its share of the underarm cast-on, as widths (cm), the yoke depth, and a front
+ * neck that continues into the front body: its rows below the split, increases per side and centre (rows, sts; 0 when
+ * the neck closes in the yoke). */
+export const YOKE_NAMES = ['yoke.back_w', 'yoke.front_w', 'yoke.sleeve_w', 'yoke.underarm_co', 'yoke.depth', 'yoke.neck_rows', 'yoke.neck_per_side', 'yoke.neck_centre'] as const;
 
 /**
  * Values of the `yoke.*` names in one size, from the project's contiguous yoke: the back and front at the split with
  * half the underarm cast-on at each side, the sleeve with the whole cast-on, and the yoke's depth (rows from the neck).
  * A cardigan front is described as the whole front (both halves), as cardigan fronts are, so that each half rounds to
- * exactly the yoke's front plus its cast-on.
+ * exactly the yoke's front plus its cast-on. A front neck that continues into the body still counts in the front's
+ * width (its remaining increases and the centre, or a cardigan's front-edge cast-ons): the body works them.
+ * `yoke.neck_centre` is the whole front's centre (a cardigan's: both front-edge cast-ons and the closing between them,
+ * less the two edge stitches, which the fronts keep as their front-edge selvedges).
  */
 export function yokeNames(project: Project, sizeId: Id): { values: Record<string, number> } | { error: string; source?: { panel: Panel; yoke: YokeResult } } {
   const panel = project.panels.find((p) => p.yoke);
@@ -777,9 +811,11 @@ export function yokeNames(project: Project, sizeId: Id): { values: Record<string
   const frontHalf = N - backHalf;
   const cardigan = project.garment.opening === 'cardigan';
   const closing = cardigan ? buildScope(project, sizeId).closing_r ?? 0 : 0;
+  const nc = y.neckContinues;
+  const centre = !nc ? 0 : cardigan ? Math.max(0, 2 * nc.frontEdgeCo + y.neck.closingSts - 2) : nc.centre;
   const front = cardigan
-    ? 2 * (last.leftFront + frontHalf - 1) / spc + closing // the edge stitch is the front-edge selvedge
-    : (last.leftFront + last.rightFront + 2 * frontHalf) / spc;
+    ? 2 * (last.leftFront + neckRest(nc, true) / 2 + frontHalf - 1) / spc + closing // the edge stitch is the front-edge selvedge
+    : (last.leftFront + last.rightFront + neckRest(nc, false) + 2 * frontHalf) / spc;
   return {
     values: {
       'yoke.back_w': (last.back + 2 * backHalf) / spc,
@@ -787,6 +823,20 @@ export function yokeNames(project: Project, sizeId: Id): { values: Record<string
       'yoke.sleeve_w': (last.leftSleeve + N) / spc,
       'yoke.underarm_co': N / spc,
       'yoke.depth': y.rows.length / y.rowsPerCm,
+      'yoke.neck_rows': nc?.rows ?? 0,
+      'yoke.neck_per_side': nc?.perSide ?? 0,
+      'yoke.neck_centre': centre,
     },
   };
+}
+
+/**
+ * The front neck in one size when it continues past the yoke's split (null when it closes in the yoke, or the yoke
+ * fails): what the body pieces from the yoke work at their top, and the neck's shape.
+ */
+export function yokeNeckContinues(project: Project, sizeId: Id): { neck: NonNullable<YokeResult['neckContinues']>; shape: NecklineShape } | null {
+  const panel = project.panels.find((p) => p.yoke);
+  if (!panel) return null;
+  const y = generateYoke(project, panel.yoke!, sizeId);
+  return y.ok && y.neckContinues ? { neck: y.neckContinues, shape: panel.yoke!.neck.shape } : null;
 }

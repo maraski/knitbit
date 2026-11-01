@@ -250,9 +250,27 @@ describe('front neck', () => {
     expect(sq.rows[sq.counts.neckRow! - 1].castOns[0].count).toBe(Math.round(15 * spc));
   });
 
-  it('errors when the neck closes below the split', () => {
+  it('a neck deeper than the split: the yoke works the increases up to it, the rest continues into the front body', () => {
+    const full = gen({ neck: { shape: 'v', depth: dim(8.5), centre: dim(0) } });
     const y = gen({ neck: { shape: 'v', depth: dim(40), centre: dim(0) } });
-    expect(y.issues.some((i) => /closes on row \d+, below the underarm split/.test(i.message))).toBe(true);
+    const Y = y.counts.total;
+    const R = y.counts.neckRow!;
+    expect(R).toBeGreaterThan(Y);
+    expect(y.ok).toBe(true);
+    expect(y.issues.filter((i) => i.severity === 'error')).toEqual([]);
+    const nc = y.neckContinues!;
+    expect(nc.rows).toBe(R - Y);
+    // Every increase is made once: in the yoke up to the split, or on the body's rows after it.
+    const inYoke = y.rows.filter((r) => r.neck).length;
+    expect(inYoke + nc.perSide).toBe(y.neck.perSide);
+    expect(nc.increaseRows).toHaveLength(nc.perSide);
+    expect(nc.increaseRows.every((r) => r >= 1 && r < nc.rows)).toBe(true);
+    // No centre cast-on and no rounds in the yoke: it's flat to the split, the front still open.
+    expect(y.rows.some((r) => r.castOns.length || r.round)).toBe(false);
+    expect(y.issues).toContainEqual(expect.objectContaining({ severity: 'info', code: 'yoke.neck-continues', message: `The front neck continues ${nc.rows} rows (${Math.round((nc.rows / rpc) * 10) / 10} cm) into the front body: ${nc.perSide} more increases each side, then ${nc.centre ? `cast on ${nc.centre} sts and join` : 'join'} in the round.` }));
+    // The body at the underarm counts the whole front: the held stitches plus what the front body still adds.
+    expect(y.derived.bodyCm * spc).toBeCloseTo(y.held.body + 2 * y.underarmCo + 2 * nc.perSide + nc.centre, 5);
+    expect(full.neckContinues).toBeUndefined();
   });
 
   it('cardigan: flat throughout, each front casts on at its front edge (less the closing width)', () => {

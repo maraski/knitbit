@@ -20,7 +20,7 @@
 // takes it to the ring (front | arm arc | back | arm arc), optional German short rows raise the back, and then the
 // raglan rates are solved as above over the rest of the depth (armhole_depth − off_shoulder_drop + the back raise).
 
-import { belowSplitFix, defaultShortRows, shortRowsFitFix, defaultYoke, generateYoke, shortRowSpan, ZONES, type PhaseSummary, type YokeCastOn, type YokeInc, type YokeIssue, type YokeParam, type YokePhase, type YokeResult, type YokeRow, type ZoneCounts } from './contiguous';
+import { belowSplitFix, continuesPast, defaultShortRows, neckContinuation, neckRest, shortRowsFitFix, defaultYoke, generateYoke, shortRowSpan, ZONES, type PhaseSummary, type YokeCastOn, type YokeInc, type YokeIssue, type YokeParam, type YokePhase, type YokeResult, type YokeRow, type ZoneCounts } from './contiguous';
 import { plugIn } from './bust';
 import { distributeAcross } from './distribute';
 import { edgePattern, edgesOf } from './edgeTreatments';
@@ -162,7 +162,9 @@ export function generateRaglan(project: Project, spec: YokeSpec, sizeId: Id): Yo
   const wholeNeck = !!shortRows;
   const { perSide, centre, frontEdgeCo, row: R } = neck;
   const bn = neck.backNeck;
-  const neckSet = new Set(o ? [] : ny!.rows.filter((r) => r.neck).map((r) => r.row));
+  // Every front neck increase row, also those past the contiguous generator's own split.
+  const neckRows = o ? [] : [...ny!.rows.filter((r) => r.neck).map((r) => r.row), ...(ny!.neckContinues?.increaseRows ?? []).map((r) => r + ny!.rows.length)];
+  const neckSet = new Set(neckRows);
   const plain = o ? o.plain : new Set(ny!.rows.filter((r) => r.plain).map((r) => r.row));
   // The first row that can increase (off-shoulder: after the band and the increase round) and the short rows' first row.
   const first = o ? o.first : 1;
@@ -231,7 +233,12 @@ export function generateRaglan(project: Project, spec: YokeSpec, sizeId: Id): Yo
   const sleeveFast = Math.max(0, ns - slow.length);
   if (bodyFast) issues.push({ severity: 'info', message: `Body: every other row isn't enough, so ${bodyFast} of its ${nb} increase rows are the rows between (increasing on the body every row there).` });
   if (sleeveFast) issues.push({ severity: 'info', message: `Sleeves: every other row isn't enough, so ${sleeveFast} of their ${ns} increase rows are the rows between.` });
-  if (R > Y) issues.push({ ...(o ? { severity: 'error' as const, code: 'yoke.band-below-split' } : belowSplitFix(R, Y, rpc, shortRows, params.neckDepth?.value ?? 0, spec.neck.shape === 'boat')), message: o ? `The band${shortRows?.pairs ? ', increase round and short rows end' : ' and increase round end'} on row ${R}, below the underarm split (row ${Y}). A shallower band, fewer short rows or a smaller off_shoulder_drop.` : shortRows ? `The short rows end on row ${R}, below the underarm split (row ${Y}). Fewer pairs or a deeper raglan.` : `The front neck closes on row ${R}, below the underarm split (row ${Y}). Make the neck shallower or the raglan deeper.` });
+  let neckContinues: YokeResult['neckContinues'];
+  if (!o && !shortRows && continuesPast(R, Y, cardigan, frontEdgeCo)) {
+    const c = neckContinuation(R, Y, rpc, neckRows, centre, frontEdgeCo, cardigan);
+    neckContinues = c.neckContinues;
+    issues.push(c.issue);
+  } else if (R > Y) issues.push({ ...(o ? { severity: 'error' as const, code: 'yoke.band-below-split' } : belowSplitFix(R, Y, rpc, shortRows!.pairs)), message: o ? `The band${shortRows?.pairs ? ', increase round and short rows end' : ' and increase round end'} on row ${R}, below the underarm split (row ${Y}). A shallower band, fewer short rows or a smaller off_shoulder_drop.` : `The short rows end on row ${R}, below the underarm split (row ${Y}). Fewer pairs or a deeper raglan.` });
   const bodySet = new Set(bodyRows);
   const sleeveSet = new Set(sleeveRows);
   const lastInc = Math.max(0, ...bodyRows, ...sleeveRows);
@@ -279,7 +286,7 @@ export function generateRaglan(project: Project, spec: YokeSpec, sizeId: Id): Yo
         incs.push({ zone: sl, at: z[sl] - seam - 1, symbol: sym.before, kind: 'sleeve' });
       }
     }
-    if (r === R && !wholeNeck) {
+    if (r === R && !wholeNeck && !neckContinues) {
       if (!cardigan) {
         const half = Math.floor(centre / 2);
         z.leftFront += half;
@@ -300,7 +307,6 @@ export function generateRaglan(project: Project, spec: YokeSpec, sizeId: Id): Yo
     if (shortRows && r >= srFrom && r <= shortRows.endRow) Object.assign(row, shortRowSpan(shortRows, r - srFrom + 1, row, cardigan), plain.has(r) ? { plain: true } : {});
     rows.push(row);
   }
-  if (cardigan && R === Y && frontEdgeCo > 0) issues.push({ severity: 'warning', message: 'The left front edge cast-on falls after the split.' });
   if (rows.some((r) => r.total <= 0)) issues.push({ severity: 'error', message: 'A row has no stitches.' });
 
   const last = rows[rows.length - 1]?.zones ?? z;
@@ -326,7 +332,8 @@ export function generateRaglan(project: Project, spec: YokeSpec, sizeId: Id): Yo
     if (shortRows?.pairs) add('neck', 'Short rows (back raise)', srFrom, Math.min(shortRows.endRow, Y), `${shortRows.pairs} pairs, German short rows, then in the round`);
   } else if (shortRows) {
     if (shortRows.pairs) add('neck', 'Short rows (neck)', 1, Math.min(R, Y), `${shortRows.pairs} pairs, German short rows${cardigan ? '' : ', then in the round'}`);
-  } else if (perSide > 0 || R <= Y) add('neck', cardigan ? 'Front neck (open)' : 'Front neck, joined', 1, Math.min(R, Y), `${perSide} per side${cardigan ? '' : `, cast on ${centre}`}`);
+  } else if (neckContinues) add('neck', 'Front neck, continues into the body', 1, Y, `${perSide - neckContinues.perSide} of ${perSide} per side`);
+  else if (perSide > 0 || R <= Y) add('neck', cardigan ? 'Front neck (open)' : 'Front neck, joined', 1, Math.min(R, Y), `${perSide} per side${cardigan ? '' : `, cast on ${centre}`}`);
   const rate = (n: number, f: number) => `${n} rows${f ? ` (${f} of them between)` : ''}`;
   add('R', 'Raglan', first, lastInc, `body 4 on ${rate(nb, bodyFast)}, sleeves 4 on ${rate(ns, sleeveFast)}`);
   add('E', 'Straight to the split', Math.max(first, lastInc + 1), Y, 'none');
@@ -359,12 +366,13 @@ export function generateRaglan(project: Project, spec: YokeSpec, sizeId: Id): Yo
     bodyIncs: { perEdge: nb, rows: bodyRows },
     endOfA: { ...castOnZones },
     neck,
+    ...(neckContinues ? { neckContinues } : {}),
     derived: {
       seamCm: lineCm,
       backEndOfACm: bn / spc,
       frontEndOfACm: (FL + FR) / spc,
       sleeveCm: (held.leftSleeve + N) / spc,
-      bodyCm: (held.body + 2 * N) / spc,
+      bodyCm: (held.body + 2 * N + neckRest(neckContinues, cardigan)) / spc,
       armholeCm: 2 * lineCm + N / spc,
       backLengthCm: (Y - hidden) / rpc,
     },

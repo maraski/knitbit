@@ -449,6 +449,10 @@ function FrontSchematic({ y, g, S, labels, units }: { y: YokeResult; g: FrontGeo
       const s = joinRow ? (n.centre > 0 ? `row ${neckRow}: cast on ${n.centre}, join in the round` : `row ${neckRow}: join in the round`) : n.frontEdgeCo > 0 ? `rows ${neckRow}–${neckRow + 1}: cast on ${n.frontEdgeCo} at each front edge` : '';
       const q = S('front', 0, g.rows[neckRow].y0);
       if (s) t('neck', { x: q.x, y: q.y - 6 }, s, 'middle', 'yoke-note');
+    } else if (!sr && y.neckContinues) {
+      // The neck is still open at the split: the front body works the rest (under the split note).
+      const q = below('front');
+      t('neck', { x: q.x, y: q.y + 13 }, `neck continues into the front body (${y.neckContinues.rows} rows)`, 'middle', 'yoke-note');
     }
   }
   return (
