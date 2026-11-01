@@ -7,7 +7,7 @@ import { contiguousChecks } from './contiguousChecks';
 import { sleeveChecks } from './sleeveChecks';
 import type { Id, Project } from './model';
 import { computePanel, type Issue } from './panel';
-import { issueKey, type IssueFix } from './issues';
+import { field, fixOf, issueKey, type IssueFix } from './issues';
 
 export interface Check {
   panelId: Id;
@@ -41,7 +41,7 @@ export function projectChecks(project: Project): Check[] {
       if (new Set(rounds).size > 1) {
         const text = joined.map(({ panel }, i) => `${panel.name} ${rounds[i]}`).join(', ');
         for (const { panel } of joined) {
-          out.push({ panelId: panel.id, panelName: panel.name, sizeId: size.id, sizeName: size.name, issue: { severity: 'warning', message: `Panels joined in the round have different numbers of rounds below the join (${text}).`, ref: { kind: 'panel' } } });
+          out.push({ panelId: panel.id, panelName: panel.name, sizeId: size.id, sizeName: size.name, issue: { severity: 'error', code: 'joins.rounds-differ', message: `Panels joined in the round have different numbers of rounds below the join (${text}).`, ref: { kind: 'panel' }, fix: fixOf(`Make the join waypoint the same height on each joined piece (${joined.map(({ panel: q }) => q.name).join(', ')}), or work them flat.`, [field.panel('waypoints', 'Waypoints')], { now: text, need: 'the same rounds' }) } });
         }
       } else {
         // Same rounds: note when side shaping falls on different rounds (fine to knit, worth seeing).
@@ -52,7 +52,7 @@ export function projectChecks(project: Project): Check[] {
         });
         if (new Set(shapingRounds).size > 1) {
           const { panel } = joined[0];
-          out.push({ panelId: panel.id, panelName: panel.name, sizeId: size.id, sizeName: size.name, issue: { severity: 'info', message: `Joined panels shape their side seams on different rounds (${joined.map(({ panel }) => panel.name).join(', ')}).`, ref: { kind: 'panel' } } });
+          out.push({ panelId: panel.id, panelName: panel.name, sizeId: size.id, sizeName: size.name, issue: { severity: 'info', code: 'joins.shaping-rounds', message: `Joined panels shape their side seams on different rounds (${joined.map(({ panel }) => panel.name).join(', ')}).`, ref: { kind: 'panel' } } });
         }
       }
     }
@@ -115,19 +115,23 @@ function joinChecks(project: Project, sizeId: Id, sizeName: string, cache: Panel
     for (const m of [...r.a.measures, ...(r.b?.measures ?? [])]) {
       if (!m.ok) {
         // A panel that can't be computed: a knock-on of its root cause.
-        out.push({ ...base, issue: m.cause ? { severity: 'warning', code: 'knock-on.join', message: `${join.name}: ${m.label} can't be measured until that panel can be computed.`, ref, causedBy: m.cause.key } : { severity: 'warning', message: `${join.name}: ${m.label}: ${m.error}`, ref } });
+        // A knock-on takes its root's severity (counted once) and its fix.
+        const own = fixOf(`Check the edges of ${join.name} (Pieces → Joins).`, [{ target: 'join', id: join.id, key: 'edges', label: join.name }]);
+        out.push({ ...base, issue: m.cause ? { severity: 'error', code: 'knock-on.join', message: `${join.name}: ${m.label} can't be measured until that panel can be computed.`, ref, causedBy: m.cause.key, fix: m.cause.fix ?? own } : { severity: 'warning', code: 'join.measure', message: `${join.name}: ${m.label}: ${m.error}`, ref, fix: own } });
       }
     }
     if (join.tag === 'seam') {
       if (!join.partner.length || !join.edges.length) {
-        out.push({ ...base, issue: { severity: 'info', message: `${join.name}: seam has only one side; add the edge it is sewn to.`, ref } });
+        out.push({ ...base, issue: { severity: 'info', code: 'join.one-side', message: `${join.name}: seam has only one side; add the edge it is sewn to.`, ref } });
       } else if (r.a.ok && r.b?.ok && !r.withinTolerance) {
         out.push({
           ...base,
           issue: {
             severity: 'warning',
+            code: 'join.seam-differ',
             message: `${join.name}: the sides differ by ${Math.abs(r.diffCm).toFixed(1)} cm (${Math.abs(r.diffRows)} rows), more than the ${project.settings.seamToleranceCm} cm tolerance.`,
             ref,
+            fix: fixOf(`Make the two sides of ${join.name} the same length (the heights of the waypoints along one side), or a larger Seam tolerance (Project settings, now ${project.settings.seamToleranceCm} cm).`, [{ target: 'join', id: join.id, key: 'edges', label: join.name }, field.settings('seamTolerance')], { now: `${Math.abs(r.diffCm).toFixed(1)} cm`, need: `≤ ${project.settings.seamToleranceCm} cm` }),
           },
         });
       }
@@ -143,7 +147,7 @@ function joinChecks(project: Project, sizeId: Id, sizeName: string, cache: Panel
           panelName: panelName(all[i].e.panelId),
           sizeId,
           sizeName,
-          issue: { severity: 'info', message: `The same edge is in "${all[i].j.name}" (${all[i].j.tag}) and "${all[k].j.name}" (${all[k].j.tag}).`, ref: { kind: 'join', id: all[i].j.id } },
+          issue: { severity: 'info', code: 'join.same-edge', message: `The same edge is in "${all[i].j.name}" (${all[i].j.tag}) and "${all[k].j.name}" (${all[k].j.tag}).`, ref: { kind: 'join', id: all[i].j.id } },
         });
       }
     }

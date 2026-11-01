@@ -54,7 +54,8 @@ describe('knock-on folding: a yoke that cannot be computed', () => {
         const c = computePanel(p, p.panels.find((x) => x.name === name)!, s);
         expect(c.ok).toBe(false);
         expect(c.issues.filter((i) => i.severity === 'error')).toEqual([
-          { severity: 'error', code: 'knock-on.yoke', message: `Waits on Yoke: ${yokeIssue.message}`, ref: { kind: 'panel' }, causedBy: issueKey(yokeOf(p).id, yokeIssue) },
+          // The root's fix comes along (Go to field lands on the yoke's field), without its one-click change.
+          { severity: 'error', code: 'knock-on.yoke', message: `Waits on Yoke: ${yokeIssue.message}`, ref: { kind: 'panel' }, causedBy: issueKey(yokeOf(p).id, yokeIssue), fix: { ...yokeIssue.fix, apply: undefined } },
         ]);
       }
     });
@@ -66,7 +67,7 @@ describe('knock-on folding: a yoke that cannot be computed', () => {
     const back = computePanel(p, p.panels.find((x) => x.name === 'Back')!, sizeId(p, '4XS'));
     const errors = back.issues.filter((i) => i.severity === 'error');
     expect(errors.filter((i) => i.causedBy)).toHaveLength(1);
-    expect(errors.filter((i) => !i.causedBy).map((i) => i.message)).toEqual([expect.stringMatching(/Unknown name "no_such_name"/)]);
+    expect(errors.filter((i) => !i.causedBy).map((i) => i.message)).toEqual([expect.stringMatching(/“no_such_name” isn't a measurement/)]);
     const top = groupChecks(notInfo(projectChecks(p))).filter((g) => g.issue.severity === 'error');
     expect(top.map((g) => g.panelName)).toEqual(['Yoke', 'Back']);
   });
@@ -100,7 +101,8 @@ describe('knock-on folding: armhole_len and joins', () => {
   it("joins that can't measure the broken panel fold under its error", () => {
     const p = brokenFront();
     const checks = projectChecks(p).filter((c) => c.sizeName === 'M');
-    const joinWarnings = checks.filter((c) => c.issue.ref.kind === 'join' && c.issue.severity === 'warning');
+    // Knock-ons take their root's severity (an error), counted once.
+    const joinWarnings = checks.filter((c) => c.issue.ref.kind === 'join' && c.issue.code === 'knock-on.join');
     expect(joinWarnings.length).toBeGreaterThan(0);
     expect(joinWarnings.every((c) => c.issue.code === 'knock-on.join' && c.issue.causedBy?.startsWith(`${p.panels.find((x) => x.name === 'Front')!.id}|`))).toBe(true);
     const groups = groupChecks(notInfo(checks));
@@ -172,7 +174,7 @@ describe('fixes on the yoke and neckline errors', () => {
       y.shoulder.backWidth = dim(5);
     });
     const i = err(p, 'M', 'yoke.shoulder-phase')!;
-    expect(i.fix).toMatchObject({ now: '5 cm', fields: [{ key: 'backWidth', label: 'Back width after the markers move' }, { key: 'neckWidth' }] });
+    expect(i.fix).toMatchObject({ now: '5 cm', fields: [{ key: 'backWidth', label: 'Back width after the markers move' }, { key: 'neckWidth' }, { key: 'extraRows' }] });
     const fixed = editYoke(p, (y) => void (y.shoulder.backWidth = dim(needCm(i))));
     expect(err(fixed, 'M', 'yoke.shoulder-phase')).toBeUndefined();
   });

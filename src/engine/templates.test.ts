@@ -123,7 +123,7 @@ describe('joined panel checks', () => {
     expect(ok.filter((c) => c.issue.severity === 'warning')).toEqual([]);
     expect(ok.some((c) => c.issue.severity === 'info')).toBe(true); // front has more waist shaping than the back
     front.waypoints.find((w) => w.name === 'underarm')!.height.expr = 'waist.height + waist_to_underarm + 2';
-    const bad = projectChecks(p).filter((c) => c.issue.severity === 'warning' && /different numbers of rounds/.test(c.issue.message));
+    const bad = projectChecks(p).filter((c) => c.issue.severity === 'error' && /different numbers of rounds/.test(c.issue.message));
     expect(bad.length).toBe(p.sizes.length * 2);
   });
 });

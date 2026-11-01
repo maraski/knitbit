@@ -161,7 +161,7 @@ describe('phase targets', () => {
 
   it('says when the sleeve cannot reach its width', () => {
     const y = gen({ depth: { ...defaultYoke('round', 'back').depth, deepen: false } }, p, sizeId(p, '4X'));
-    expect(y.issues.some((i) => /The sleeve reaches \d+ sts .* short of its width/.test(i.message))).toBe(true);
+    expect(y.issues.some((i) => /The sleeve reaches \d+ sts .* short of Sleeve at the underarm/.test(i.message))).toBe(true);
   });
 
   it('the body at the underarm (with both cast-ons) is upper chest + ease', () => {
@@ -405,6 +405,6 @@ describe('whole-neck start: short rows raise the back', () => {
   it('errors when the turns run past centre front, or the short rows end below the split', () => {
     expect(neck({ shortRows: { ...defaultYoke().shortRows!, pairs: dim(30), step: dim(2) } }).issues.some((i) => i.severity === 'error' && /past centre front/.test(i.message))).toBe(true);
     const deep = neck({ shortRows: { ...defaultYoke().shortRows!, pairs: dim(50), step: dim(0), first: dim(1) } });
-    expect(deep.issues.some((i) => /short rows end on row \d+, below the underarm split/.test(i.message))).toBe(true);
+    expect(deep.issues.some((i) => /short rows end on row \d+, .*below the underarm split/.test(i.message))).toBe(true);
   });
 });

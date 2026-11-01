@@ -6,6 +6,7 @@ import { evaluate, renameReferences, scopeFrom } from './expr';
 import { evaluateDim } from './measurements';
 import { DEFAULT_LENGTH_NO_WIDTH, dim, type BustShaping, type DimExpr, type Id, type Panel } from './model';
 import { roundNearest } from './rounding';
+import { ceil1, cmText, field, fixOf, floor1, stsCm, type FieldRef, type IssueFix } from './issues';
 
 export interface BustFormula {
   expr: string;
@@ -27,7 +28,21 @@ export interface ShortRowPair {
 export interface BustIssue {
   severity: 'error' | 'warning' | 'info';
   message: string;
+  code?: string;
+  fix?: IssueFix;
 }
+
+// The bust properties' fields, as BustProps labels them.
+const BF = {
+  width: field.bust('width', 'Extra width W (bust_w)'),
+  length: field.bust('length', 'Extra centre-front length L (bust_l)'),
+  height: field.bust('apexHeight', 'Bust point height (up from the lower edge)'),
+  offset: field.bust('apexOffset', 'Distance from centre front'),
+  pairs: field.bust('pairs', 'Pairs'),
+  zone: field.bust('zoneWidth', 'Turn zone width (centred on the bust point)'),
+  dart: field.bust('vertical', 'Start (lower point)'),
+  rows: field.bust('rows', 'Increase rows / Decrease rows'),
+};
 
 export interface ComputedBust {
   method: BustShaping['method'];
@@ -135,13 +150,13 @@ export function computeBust(ctx: BustContext): ComputedBust | null {
   const hf = evaluateDim(b.apexHeight, ctx.sizeId, s);
   const of = evaluateDim(b.apexOffset, ctx.sizeId, s);
   const errs = [
-    'error' in wf ? `Width: ${wf.error}` : null,
-    'error' in lf ? `Length: ${lf.error}` : null,
-    !hf.ok ? `Bust point height: ${hf.error}` : null,
-    !of.ok ? `Bust point offset: ${of.error}` : null,
-  ].filter((x): x is string => !!x);
+    'error' in wf ? { m: `Width: ${wf.error}`, f: BF.width } : null,
+    'error' in lf ? { m: `Length: ${lf.error}`, f: BF.length } : null,
+    !hf.ok ? { m: `Bust point height: ${hf.error}`, f: BF.height } : null,
+    !of.ok ? { m: `Bust point offset: ${of.error}`, f: BF.offset } : null,
+  ].filter((x): x is { m: string; f: FieldRef } => !!x);
   if (errs.length || 'error' in wf || 'error' in lf || !hf.ok || !of.ok) {
-    return { method: b.method, D, noFrontWidth, width: blank(b.width), length: blank(lengthDim(b)), apex: { row: 0, heightCm: 0, offsetCm: 0, leftX: 0, rightX: 0 }, shortRows: null, darts: null, issues: errs.map((m) => ({ severity: 'error', message: m })) };
+    return { method: b.method, D, noFrontWidth, width: blank(b.width), length: blank(lengthDim(b)), apex: { row: 0, heightCm: 0, offsetCm: 0, leftX: 0, rightX: 0 }, shortRows: null, darts: null, issues: errs.map(({ m, f }) => ({ severity: 'error', code: 'bust.expr', message: m, fix: fixOf(`Correct the expression in ${f.label}.`, [f]) })) };
   }
 
   // Garment height (cm) → knit row.
@@ -153,10 +168,17 @@ export function computeBust(ctx: BustContext): ComputedBust | null {
   const centre = (r: number) => (ctx.leftEdge[r] + ctx.rightEdge[r]) / 2;
   const offsetSts = of.value.value * spc;
   const apex = { row: apexRow, heightCm: hf.value.value, offsetCm: of.value.value, leftX: centre(apexRow) - offsetSts, rightX: centre(apexRow) + offsetSts };
-  if (hf.value.value <= ctx.h0 || apexRow <= 0 || apexRow >= T) issues.push({ severity: 'error', message: 'The bust point is outside the panel.' });
+  if (hf.value.value <= ctx.h0 || apexRow <= 0 || apexRow >= T) {
+    const lo = ceil1(ctx.h0 + 1 / rpc);
+    const hi = floor1(ctx.h0 + (T - 1) / rpc);
+    issues.push({ severity: 'error', code: 'bust.apex-outside', message: `The bust point (${cmText(hf.value.value)} up) is outside the panel.`, fix: fixOf(`Make ${BF.height.label} between ${cmText(lo)} and ${cmText(hi)} (now ${cmText(hf.value.value)}).`, [BF.height], { now: cmText(hf.value.value), need: `${cmText(lo)} … ${cmText(hi)}` }) });
+  }
   const half = (ctx.rightEdge[apexRow] - ctx.leftEdge[apexRow]) / 2;
-  if (offsetSts >= half - 2) issues.push({ severity: 'warning', message: 'The bust point is at or beyond the side edge; check apex_to_apex.' });
-  if (D <= 0) issues.push({ severity: 'info', message: `Bust and upper chest differ by ${fmt(D)} cm; little or no bust shaping is needed.` });
+  if (offsetSts >= half - 2) {
+    const most = floor1((half - 3) / spc);
+    issues.push({ severity: 'warning', code: 'bust.apex-edge', message: `The bust point (${cmText(of.value.value)} from centre front) is at or beyond the side edge.`, fix: fixOf(`Make ${BF.offset.label} at most ${cmText(most)} (now ${cmText(of.value.value)}); it usually comes from apex_to_apex.`, [BF.offset, field.measurement('apex_to_apex')], { now: cmText(of.value.value), need: `≤ ${cmText(most)}` }) });
+  }
+  if (D <= 0) issues.push({ severity: 'info', code: 'bust.no-difference', message: `Bust and upper chest differ by ${fmt(D)} cm; little or no bust shaping is needed.` });
 
   const out: ComputedBust = { method: b.method, D, noFrontWidth, width: wf, length: lf, apex, shortRows: null, darts: null, issues };
   const manual = b.manual[ctx.sizeId];
@@ -166,7 +188,7 @@ export function computeBust(ctx: BustContext): ComputedBust | null {
     const autoPairs = roundNearest((L * rpc) / 2);
     const n = Math.max(0, b.shortRows.pairs ?? autoPairs);
     if (n === 0) {
-      issues.push({ severity: 'info', message: 'The extra length rounds to no short rows.' });
+      issues.push({ severity: 'info', code: 'bust.no-short-rows', message: 'The extra length rounds to no short rows.' });
       return out;
     }
     // Where to insert: centred on the bust point, or just below the underarm for an underarm dart.
@@ -210,7 +232,8 @@ export function computeBust(ctx: BustContext): ComputedBust | null {
       // distance the turns are spread evenly from the bust point to exactly that distance from the edge.
       step = fixedEdge ? (n > 1 ? (outer - inner) / (n - 1) : outer - inner) : Math.floor((outer - inner) / n);
       if (step < 1) {
-        issues.push({ severity: 'error', message: `${n} turns per side don't fit between the bust point and the side seam (${Math.max(0, Math.floor(outer - inner))} sts). Reduce the length or stack a second dart.` });
+        const most = Math.max(0, Math.floor(outer - inner));
+        issues.push({ severity: 'error', code: 'bust.turns-fit', message: `${n} turns per side don't fit between the bust point and the side seam (${stsCm(most, spc)}).`, fix: fixOf(`Set ${BF.pairs.label} to at most ${most} (now ${n}), or a shorter ${BF.length.label}.`, [BF.pairs, BF.length], { now: String(n), need: `≤ ${most}` }) });
         return out;
       }
     } else if (b.method === 'shortrows') {
@@ -226,7 +249,7 @@ export function computeBust(ctx: BustContext): ComputedBust | null {
       tipX = inner;
     }
     if (outer <= inner) {
-      issues.push({ severity: 'error', message: 'There is no room for the turns between the bust point and the side edge.' });
+      issues.push({ severity: 'error', code: 'bust.no-room', message: 'There is no room for the turns between the bust point and the side edge.', fix: fixOf(`Bring the bust point nearer centre front (${BF.offset.label}, now ${cmText(of.value.value)}), or a narrower ${b.method === 'shortrows' ? BF.zone.label : 'tip gap'}.`, [BF.offset, BF.zone], { now: cmText(of.value.value) }) });
       return out;
     }
     // Unworked stitches at the edge for each turn, evenly spaced from the outermost to the innermost turn.
@@ -263,12 +286,13 @@ export function computeBust(ctx: BustContext): ComputedBust | null {
     const spacing = left.slice(1).map((v, i) => Math.abs(v - left[i]));
     const minGap = spacing.length ? Math.min(...spacing) : Infinity;
     if (minGap < 2) {
-      issues.push({ severity: 'warning', message: `Turns are only ${minGap} st${minGap === 1 ? '' : 's'} apart: ${n} short-row pairs are a lot for this width. Reduce the length, widen the zone, or set fewer pairs.` });
+      const most = Math.max(1, Math.floor((uMax - uMin) / 2) + 1);
+      issues.push({ severity: 'warning', code: 'bust.turns-close', message: `Turns are only ${minGap} st${minGap === 1 ? '' : 's'} apart: ${n} short-row pairs are a lot for this width.`, fix: fixOf(`Set ${BF.pairs.label} to at most ${most} (now ${n}) for turns 2 sts apart, or a wider ${BF.zone.label}.`, [BF.pairs, BF.zone], { now: String(n), need: `≤ ${most}` }) });
     }
-    if (pairs.some((p) => p.wsWorked < 4)) issues.push({ severity: 'error', message: 'Some short rows work fewer than 4 stitches; the turns cross over.' });
-    if (left.some((v, i) => v !== right[i])) issues.push({ severity: 'warning', message: 'Left and right turns differ: the bust shaping is asymmetric.' });
+    if (pairs.some((p) => p.wsWorked < 4)) issues.push({ severity: 'error', code: 'bust.turns-cross', message: 'Some short rows work fewer than 4 stitches; the turns cross over.', fix: fixOf(`Move the turns apart: fewer ${BF.pairs.label} (now ${n}), or turns set by hand further from the centre.`, [BF.pairs], { now: String(n) }) });
+    if (left.some((v, i) => v !== right[i])) issues.push({ severity: 'warning', code: 'bust.asymmetric', message: 'Left and right turns differ: the bust shaping is asymmetric.', fix: fixOf('Type the same turns for both sides, or clear the hand-set turns.', [field.bust('manual', 'Turns')]) });
     if (ctx.underarmRow !== null && (ctx.topDown ? after < ctx.underarmRow : after + 1 > ctx.underarmRow)) {
-      issues.push({ severity: 'warning', message: 'The short rows start above the underarm, inside the armhole shaping.' });
+      issues.push({ severity: 'warning', code: 'bust.above-underarm', message: 'The short rows start above the underarm, inside the armhole shaping.', fix: fixOf(`Lower the bust point (${BF.height.label}, now ${cmText(hf.value.value)}), or fewer ${BF.pairs.label}.`, [BF.height, BF.pairs], { now: cmText(hf.value.value) }) });
     }
     out.shortRows = {
       kind: b.method === 'shortrows' ? 'wedge' : 'dart',
@@ -292,7 +316,7 @@ export function computeBust(ctx: BustContext): ComputedBust | null {
   const gap = evaluateDim(b.vertical.gap, ctx.sizeId, s);
   const top = evaluateDim(b.vertical.top, ctx.sizeId, s);
   if (!bottom.ok || !gap.ok || !top.ok) {
-    issues.push({ severity: 'error', message: `Dart heights: ${[bottom, gap, top].map((r) => (!r.ok ? r.error : '')).filter(Boolean).join('; ')}` });
+    issues.push({ severity: 'error', code: 'bust.expr', message: `Dart heights: ${[bottom, gap, top].map((r) => (!r.ok ? r.error : '')).filter(Boolean).join('; ')}`, fix: fixOf('Correct the dart heights (Start, Gap, Close by).', [BF.dart]) });
     return out;
   }
   const gapRows = Math.max(0, roundNearest(gap.value.value * rpc));
@@ -322,16 +346,16 @@ export function computeBust(ctx: BustContext): ComputedBust | null {
     if (!r.feasible) {
       const any = distributeAuto(nRows, span, { side: 'any', align: 'center' });
       if (any.feasible) {
-        issues.push({ severity: 'info', message: `Vertical darts (${label}): not enough RS rows, so the dart shaping is worked on every row.` });
+        issues.push({ severity: 'info', code: 'bust.dart-every-row', message: `Vertical darts (${label}): not enough RS rows, so the dart shaping is worked on every row.` });
         r = any;
       }
     }
-    for (const w of r.warnings) issues.push({ severity: r.feasible ? 'warning' : 'error', message: `Vertical darts (${label}): ${w}` });
+    for (const w of r.warnings) issues.push({ severity: r.feasible ? 'warning' : 'error', code: 'bust.dart-rows', message: `Vertical darts (${label}): ${w}`, fix: fixOf(`Give the darts more height (Start / Close by further from the bust point), or less ${BF.width.label} (${nRows} shaping rows each side).`, [BF.dart, BF.width]) });
     return r.rows;
   };
   const widenRows = manual?.incRows ?? place(lowSpan, 'below the bust');
   const narrowRows = manual?.decRows ?? place(highSpan, 'above the bust');
-  if (widenRows.length !== narrowRows.length) issues.push({ severity: 'warning', message: 'The darts open and close a different number of times: the extra width does not return to zero.' });
+  if (widenRows.length !== narrowRows.length) issues.push({ severity: 'warning', code: 'bust.dart-unbalanced', message: `The darts open ${widenRows.length} and close ${narrowRows.length} times: the extra width does not return to zero.`, fix: fixOf(`Make the increase and decrease rows the same number (${widenRows.length} and ${narrowRows.length}), or clear the hand-set rows.`, [BF.rows], { now: `${widenRows.length} / ${narrowRows.length}` }) });
 
   // Stitches each dart adds per shaping row: 2 (one each side of the dart line), the last one 1 if odd.
   const perRow = (k: number) => (k === nRows - 1 && perDart % 2 === 1 ? 1 : 2);
@@ -347,7 +371,7 @@ export function computeBust(ctx: BustContext): ComputedBust | null {
     acc += change.get(r) ?? 0;
     interior[r] = acc;
   }
-  if (Math.min(...interior) < 0) issues.push({ severity: 'error', message: 'The dart closes before it opens; check the dart rows.' });
+  if (Math.min(...interior) < 0) issues.push({ severity: 'error', code: 'bust.dart-order', message: 'The dart closes before it opens.', fix: fixOf('Put the increase rows below the bust point and the decrease rows above it (or clear the hand-set rows).', [BF.rows]) });
   out.darts = {
     leftX: centre(apexRow) - offsetSts,
     rightX: centre(apexRow) + offsetSts,

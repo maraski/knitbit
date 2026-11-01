@@ -16,7 +16,7 @@ import { buildScope, evaluateDim } from './measurements';
 import type { FrontHalf, Id, ManualEvent, Neckline, Panel, Project, Segment, SegmentMethod, ShapingPlacement } from './model';
 import { defaultAutoMethod, defaultPrincess, dim } from './model';
 import { roundNearest, roundRows, roundStitches, type RoundingResult } from './rounding';
-import { cmText, issueKey, type IssueFix } from './issues';
+import { ceil1, cmText, exprErrorText, field, fixOf, floor1, issueKey, rowsCm, stsCm, waypointLabel, waypointWords, withPanelFields, wpText, type IssueFix } from './issues';
 import { bustValues, computeBust, type ComputedBust } from './bust';
 import { sideEdgeLength } from './edges';
 import { measureEdge } from './joins';
@@ -51,7 +51,7 @@ export interface Issue {
   severity: 'error' | 'warning' | 'info';
   message: string;
   ref: IssueRef;
-  /** Stable id of the kind of problem, e.g. 'yoke.neck-below-split' (for grouping, tests and docs). */
+  /** Stable id of the kind of problem, e.g. 'yoke.short-rows-fit' (for grouping, tests and docs). */
   code?: string;
   /** What to change: the field(s), this size's value and what it needs. */
   fix?: IssueFix;
@@ -63,13 +63,16 @@ export interface Issue {
 export interface RootCause {
   key: string;
   message: string;
+  /** The root's fix (without its one-click change): Go to field from a knock-on lands on the root's field. */
+  fix?: IssueFix;
 }
 
 /** The root cause of a panel that can't be computed (its first error, or that error's own root). */
 export function rootCause(panel: { id: Id; name: string }, issues: Issue[]): RootCause | undefined {
   const i = issues.find((x) => x.severity === 'error');
   if (!i) return undefined;
-  return i.causedBy ? { key: i.causedBy, message: i.message } : { key: issueKey(panel.id, i), message: `Waits on ${panel.name}: ${i.message}` };
+  const fix = i.fix && { ...i.fix, apply: undefined, fields: i.fix.fields.map((f) => (f.panelId || f.target === 'measurement' || f.target === 'settings' ? f : { ...f, panelId: panel.id })) };
+  return { ...(i.causedBy ? { key: i.causedBy, message: i.message } : { key: issueKey(panel.id, i), message: `Waits on ${panel.name}: ${i.message}` }), ...(fix && { fix }) };
 }
 
 export interface ComputedWaypoint {
@@ -448,11 +451,11 @@ export function computePanel(project: Project, panel: Panel, sizeId: Id): Comput
   const raw = computePanelRaw(project, panel, sizeId);
   const c = panel.half ? cropHalf(raw, panel, panel.half, halfFrame(project, panel.half, raw.stitchesPerCm, buildScope(project, sizeId))) : raw;
   // Explain unknown names that follow a fit choice (e.g. hem_circ when the table has no high_hip).
-  if (!c.issues.some((i) => /Unknown name "/.test(i.message))) return c;
-  const issues = c.issues.map((i) => {
+  const issues = withPanelFields(c.issues, panel.id).map((i) => {
     const m = /Unknown name "([\w.]+)"/.exec(i.message);
-    const hint = m && missingAliasHint(project, m[1]);
-    return hint ? { ...i, message: `${i.message}: ${hint}.` } : i;
+    if (!m) return i;
+    const hint = missingAliasHint(project, m[1]);
+    return { ...i, message: exprErrorText(hint ? `${i.message}: ${hint}.` : i.message) };
   });
   return { ...c, issues };
 }
@@ -464,13 +467,13 @@ function computePanelRaw(project: Project, panel: Panel, sizeId: Id): ComputedPa
   const topDown = panel.direction === 'top-down';
 
   if (panel.waypoints.length < 2) {
-    issues.push({ severity: 'error', message: 'A panel needs at least two waypoints (e.g. hem and top).', ref: { kind: 'panel' } });
+    issues.push({ severity: 'error', code: 'panel.waypoints', message: 'A panel needs at least two waypoints (e.g. hem and top).', ref: { kind: 'panel' }, fix: fixOf('Add a waypoint (Panel → Add waypoint).', [field.panel('waypoints', 'Waypoints')]) });
     return emptyPanel(panel, sizeId, spc, rpc, issues);
   }
 
   const keys = panel.waypoints.map((w) => waypointKey(w.name));
   keys.forEach((k, i) => {
-    if (keys.indexOf(k) !== i) issues.push({ severity: 'error', message: `Two waypoints are named "${k}"; names must be unique.`, ref: { kind: 'waypoint', id: panel.waypoints[i].id } });
+    if (keys.indexOf(k) !== i) issues.push({ severity: 'error', code: 'waypoint.duplicate-name', message: `Two waypoints are named "${k}"; names must be unique.`, ref: { kind: 'waypoint', id: panel.waypoints[i].id }, fix: fixOf(`Rename one of them (waypoint Name).`, [{ target: 'waypoint', id: panel.waypoints[i].id, key: 'name', label: 'Name' }]) });
   });
 
   // ---- evaluate expressions ----
@@ -479,32 +482,34 @@ function computePanelRaw(project: Project, panel: Panel, sizeId: Id): ComputedPa
   const failedNames = new Set<string>();
   const sourceFailed = (names: readonly string[], cause: RootCause | undefined, code: string, error: string) => {
     for (const n of names) failedNames.add(n);
-    issues.push(cause ? { severity: 'error', code, message: cause.message, ref: { kind: 'panel' }, causedBy: cause.key } : { severity: 'error', message: error, ref: { kind: 'panel' } });
+    const own = code === 'knock-on.yoke' ? fixOf('Add a contiguous or raglan yoke (Garment → Construction), or change the widths that use the yoke.', [field.settings('construction', 'Construction')]) : fixOf('Check the join this piece is measured from (Pieces → Joins).', [field.settings('joins')]);
+    issues.push(cause ? { severity: 'error', code, message: cause.message, ref: { kind: 'panel' }, causedBy: cause.key, fix: cause.fix ?? fixOf('Fix the problem it waits on first; this piece follows.', []) } : { severity: 'error', code: code.replace('knock-on.', 'source.'), message: error, ref: { kind: 'panel' }, fix: own });
   };
   if (usesName(panel, 'armhole_len')) {
     const a = armholeLength(project, panel, sizeId);
-    if ('value' in a) issues.push({ severity: 'info', message: `armhole_len = ${a.value.toFixed(1)} cm, from ${a.source}.`, ref: { kind: 'panel' } });
-    else sourceFailed(['armhole_len'], a.cause, 'knock-on.armhole', `armhole_len: ${a.error}`);
+    if ('value' in a) issues.push({ severity: 'info', code: 'source.armhole-info', message: `armhole_len = ${a.value.toFixed(1)} cm, from ${a.source}.`, ref: { kind: 'panel' } });
+    else sourceFailed(['armhole_len'], a.cause, 'knock-on.armhole', `The armhole can't be measured: ${a.error}`);
   }
   if (EDGE_NAMES.some((n) => usesName(panel, n))) {
     const j = joinedEdge(project, panel, sizeId);
-    if ('lengthCm' in j) issues.push({ severity: 'info', message: `edge_len = ${j.lengthCm.toFixed(1)} cm, edge_rows = ${j.rows}, edge_pickup = ${j.pickup} sts, from ${j.source}.`, ref: { kind: 'panel' } });
-    else sourceFailed(EDGE_NAMES, j.cause, 'knock-on.edge', `edge_len: ${j.error}`);
+    if ('lengthCm' in j) issues.push({ severity: 'info', code: 'source.edge-info', message: `edge_len = ${j.lengthCm.toFixed(1)} cm, edge_rows = ${j.rows}, edge_pickup = ${j.pickup} sts, from ${j.source}.`, ref: { kind: 'panel' } });
+    else sourceFailed(EDGE_NAMES, j.cause, 'knock-on.edge', `The joined edge can't be measured: ${j.error}`);
   }
   if (usesYoke(panel)) {
     const n = yokeNames(project, sizeId);
-    if ('error' in n) sourceFailed(YOKE_NAMES, n.source && rootCause(n.source.panel, yokeIssues(n.source.yoke)), 'knock-on.yoke', `yoke.*: ${n.error}`);
+    if ('error' in n) sourceFailed(YOKE_NAMES, n.source && rootCause(n.source.panel, yokeIssues(n.source.yoke)), 'knock-on.yoke', `Waits on the yoke: ${n.error}`);
   }
   const { values, errors } = resolvePanelDims(project, panel, sizeId);
   const folded = knockOnErrors(errors, failedNames);
   let failed = false;
   panel.waypoints.forEach((wp, i) => {
     const k = keys[i];
-    for (const field of ['height', ...(wp.symmetric ? ['width'] : ['left', 'right'])]) {
-      const e = errors[`${k}.${field}`];
+    for (const fld of ['height', ...(wp.symmetric ? ['width'] : ['left', 'right'])]) {
+      const e = errors[`${k}.${fld}`];
       if (e) {
         failed = true;
-        if (!folded.has(`${k}.${field}`)) issues.push({ severity: 'error', message: `${wp.name} ${field}: ${e}`, ref: { kind: 'waypoint', id: wp.id } });
+        const f = { target: 'waypoint' as const, id: wp.id, key: fld, label: `${waypointLabel(wp.name)} ${fld}` };
+        if (!folded.has(`${k}.${fld}`)) issues.push({ severity: 'error', code: 'waypoint.expr', message: `${waypointLabel(wp.name)} ${fld}: ${e}`, ref: { kind: 'waypoint', id: wp.id }, fix: fixOf(`Correct the expression in ${f.label}.`, [f]) });
       }
     }
   });
@@ -527,7 +532,7 @@ function computePanelRaw(project: Project, panel: Panel, sizeId: Id): ComputedPa
     const a = evaluateDim(sec.fromHeight, sizeId, scope);
     const b = evaluateDim(sec.toHeight, sizeId, scope);
     if (!a.ok || !b.ok) {
-      issues.push({ severity: 'error', message: `Section "${sec.name}": ${!a.ok ? a.error : !b.ok ? b.error : ''}`, ref: { kind: 'panel' } });
+      issues.push({ severity: 'error', code: 'section.expr', message: `Section "${sec.name}": ${!a.ok ? a.error : !b.ok ? b.error : ''}`, ref: { kind: 'panel' }, fix: fixOf(`Correct the heights of section "${sec.name}" (Panel → Pattern sections).`, [field.panel('sections', 'Pattern sections')]) });
       return [];
     }
     return [{ sec, from: Math.min(a.value.value, b.value.value), to: Math.max(a.value.value, b.value.value) }];
@@ -617,18 +622,19 @@ function computePanelRaw(project: Project, panel: Panel, sizeId: Id): ComputedPa
 
   const sorted = [...wps].sort((a, b) => a.heightCm - b.heightCm);
   if (sorted.some((w, i) => w !== wps[i])) {
-    issues.push({ severity: 'warning', message: 'Waypoints are not in height order; they are drawn in height order.', ref: { kind: 'panel' } });
+    issues.push({ severity: 'warning', code: 'waypoint.order', message: 'Waypoints are not in height order; they are drawn in height order.', ref: { kind: 'panel' }, fix: fixOf('Change the heights so each waypoint is above the one before it in the list.', [field.panel('waypoints', 'Waypoints')]) });
     wps = sorted;
   }
   const h0 = wps[0].heightCm;
   const roundRows_ = (h: number) => roundRows(h * rpc).value;
   for (const w of wps) w.heightCm -= h0;
-  if (h0 !== 0) issues.push({ severity: 'info', message: `The lowest waypoint is at ${h0.toFixed(1)} cm; heights are measured from it.`, ref: { kind: 'waypoint', id: wps[0].id } });
+  if (h0 !== 0) issues.push({ severity: 'info', code: 'waypoint.lowest-not-zero', message: `The lowest waypoint is at ${h0.toFixed(1)} cm; heights are measured from it.`, ref: { kind: 'waypoint', id: wps[0].id } });
   for (const w of wps) {
     w.rowRounding = roundRows(w.heightCm * rpc, panel.rounding.rowParity);
     w.row = w.rowRounding.value;
-    if (w.stitches <= 0) issues.push({ severity: 'error', message: `${w.name}: width gives ${w.stitches} stitches.`, ref: { kind: 'waypoint', id: w.id } });
-    for (const r of w.stitchRounding) for (const m of r.warnings) issues.push({ severity: 'warning', message: `${w.name}: ${m}`, ref: { kind: 'waypoint', id: w.id } });
+    const wf = field.waypoint(w.id, w.name, w.symmetric ? 'width' : 'left');
+    if (w.stitches <= 0) issues.push({ severity: 'error', code: 'waypoint.no-stitches', message: `${waypointLabel(w.name)}: width ${cmText(w.widthCm)} gives ${w.stitches} stitches.`, ref: { kind: 'waypoint', id: w.id }, fix: fixOf(`Make ${wf.label} at least ${cmText(ceil1((w.selvedge + 1) / spc))} (now ${cmText(w.widthCm)}).`, [wf], { now: cmText(w.widthCm), need: `≥ ${cmText(ceil1((w.selvedge + 1) / spc))}` }) });
+    for (const r of w.stitchRounding) for (const m of r.warnings) issues.push({ severity: 'warning', code: 'waypoint.rounding', message: `${waypointLabel(w.name)}: ${m}`, ref: { kind: 'waypoint', id: w.id }, fix: fixOf(`Set the panel's Rounding parity to any, or change the pattern multiple or selvedges.`, [field.panel('rounding', 'Rounding')]) });
   }
   if (topDown) {
     // Knitting order: start at the garment's top. Rows are rounded in garment terms first, then
@@ -668,7 +674,7 @@ function computePanelRaw(project: Project, panel: Panel, sizeId: Id): ComputedPa
         let split = roundRows(d.value.value * rpc).value;
         if (split % 2 === 0) split += 1; // the centre is cast on on a RS row
         if (split >= from) {
-          issues.push({ severity: 'info', message: `The neck closes on row ${split}, below the underarm join (row ${joinRow}): the body is worked flat until then, in the round from row ${split + 1}.`, ref: { kind: 'neckline' } });
+          issues.push({ severity: 'info', code: 'neckline.below-join', message: `The neck closes on row ${split}, below the underarm join (row ${joinRow}): the body is worked flat until then, in the round from row ${split + 1}.`, ref: { kind: 'neckline' } });
           from = split + 1;
         }
       }
@@ -710,7 +716,10 @@ function computePanelRaw(project: Project, panel: Panel, sizeId: Id): ComputedPa
   if (usesPrincess) {
     const pr = panel.princess ?? defaultPrincess();
     const pv = evaluateDim(pr.position, sizeId, scope);
-    if (!pv.ok) issues.push({ severity: 'error', message: `Princess line position: ${pv.error}. Shaping stays at the side edges.`, ref: { kind: 'panel' } });
+    if (!pv.ok) {
+      const sid = panel.segments.find((x) => x.placement === 'princess' || x.placement === 'both')!.fromWaypoint;
+      issues.push({ severity: 'warning', code: 'segment.princess-expr', message: `Princess line position: ${pv.error}. Shaping stays at the side edges.`, ref: { kind: 'segment', fromWaypoint: sid }, fix: fixOf('Correct Princess lines: distance from centre (segment properties).', [field.segment(sid, 'Princess lines: distance from centre', 'princess')]) });
+    }
     else princessOut = { offset: pv.value.value * spc, sides: pr.sides };
   }
 
@@ -728,7 +737,8 @@ function computePanelRaw(project: Project, panel: Panel, sizeId: Id): ComputedPa
       : { fromWaypoint: gLower.id, left: defaultAutoMethod(), right: defaultAutoMethod(), mirror: true, manual: {} };
     const span: RowSpan = { from: lo.row + 1, to: hi.row };
     const ref: IssueRef = { kind: 'segment', fromWaypoint: gLower.id };
-    const label = `${gLower.name} → ${gUpper.name}`;
+    const label = `${wpText(gLower.name)} → ${wpText(gUpper.name)}`;
+    const sc: SegCtx = { label, lowerId: gLower.id, upperId: gUpper.id, upperName: gUpper.name, rpc };
     const segFlat = isFlatRow(Math.max(1, span.from));
     const joinStep = segFlat && joinRow !== null && roundPart ? (!topDown && span.from === joinRow + 1 ? 'start' : topDown && span.to === joinRow ? 'end' : undefined) : undefined;
     const rc: RowCtx = { flat: segFlat, rsOdd, joinStep };
@@ -749,8 +759,10 @@ function computePanelRaw(project: Project, panel: Panel, sizeId: Id): ComputedPa
         const expected = panel.rounding.parity === 'start';
         issues.push({
           severity: expected ? 'info' : 'warning',
+          code: 'segment.odd-change',
           message: `${label}: odd stitch change (${total}); the ${which} edge gets one more ${total < 0 ? 'decrease' : 'increase'}${expected ? ' (the rib’s multiple fixes the count here)' : ''}.`,
           ref,
+          ...(!expected && { fix: fixOf(`Make the width change even: set the panel's Rounding parity to same as the first row, or change ${waypointWords(hi.name)}'s width by 1 st (${cmText(1 / spc)}).`, [field.panel('rounding', 'Rounding'), field.waypoint(hi.id, hi.name, hi.symmetric ? 'width' : 'left')]) }),
         });
       }
     } else {
@@ -759,7 +771,8 @@ function computePanelRaw(project: Project, panel: Panel, sizeId: Id): ComputedPa
     }
 
     if (span.to < span.from && (dL !== 0 || dR !== 0)) {
-      issues.push({ severity: 'error', message: `${lo.name} and ${hi.name} are on the same row but the width changes; move them apart.`, ref });
+      const gap = cmText(ceil1(1 / rpc));
+      issues.push({ severity: 'error', code: 'segment.same-row', message: `${waypointLabel(lo.name)} and ${waypointWords(hi.name)} are on the same row but the width changes.`, ref, fix: fixOf(`Move ${waypointWords(gUpper.name)} at least ${gap} (1 row) above ${waypointWords(gLower.name)}, or make their widths equal.`, [field.waypoint(gUpper.id, gUpper.name, 'height')], { now: '0 rows', need: `≥ 1 row (${gap})` }) });
     }
 
     const manual = seg.manual[sizeId];
@@ -772,7 +785,7 @@ function computePanelRaw(project: Project, panel: Panel, sizeId: Id): ComputedPa
     const atLine = (m: SegmentMethod): SegmentMethod => (m.kind === 'auto' && pointsAt(m) > 1 ? { ...m, perSide: m.perSide * pointsAt(m) } : m);
     const placement: ShapingPlacement = wanted !== 'edge' && (seg.left.kind === 'auto' || seg.left.kind === 'straight' || leftManual) ? wanted : 'edge';
     if (wanted !== 'edge' && placement === 'edge') {
-      issues.push({ severity: 'info', message: `${label}: princess lines only take increases/decreases; these steps stay at the side edges.`, ref });
+      issues.push({ severity: 'info', code: 'segment.princess-steps', message: `${label}: princess lines only take increases/decreases; these steps stay at the side edges.`, ref });
     }
     const leftMethod = placement === 'edge' ? seg.left : atLine(seg.left);
     const rightMethod = placement === 'edge' ? (seg.mirror ? seg.left : seg.right) : atLine(seg.mirror ? seg.left : seg.right);
@@ -780,10 +793,10 @@ function computePanelRaw(project: Project, panel: Panel, sizeId: Id): ComputedPa
     let left: EdgeShaping;
     let right: EdgeShaping;
     if (!leftManual && !rightManual && seg.mirror && leftMethod.kind === 'auto') {
-      [left, right] = pairedAuto(leftMethod, dL, dR, span, issues, ref, label, rc);
+      [left, right] = pairedAuto(leftMethod, dL, dR, span, issues, ref, label, rc, sc);
     } else {
-      left = leftManual ? manualEdge(leftManual, dL, span, issues, { ...ref, edge: 'left' }) : edgeShaping(leftMethod, dL, span, 'left', rc, issues, { ...ref, edge: 'left' }, label);
-      right = rightManual ? manualEdge(rightManual, dR, span, issues, { ...ref, edge: 'right' }) : edgeShaping(rightMethod, dR, span, 'right', rc, issues, { ...ref, edge: 'right' }, label);
+      left = leftManual ? manualEdge(leftManual, dL, span, issues, { ...ref, edge: 'left' }) : edgeShaping(leftMethod, dL, span, 'left', rc, issues, { ...ref, edge: 'left' }, label, sc);
+      right = rightManual ? manualEdge(rightManual, dR, span, issues, { ...ref, edge: 'right' }) : edgeShaping(rightMethod, dR, span, 'right', rc, issues, { ...ref, edge: 'right' }, label, sc);
     }
 
     // At a princess line the stored symbol is the stitch on the marker's outer side (towards the side edge),
@@ -797,7 +810,7 @@ function computePanelRaw(project: Project, panel: Panel, sizeId: Id): ComputedPa
       const full = princessOut!.sides === 'both' ? 2 + (placement === 'both' ? 1 : 0) : 1 + (placement === 'both' ? 1 : 0);
       const odd = [...left.events, ...right.events].filter((e) => (e.kind === 'dec' || e.kind === 'inc') && Math.abs(e.delta) < full && full > 1);
       if (odd.length) {
-        issues.push({ severity: 'info', message: `${label}: the stitch count doesn't divide evenly over the shaping points; row ${odd.map((e) => e.row).filter((r, i, a) => a.indexOf(r) === i).join(', ')} shapes one side of the marker only.`, ref });
+        issues.push({ severity: 'info', code: 'segment.princess-odd', message: `${label}: the stitch count doesn't divide evenly over the shaping points; row ${odd.map((e) => e.row).filter((r, i, a) => a.indexOf(r) === i).join(', ')} shapes one side of the marker only.`, ref });
       }
     }
 
@@ -826,8 +839,10 @@ function computePanelRaw(project: Project, panel: Panel, sizeId: Id): ComputedPa
     if (hi.actualStitches !== hi.stitches) {
       issues.push({
         severity: 'warning',
-        message: `At ${hi.name} the shaping reaches ${hi.actualStitches} sts, but the target is ${hi.stitches} sts.`,
+        code: 'waypoint.shaping-short',
+        message: `At ${waypointWords(hi.name)} the shaping reaches ${hi.actualStitches} sts (${cmText(hi.actualStitches / spc)}), but the target is ${hi.stitches} sts (${cmText(hi.stitches / spc)}).`,
         ref: { kind: 'waypoint', id: hi.id },
+        fix: fixOf(`Change the shaping of ${label} (method, steps or markers) so it reaches ${hi.stitches} sts, or make ${waypointWords(hi.name)}'s width ${cmText(hi.actualStitches / spc)}.`, [field.segment(gLower.id, `Shaping ${label}`), field.waypoint(hi.id, hi.name, hi.symmetric ? 'width' : 'left')], { now: `${hi.actualStitches} sts`, need: `${hi.stitches} sts` }),
       });
     }
     segments.push({ fromWaypoint: gLower.id, toWaypoint: gUpper.id, index: i, rowFrom: span.from, rowTo: span.to, mirror: seg.mirror, implicit: !stored, placement, left, right });
@@ -838,7 +853,9 @@ function computePanelRaw(project: Project, panel: Panel, sizeId: Id): ComputedPa
       if (seg.placement === 'edge') continue;
       const narrowest = Math.min(...Array.from({ length: Math.max(1, seg.rowTo - seg.rowFrom + 1) }, (_, k) => (rightEdge[seg.rowFrom + k] - leftEdge[seg.rowFrom + k]) / 2));
       if (princessOut.offset < 2 || princessOut.offset > narrowest - 3) {
-        issues.push({ severity: 'warning', message: `Princess lines are ${roundNearest(princessOut.offset)} sts from the centre, too close to the ${princessOut.offset < 2 ? 'centre' : 'side edges'} (half width ${roundNearest(narrowest)} sts).`, ref: { kind: 'segment', fromWaypoint: seg.fromWaypoint } });
+        const lo = cmText(ceil1(2 / spc));
+        const hiCm = cmText(floor1((narrowest - 3) / spc));
+        issues.push({ severity: 'warning', code: 'segment.princess-close', message: `Princess lines are ${stsCm(roundNearest(princessOut.offset), spc)} from the centre, too close to the ${princessOut.offset < 2 ? 'centre' : 'side edges'} (half width ${stsCm(roundNearest(narrowest), spc)}).`, ref: { kind: 'segment', fromWaypoint: seg.fromWaypoint }, fix: fixOf(`Make Princess lines: distance from centre between ${lo} and ${hiCm} (now ${cmText(princessOut.offset / spc)}).`, [field.segment(seg.fromWaypoint, 'Princess lines: distance from centre', 'princess')], { now: cmText(princessOut.offset / spc), need: `${lo} … ${hiCm}` }) });
       }
     }
   }
@@ -851,7 +868,11 @@ function computePanelRaw(project: Project, panel: Panel, sizeId: Id): ComputedPa
     // The yoke's neck carries on: its increases on the rows the yoke planned (as distances from the closing row).
     const dists = yokeNeck && !panel.neckline ? yokeNeck.neck.increaseRows.map((r) => yokeNeck.neck.rows - r) : undefined;
     neck = computeNeck(project, panel, neckline, sizeId, { spc, rpc, totalRows, leftEdge, rightEdge, flat, isRS, atStart: topDown, dists }, issues);
-    if (neck && dists && totalRows - neck.splitRow < 2 * rpc) issues.push({ severity: 'warning', code: 'body.neck-near-hem', message: `The front neck is still open ${cmText(Math.max(0, Math.round(((totalRows - neck.splitRow) / rpc) * 10) / 10))} above the lower edge: a shallower neck or a longer body.`, ref: { kind: 'neckline' } });
+    if (neck && dists && totalRows - neck.splitRow < 2 * rpc) {
+      const yokePanel = project.panels.find((p) => p.yoke);
+      const shallower = ceil1(2 - (totalRows - neck.splitRow) / rpc);
+      issues.push({ severity: 'warning', code: 'body.neck-near-hem', message: `The front neck is still open ${cmText(Math.max(0, Math.round(((totalRows - neck.splitRow) / rpc) * 10) / 10))} above the lower edge.`, ref: { kind: 'neckline' }, fix: fixOf(`Make the yoke's Depth below the neck point ${cmText(shallower)} shallower, or lengthen the body.`, [{ ...field.yoke('neckDepth'), ...(yokePanel && { panelId: yokePanel.id }) }], { need: `≥ 2 cm above the lower edge` }) });
+    }
     if (neck) {
       // The left shoulder's neck edge is that piece's right edge, and vice versa.
       for (const e of neck.events) e.symbol ??= defaultSymbol(e.kind, 'right', e.delta);
@@ -897,7 +918,7 @@ function computePanelRaw(project: Project, panel: Panel, sizeId: Id): ComputedPa
           const at = `${((neckRight[r]! - neckLeft[r]!) / spc).toFixed(1)} cm`;
           const there = `${((rightEdge[r] - leftEdge[r]) / spc).toFixed(1)} cm`;
           const strap = !!project.garment.strap;
-          const narrow = strap ? 'widen the strap (Garment → Strap width)' : 'narrow the neckline opening width (and the neck_side width with it)';
+          const narrow = strap ? 'widen the strap (Garment → Strap width)' : 'narrow the neckline opening width (and the width at the neck point, the top of the shoulder, with it)';
           // The opening narrower by the missing stitches each side fits.
           const need = cmText(Math.floor(((neck.widthSts + 2 * Math.min(sl, sr)) / spc) * 10) / 10);
           const now = cmText(neck.widthSts / spc);
@@ -905,8 +926,8 @@ function computePanelRaw(project: Project, panel: Panel, sizeId: Id): ComputedPa
             severity: 'error',
             code: 'neckline.wider-than-top',
             fix: strap
-              ? { text: `Widen the strap (Garment → Strap width) so the opening is at most ${need} (now ${now}), or make the neck shallower.`, fields: [{ target: 'settings', key: 'strap', label: 'Strap width' }], now, need: `≤ ${need}` }
-              : { text: `Make the neckline's Opening width at most ${need} (now ${now}), or widen the waypoint at the top of the shoulders.`, fields: [{ target: 'neckline', panelId: panel.id, key: 'width', label: 'Opening width' }], now, need: `≤ ${need}` },
+              ? fixOf(`Widen the strap (Garment → Strap width) so the opening is at most ${need} (now ${now}), or make the neck shallower.`, [field.settings('strap')], { now, need: `≤ ${need}` })
+              : fixOf(`Make the neckline's Opening width at most ${need} (now ${now}), or widen the waypoint at the top of the shoulders.`, [field.neckline('width', panel.id)], { now, need: `≤ ${need}`, apply: { field: field.neckline('width', panel.id), value: Math.floor(((neck.widthSts + 2 * Math.min(sl, sr)) / spc) * 10) / 10, unit: 'cm' } }),
             message: `Neck wider than the panel at row ${r}: the opening is ${at} where the panel is ${there}, so the ${sl < 0 ? 'left' : 'right'} side would have ${roundNearest(Math.min(sl, sr))} sts. To fix: ${narrow}, make the neck shallower, or widen the panel at that height.`,
             ref: { kind: 'neckline' },
           });
@@ -919,7 +940,7 @@ function computePanelRaw(project: Project, panel: Panel, sizeId: Id): ComputedPa
       // (A neck from the yoke: the stitches each side come from the yoke.)
       if ((remainL > 0 || remainR > 0) && !dists) {
         const where = neck.atStart ? 'are cast on at the shoulders' : 'remain at the top';
-        issues.push({ severity: 'info', message: `${Math.max(0, remainL)} + ${Math.max(0, remainR)} shoulder sts ${where}.`, ref: { kind: 'neckline' } });
+        issues.push({ severity: 'info', code: 'neckline.shoulder-sts', message: `${Math.max(0, remainL)} + ${Math.max(0, remainR)} shoulder sts ${where}.`, ref: { kind: 'neckline' } });
       }
     }
   }
@@ -985,13 +1006,13 @@ function computePanelRaw(project: Project, panel: Panel, sizeId: Id): ComputedPa
     if (neck) {
       const o = neck.openRow;
       if ((neckLeft[o] ?? 0) - leftEdge[o] < -1e-6 || rightEdge[o] - (neckRight[o] ?? 0) < -1e-6) {
-        issues.push({ severity: 'warning', message: `Painted stitches / shaping lines run out of stitches at the shoulders (${net} sts overall): the shoulder bind-offs were planned for the original width. Add increases back, use a fisheye line, or treat it as an experiment.`, ref: { kind: 'panel' } });
+        issues.push({ severity: 'warning', code: 'paint.runs-out', message: `Painted stitches / shaping lines run out of stitches at the shoulders (${net} sts overall): the shoulder bind-offs were planned for the original width.`, ref: { kind: 'panel' }, fix: fixOf(`Add ${Math.abs(net)} sts back with increases (painted stitches or a line), or use a fisheye line.`, [field.panel('lines', 'Shaping lines')], { now: `${net} sts`, need: '0 sts' }) });
       }
     } else if (rightEdge[totalRows] - leftEdge[totalRows] < 0) {
-      issues.push({ severity: 'warning', message: `Painted stitches / shaping lines run out of stitches before the top.`, ref: { kind: 'panel' } });
+      issues.push({ severity: 'warning', code: 'paint.runs-out', message: `Painted stitches / shaping lines run out of stitches before the top.`, ref: { kind: 'panel' }, fix: fixOf(`Add ${Math.abs(net)} sts back with increases (painted stitches or a line), or use a fisheye line.`, [field.panel('lines', 'Shaping lines')], { now: `${net} sts`, need: '0 sts' }) });
     }
     const netFree = freeOnly[totalRows];
-    if (freeOnly.some((v) => v !== 0)) issues.push({ severity: 'info', message: `Painted stitches change the count by ${netFree > 0 ? '+' : ''}${netFree} st${Math.abs(netFree) === 1 ? '' : 's'} by the last row; the shaping after them is unchanged, so later widths move with them.`, ref: { kind: 'panel' } });
+    if (freeOnly.some((v) => v !== 0)) issues.push({ severity: 'info', code: 'paint.count-change', message: `Painted stitches change the count by ${netFree > 0 ? '+' : ''}${netFree} st${Math.abs(netFree) === 1 ? '' : 's'} by the last row; the shaping after them is unchanged, so later widths move with them.`, ref: { kind: 'panel' } });
   }
   // Edge markers follow widened edges (darts and painted stitches).
   const widen = (r: number) => (bust?.darts ? bust.darts.interior[r] / 2 : 0) + free[r] / 2;
@@ -1019,7 +1040,17 @@ function computePanelRaw(project: Project, panel: Panel, sizeId: Id): ComputedPa
     return roundNearest(outer - cut);
   });
   const negative = counts.findIndex((n) => n < 0);
-  if (negative >= 0) issues.push({ severity: 'error', message: `The stitch count goes negative (${counts[negative]}) at row ${negative}.`, ref: { kind: 'panel' } });
+  if (negative >= 0) {
+    // Usually the neck reaching past the panel's edge: then this is that error's knock-on.
+    const root = issues.find((i) => i.code === 'neckline.wider-than-top');
+    issues.push({
+      severity: 'error',
+      code: 'panel.negative-count',
+      message: `The stitch count goes negative (${counts[negative]}) at row ${negative}.`,
+      ref: { kind: 'panel' },
+      ...(root ? { causedBy: issueKey(panel.id, root), fix: { ...root.fix!, apply: undefined } } : { fix: fixOf(`More shaping takes stitches off than there are by row ${negative}: widen the waypoints above it, or take less off (neckline, shaping lines, painted stitches).`, [field.panel('waypoints', 'Waypoints')]) }),
+    });
+  }
 
   // Hand-placed decreases/increases on WS rows of a flat panel whose shaping is meant for RS rows.
   {
@@ -1033,6 +1064,7 @@ function computePanelRaw(project: Project, panel: Panel, sizeId: Id): ComputedPa
         if (ws.length) {
           issues.push({
             severity: 'info',
+            code: 'segment.ws-markers',
             message: `${edge === 'left' ? 'Left' : 'Right'} edge: ${ws.length} marker${ws.length > 1 ? 's' : ''} on WS rows (${ws.map((e) => e.row).join(', ')}), worked as purl-side shaping.`,
             ref: { kind: 'segment', fromWaypoint: seg.fromWaypoint, edge },
           });
@@ -1059,7 +1091,7 @@ function computePanelRaw(project: Project, panel: Panel, sizeId: Id): ComputedPa
         if (a < leftEdge[f.row] - 1e-6 || a + 1 > rightEdge[f.row] + 1e-6 || inNeck) outside++;
       }
     }
-    if (outside) issues.push({ severity: 'warning', message: `${outside} painted stitch${outside === 1 ? ' is' : 'es are'} outside the fabric on ${outside === 1 ? 'its' : 'their'} row and ${outside === 1 ? 'is' : 'are'} not drawn.`, ref: { kind: 'panel' } });
+    if (outside) issues.push({ severity: 'warning', code: 'paint.outside', message: `${outside} painted stitch${outside === 1 ? ' is' : 'es are'} outside the fabric on ${outside === 1 ? 'its' : 'their'} row and ${outside === 1 ? 'is' : 'are'} not drawn.`, ref: { kind: 'panel' }, fix: fixOf('Move or erase them in the chart (they were painted for an earlier shape).', [field.panel('paint', 'Painted stitches')]) });
   }
   const outline = buildOutline(wps, segments, leftEdge, rightEdge, neckLeft, neckRight, neck, topDown, extraRows);
 
@@ -1096,6 +1128,35 @@ function computePanelRaw(project: Project, panel: Panel, sizeId: Id): ComputedPa
 
 function flipAlign<T extends string>(a: T): T {
   return (a === 'start' ? 'end' : a === 'end' ? 'start' : a) as T;
+}
+
+/** A segment's names for its fixes: its label, its waypoints (garment order) and the row gauge. */
+interface SegCtx {
+  label: string;
+  lowerId: Id;
+  upperId: Id;
+  upperName: string;
+  rpc: number;
+}
+
+/** Rows an auto schedule of `n` shaping rows needs: every row, alternate rows, or its fixed rhythm. */
+function rowsNeeded(method: SegmentMethod, n: number, rc: RowCtx): number {
+  if (method.kind !== 'auto' || n <= 0) return n;
+  const every = method.rhythm.type === 'fixed' ? method.rhythm.every : method.rhythm.type === 'mixed' ? Math.min(method.rhythm.a, method.rhythm.b) : rc.flat && method.side !== 'any' ? 2 : 1;
+  return (n - 1) * Math.max(1, every) + 1;
+}
+
+/** Move the upper waypoint up (or change the shaping) so the segment has `need` rows. */
+function segRowsFix(sc: SegCtx, need: number, span: RowSpan, or: string): IssueFix {
+  const have = Math.max(0, span.to - span.from + 1);
+  const more = ceil1(Math.max(0, need - have) / sc.rpc);
+  return fixOf(`Give ${sc.label} at least ${rowsCm(need, sc.rpc)}: move ${waypointWords(sc.upperName)} ${cmText(more)} further from the waypoint below, ${or}.`, [field.waypoint(sc.upperId, sc.upperName, 'height'), field.segment(sc.lowerId, `Shaping ${sc.label}`)], { now: rowsCm(have, sc.rpc), need: `≥ ${rowsCm(need, sc.rpc)}` });
+}
+
+/** A distribute warning on a segment: a note when it only says the rhythm uses any row, else what doesn't fit. */
+function scheduleIssue(w: string, feasible: boolean, message: string, ref: IssueRef, sc: SegCtx, need: number, span: RowSpan): Issue {
+  if (/alternates RS and WS/.test(w)) return { severity: 'info', code: 'segment.any-row', message, ref };
+  return { severity: feasible ? 'warning' : 'error', code: 'segment.rows', message, ref, fix: segRowsFix(sc, need, span, 'or change its shaping (Rhythm, Sts per edge per row)') };
 }
 
 /** A segment as seen when knitting downwards: "near the lower waypoint" becomes "near the end". */
@@ -1148,13 +1209,14 @@ function pairedAuto(
   ref: IssueRef,
   label: string,
   rc: RowCtx,
+  sc: SegCtx,
 ): [EdgeShaping, EdgeShaping] {
   const p = Math.max(1, Math.round(method.perSide));
   const n = Math.max(Math.ceil(Math.abs(dL) / p), Math.ceil(Math.abs(dR) / p));
   const empty = (target: number): EdgeShaping => ({ method: 'auto', target, events: [], summary: 'no shaping' });
   if (n === 0) return [empty(dL), empty(dR)];
   const s = schedule(method, n, span, rc);
-  for (const w of s.warnings) issues.push({ severity: s.feasible ? 'warning' : 'error', message: `${label}: ${w}`, ref });
+  for (const w of s.warnings) issues.push(scheduleIssue(w, s.feasible, `${label}: ${w}`, ref, sc, rowsNeeded(method, n, rc), span));
   const make = (d: number): ShapeEvent[] => {
     let remaining = Math.abs(d);
     const sign = Math.sign(d);
@@ -1186,18 +1248,19 @@ export function autoSteps(total: number, maxPerStep: number): number[] {
   return splitEvenly(total, k, 'longFirst');
 }
 
-function edgeShaping(method: SegmentMethod, d: number, span: RowSpan, edge: Edge, rc: RowCtx, issues: Issue[], ref: IssueRef, label: string): EdgeShaping {
+function edgeShaping(method: SegmentMethod, d: number, span: RowSpan, edge: Edge, rc: RowCtx, issues: Issue[], ref: IssueRef, label: string, sc: SegCtx): EdgeShaping {
   const where = `${label} (${edge} edge)`;
+  const segField = field.segment(sc.lowerId, `Shaping ${label}`);
   switch (method.kind) {
     case 'straight':
-      if (d !== 0) issues.push({ severity: 'warning', message: `${where}: worked straight, but the width changes by ${d} sts.`, ref });
+      if (d !== 0) issues.push({ severity: 'warning', code: 'segment.straight-change', message: `${where}: worked straight, but the width changes by ${d} sts.`, ref, fix: fixOf(`Choose a shaping method for ${label} (Method), or make ${waypointWords(sc.upperName)}'s width the same as the one below it.`, [segField, field.waypoint(sc.upperId, sc.upperName, 'width')]) });
       return { method: 'straight', target: d, events: [], summary: 'straight' };
     case 'auto': {
       const p = Math.max(1, Math.round(method.perSide));
       const n = Math.ceil(Math.abs(d) / p);
       if (n === 0) return { method: 'auto', target: d, events: [], summary: 'no shaping' };
       const s = schedule(method, n, span, rc);
-      for (const w of s.warnings) issues.push({ severity: s.feasible ? 'warning' : 'error', message: `${where}: ${w}`, ref });
+      for (const w of s.warnings) issues.push(scheduleIssue(w, s.feasible, `${where}: ${w}`, ref, sc, rowsNeeded(method, n, rc), span));
       let remaining = Math.abs(d);
       const events: ShapeEvent[] = [];
       for (const row of s.rows) {
@@ -1213,7 +1276,7 @@ function edgeShaping(method: SegmentMethod, d: number, span: RowSpan, edge: Edge
       const steps = method.steps ?? autoSteps(Math.abs(d), method.maxPerStep);
       const sum = steps.reduce((a, b) => a + b, 0);
       if (sum !== Math.abs(d)) {
-        issues.push({ severity: 'warning', message: `${where}: steps add up to ${sum} sts, but ${Math.abs(d)} are needed.`, ref });
+        issues.push({ severity: 'warning', code: 'segment.steps-sum', message: `${where}: steps add up to ${sum} sts, but ${Math.abs(d)} are needed.`, ref, fix: fixOf(`Make Steps (sts) add up to ${Math.abs(d)} (now ${sum}), or leave them empty to split automatically.`, [{ ...segField, label: 'Steps (sts)' }], { now: `${sum} sts`, need: `${Math.abs(d)} sts` }) });
       }
       if (steps.length === 0) return { method: method.kind, target: d, events: [], summary: 'no shaping' };
       const atJoin = method.kind === 'steps' && rc.joinStep !== undefined;
@@ -1224,10 +1287,13 @@ function edgeShaping(method: SegmentMethod, d: number, span: RowSpan, edge: Edge
       if (!rows) {
         const avail = eligibleRows(span, side);
         rows = align === 'end' ? avail.slice(-steps.length) : avail.slice(0, steps.length);
+        const need = side === 'any' ? steps.length : 2 * steps.length - 1;
         issues.push({
           severity: 'error',
+          code: 'segment.steps-rows',
           message: `${where}: ${steps.length} steps need ${steps.length} ${side === 'any' ? '' : side.toUpperCase() + ' '}rows, but only ${avail.length} are available.`,
           ref,
+          fix: segRowsFix(sc, need, span, 'or fewer steps (a larger Max per step)'),
         });
       }
       const sign = Math.sign(d) || -1;
@@ -1253,7 +1319,7 @@ function manualEdge(list: ManualEvent[], d: number, span: RowSpan, issues: Issue
   for (const e of list) {
     const row = span.from - 1 + e.row;
     if (row < span.from || row > span.to) {
-      issues.push({ severity: 'warning', message: `A manual marker at segment row ${e.row} is outside this segment and was ignored.`, ref });
+      issues.push({ severity: 'warning', code: 'segment.manual-outside', message: `A manual marker at segment row ${e.row} is outside this segment and was ignored.`, ref, fix: fixOf('Move or delete that marker (segment properties, markers).', [{ target: 'segment', id: ref.kind === 'segment' ? ref.fromWaypoint : undefined, key: 'method', label: 'Markers' }]) });
       continue;
     }
     events.push({ row, delta: e.delta, kind: eventKindFor(e), symbol: e.symbol });
@@ -1262,7 +1328,7 @@ function manualEdge(list: ManualEvent[], d: number, span: RowSpan, issues: Issue
   const sum = events.reduce((a, e) => a + e.delta, 0);
   if (sum !== d) {
     const edge = ref.kind === 'segment' && ref.edge === 'right' ? 'Right' : 'Left';
-    issues.push({ severity: 'warning', message: `${edge} edge: manual markers change this edge by ${sum} sts; ${d} are needed.`, ref });
+    issues.push({ severity: 'warning', code: 'segment.manual-sum', message: `${edge} edge: manual markers change this edge by ${sum} sts; ${d} are needed.`, ref, fix: fixOf(`Add or remove markers so they change the edge by ${d} sts (now ${sum}).`, [{ target: 'segment', id: ref.kind === 'segment' ? ref.fromWaypoint : undefined, key: 'method', label: 'Markers' }], { now: `${sum} sts`, need: `${d} sts` }) });
   }
   return { method: 'manual', target: d, events, summary: `manual: ${events.length} marker${events.length === 1 ? '' : 's'}` };
 }
@@ -1326,7 +1392,11 @@ function computeNeck(
     neck_depth: 'neck.depth',
   };
   const r = resolveDefinitions(defs, scope);
-  for (const [k, e] of Object.entries(r.errors)) if (k.startsWith('neck.')) issues.push({ severity: 'error', message: `Neckline ${k.slice(5)}: ${e}`, ref });
+  for (const [k, e] of Object.entries(r.errors)) {
+    if (!k.startsWith('neck.')) continue;
+    const f = field.neckline(k.slice(5) as 'width' | 'depth' | 'centre');
+    issues.push({ severity: 'error', code: 'neckline.expr', message: `Neckline ${f.label}: ${e}`, ref, fix: fixOf(`Correct the expression in ${f.label}.`, [f]) });
+  }
   if (Object.keys(r.errors).length) return null;
 
   const T = g.totalRows;
@@ -1341,7 +1411,9 @@ function computeNeck(
     if (g.flat && !g.isRS(splitRow)) splitRow += 1; // cast on the centre on a RS row
   }
   if (splitRow < 1 || splitRow > T) {
-    issues.push({ severity: 'error', message: 'The neckline is deeper than the panel.', ref });
+    const most = floor1((T - 2) / g.rpc);
+    const now = cmText(r.values['neck.depth']);
+    issues.push({ severity: 'error', code: 'neckline.too-deep', message: `The neckline (${now}) is deeper than the panel (${cmText(T / g.rpc)}).`, ref, fix: fixOf(`Make Depth (from top) at most ${cmText(most)} (now ${now}).`, [field.neckline('depth')], { now, need: `≤ ${cmText(most)}`, apply: { field: field.neckline('depth'), value: most, unit: 'cm' } }) });
     return null;
   }
 
@@ -1367,7 +1439,8 @@ function computeNeck(
   if (nk.shape === 'square') width = Math.max(width, centre); // the whole opening goes at once; rounding can differ by a stitch
   let perSide = Math.floor((width - centre) / 2);
   if (perSide < 0) {
-    issues.push({ severity: 'warning', message: `The centre (${centre} sts) is wider than the neck opening (${width} sts).`, ref });
+    const most = floor1(width / g.spc);
+    issues.push({ severity: 'warning', code: 'neckline.centre-wide', message: `The centre (${stsCm(centre, g.spc)}) is wider than the neck opening (${stsCm(width, g.spc)}).`, ref, fix: fixOf(`Make Centre width at most ${cmText(most)} (now ${cmText(r.values['neck.centre'])}), or a wider Opening width.`, [field.neckline('centre'), field.neckline('width')], { now: cmText(r.values['neck.centre']), need: `≤ ${cmText(most)}`, apply: { field: field.neckline('centre'), value: most, unit: 'cm' } }) });
     perSide = 0;
   }
 
@@ -1384,7 +1457,11 @@ function computeNeck(
     if (nk.shape === 'v') {
       // Spread to the open end; side parity is about real rows, so place in row space.
       const s = distributeAuto(perSide, span, { side: nk.side, align: g.atStart ? 'start' : 'end' });
-      for (const w of s.warnings) issues.push({ severity: 'warning', message: `Neckline: ${w}`, ref });
+      // perSide shaping rows on alternate rows (or every row), plus the centre's row and a flat panel's last row.
+      const needRows = (nk.side === 'any' ? perSide : 2 * perSide - 1) + 1 + (g.flat ? 1 : 0);
+      const deeper = ceil1(needRows / g.rpc);
+      const now = cmText(r.values['neck.depth']);
+      for (const w of s.warnings) issues.push({ severity: 'warning', code: 'neckline.rows', message: `Neckline: ${w}`, ref, fix: fixOf(`Make Depth (from top) at least ${cmText(deeper)} (now ${now}), or set Side shaping on to any row.`, [field.neckline('depth')], { now, need: `≥ ${cmText(deeper)}`, apply: { field: field.neckline('depth'), value: deeper, unit: 'cm' } }) });
       dists = s.rows.map((row) => Math.abs(row - splitRow));
     } else {
       // Round / square / boat: half the shaping on every row next to the centre, the rest every other row.
@@ -1394,8 +1471,10 @@ function computeNeck(
       if (dists[dists.length - 1] > room) {
         const s = distributeAuto(perSide, { from: 1, to: Math.max(0, room) }, { side: 'any', align: 'start' });
         dists = s.rows;
-        if (!s.feasible) issues.push({ severity: 'error', message: `Neckline: ${perSide} ${verb} per side do not fit in ${Math.max(0, room)} rows.`, ref });
-        else issues.push({ severity: 'info', message: `Neckline: ${verb} were packed closer to fit the neck depth.`, ref });
+        const deeper = ceil1((perSide + 1 + (g.flat ? 1 : 0)) / g.rpc);
+        const now = cmText(r.values['neck.depth']);
+        if (!s.feasible) issues.push({ severity: 'error', code: 'neckline.fit', message: `Neckline: ${perSide} ${verb} per side do not fit in ${rowsCm(Math.max(0, room), g.rpc)}.`, ref, fix: fixOf(`Make Depth (from top) at least ${cmText(deeper)} (now ${now}), or a wider Centre width.`, [field.neckline('depth'), field.neckline('centre')], { now, need: `≥ ${cmText(deeper)}`, apply: { field: field.neckline('depth'), value: deeper, unit: 'cm' } }) });
+        else issues.push({ severity: 'info', code: 'neckline.packed', message: `Neckline: ${verb} were packed closer to fit the neck depth.`, ref });
       }
     }
   }

@@ -8,6 +8,7 @@ import { evaluateDim } from './measurements';
 import type { Anchor, Id, Panel, ShapingLine } from './model';
 import { dim, newId } from './model';
 import { roundNearest } from './rounding';
+import { ceil1, cmText, field, fixOf, floor1, type IssueFix } from './issues';
 
 export interface LineEvent {
   row: number; // knit row
@@ -24,7 +25,7 @@ export interface ComputedLine {
   events: LineEvent[];
   amount: number; // stitches, as evaluated (garment-up change)
   manual: boolean;
-  issues: { severity: 'error' | 'warning' | 'info'; message: string }[];
+  issues: { severity: 'error' | 'warning' | 'info'; message: string; code?: string; fix?: IssueFix }[];
 }
 
 /** Line x (sts from the row centre) at a knit row, interpolated between its ends. */
@@ -67,11 +68,13 @@ function computeLine(l: ShapingLine, ctx: Ctx): ComputedLine {
   const issues: ComputedLine['issues'] = [];
   const T = ctx.totalRows;
   const base: ComputedLine = { id: l.id, name: l.name, mirror: l.mirror, sides: l.sides, ends: [{ row: 0, x: 0 }, { row: 0, x: 0 }], events: [], amount: 0, manual: false, issues };
+  const lf = (key: 'amount' | 'start' | 'end', label: string) => field.line(l.id, key, label);
   const at = (a: Anchor, which: string) => {
     const h = evaluateDim(a.height, ctx.sizeId, ctx.scope);
     const x = evaluateDim(a.x, ctx.sizeId, ctx.scope);
-    if (!h.ok) issues.push({ severity: 'error', message: `${which} height: ${h.error}` });
-    if (!x.ok) issues.push({ severity: 'error', message: `${which} position: ${x.error}` });
+    const f = lf(which === 'Start' ? 'start' : 'end', `${which}: Height / Distance from centre`);
+    if (!h.ok) issues.push({ severity: 'error', code: 'line.expr', message: `${which} height: ${h.error}`, fix: fixOf(`Correct the expression in the ${which.toLowerCase()}'s Height.`, [f]) });
+    if (!x.ok) issues.push({ severity: 'error', code: 'line.expr', message: `${which} position: ${x.error}`, fix: fixOf(`Correct the expression in the ${which.toLowerCase()}'s Distance from centre.`, [f]) });
     if (!h.ok || !x.ok) return null;
     const g = Math.max(0, Math.min(T, roundNearest((h.value.value - ctx.h0) * ctx.rpc)));
     return { row: ctx.topDown ? T - g : g, x: x.value.value * ctx.spc };
@@ -79,7 +82,7 @@ function computeLine(l: ShapingLine, ctx: Ctx): ComputedLine {
   const a = at(l.from, 'Start');
   const b = at(l.to, 'End');
   const amt = evaluateDim(l.amount, ctx.sizeId, ctx.scope);
-  if (!amt.ok) issues.push({ severity: 'error', message: `Stitches: ${amt.error}` });
+  if (!amt.ok) issues.push({ severity: 'error', code: 'line.expr', message: `Stitches: ${amt.error}`, fix: fixOf('Correct the expression in Stitches per line.', [lf('amount', 'Stitches per line')]) });
   if (!a || !b || !amt.ok) return base;
   // Ends in knit order.
   const ends: ComputedLine['ends'] = a.row <= b.row ? [a, b] : [b, a];
@@ -87,7 +90,7 @@ function computeLine(l: ShapingLine, ctx: Ctx): ComputedLine {
   const res: ComputedLine = { ...base, ends, amount };
   const span: RowSpan = { from: ends[0].row + 1, to: ends[1].row };
   if (span.to < span.from) {
-    if (amount !== 0) issues.push({ severity: 'error', message: 'Both ends are on the same row; give the line some height.' });
+    if (amount !== 0) issues.push({ severity: 'error', code: 'line.flat', message: 'Both ends are on the same row.', fix: fixOf(`Give the line some height: move the End at least ${cmText(ceil1(1 / ctx.rpc))} (1 row) above the Start.`, [lf('end', 'End: Height (up from the lower edge)')], { now: '0 rows', need: '≥ 1 row' }) });
     return res;
   }
   const per = l.sides === 'both' ? 2 : 1;
@@ -116,10 +119,10 @@ function computeLine(l: ShapingLine, ctx: Ctx): ComputedLine {
         events.push({ row: r, delta: Math.sign(ph.delta) * k });
         left -= k;
       }
-      if (left > 0) issues.push({ severity: 'warning', message: `Hand-placed rows leave ${left} st${left === 1 ? '' : 's'} unshaped${l.kind === 'fisheye' ? ' in one half' : ''}.` });
+      if (left > 0) issues.push({ severity: 'warning', code: 'line.manual-short', message: `Hand-placed rows leave ${left} st${left === 1 ? '' : 's'} unshaped${l.kind === 'fisheye' ? ' in one half' : ''}.`, fix: fixOf(`Add ${Math.ceil(left / per)} more row${Math.ceil(left / per) === 1 ? '' : 's'} to Rows, or clear them to place automatically.`, [lf('amount', 'Rows')]) });
     }
     const outside = manual.filter((r) => r < span.from || r > span.to);
-    if (outside.length) issues.push({ severity: 'warning', message: `Rows ${outside.join(', ')} are outside the line and were ignored.` });
+    if (outside.length) issues.push({ severity: 'warning', code: 'line.manual-outside', message: `Rows ${outside.join(', ')} are outside the line and were ignored.`, fix: fixOf(`Remove them from Rows (the line runs from row ${span.from} to ${span.to}).`, [lf('amount', 'Rows')]) });
   } else {
     for (const ph of phases) {
       const n = Math.ceil(Math.abs(ph.delta) / per);
@@ -129,11 +132,14 @@ function computeLine(l: ShapingLine, ctx: Ctx): ComputedLine {
       if (!r.feasible && side !== 'any') {
         const any = distributeAuto(n, ph.span, { side: 'any', align: 'center' });
         if (any.feasible) {
-          issues.push({ severity: 'info', message: 'Not enough RS rows, so the shaping is worked on every row.' });
+          issues.push({ severity: 'info', code: 'line.every-row', message: 'Not enough RS rows, so the shaping is worked on every row.' });
           r = any;
         }
       }
-      for (const w of r.warnings) issues.push({ severity: r.feasible ? 'warning' : 'error', message: w });
+      for (const w of r.warnings) {
+        if (/alternates RS and WS/.test(w)) issues.push({ severity: 'info', code: 'line.every-row', message: w });
+        else issues.push({ severity: r.feasible ? 'warning' : 'error', code: 'line.rows', message: w, fix: fixOf(`Give the line more height (it needs ${n} shaping rows, now ${ph.span.to - ph.span.from + 1} rows), or fewer Stitches per line.`, [lf('end', 'End: Height (up from the lower edge)'), lf('amount', 'Stitches per line')]) });
+      }
       let left = Math.abs(ph.delta);
       for (const row of r.rows) {
         const k = Math.min(per, left);
@@ -146,16 +152,16 @@ function computeLine(l: ShapingLine, ctx: Ctx): ComputedLine {
   events.sort((x, y) => x.row - y.row);
   res.events = events;
 
-  if (per === 2 && events.some((e) => Math.abs(e.delta) === 1)) issues.push({ severity: 'info', message: 'An odd stitch is worked on one side of the line only.' });
+  if (per === 2 && events.some((e) => Math.abs(e.delta) === 1)) issues.push({ severity: 'info', code: 'line.odd', message: 'An odd stitch is worked on one side of the line only.' });
   // Position checks.
   for (const e of [ends[0], ends[1]]) {
     const h = ctx.halfWidth(Math.max(0, Math.min(T, e.row)));
-    if (Math.abs(e.x) > h - 2) issues.push({ severity: 'warning', message: `An end is ${roundNearest(Math.abs(e.x))} sts from the centre, at or beyond the edge (half width ${roundNearest(h)} sts).` });
+    if (Math.abs(e.x) > h - 2) issues.push({ severity: 'warning', code: 'line.at-edge', message: `An end is ${roundNearest(Math.abs(e.x))} sts (${cmText(Math.abs(e.x) / ctx.spc)}) from the centre, at or beyond the edge (half width ${roundNearest(h)} sts, ${cmText(h / ctx.spc)}).`, fix: fixOf(`Make that end's Distance from centre at most ${cmText(floor1((h - 2) / ctx.spc))} (now ${cmText(Math.abs(e.x) / ctx.spc)}).`, [lf(e === ends[0] ? 'start' : 'end', 'Distance from centre')], { now: cmText(Math.abs(e.x) / ctx.spc), need: `≤ ${cmText(floor1((h - 2) / ctx.spc))}` }) });
   }
-  if (l.mirror && Math.abs(ends[0].x) < 1 && Math.abs(ends[1].x) < 1) issues.push({ severity: 'warning', message: 'A mirrored line on the centre overlaps its twin.' });
+  if (l.mirror && Math.abs(ends[0].x) < 1 && Math.abs(ends[1].x) < 1) issues.push({ severity: 'warning', code: 'line.mirror-overlap', message: 'A mirrored line on the centre overlaps its twin.', fix: fixOf('Move the line off the centre (Distance from centre), or untick Mirror.', [lf('start', 'Distance from centre')]) });
   const net = events.reduce((s2, e) => s2 + e.delta, 0) * (l.mirror ? 2 : 1);
   if (net !== 0) {
-    issues.push({ severity: 'info', message: `Changes the stitch count by ${net > 0 ? '+' : ''}${net} from row ${ends[1].row} on; later widths move with it.` });
+    issues.push({ severity: 'info', code: 'line.count-change', message: `Changes the stitch count by ${net > 0 ? '+' : ''}${net} from row ${ends[1].row} on; later widths move with it.` });
   }
   return res;
 }

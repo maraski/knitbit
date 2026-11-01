@@ -22,6 +22,7 @@
 
 import { belowSplitFix, continuesPast, defaultShortRows, neckContinuation, neckRest, shortRowsFitFix, defaultYoke, generateYoke, shortRowSpan, ZONES, type PhaseSummary, type YokeCastOn, type YokeInc, type YokeIssue, type YokeParam, type YokePhase, type YokeResult, type YokeRow, type ZoneCounts } from './contiguous';
 import { plugIn } from './bust';
+import { ceil1, cmText, exprErrorText, field, fixOf, floor1, rowsCm, stsCm, YOKE_LABELS } from './issues';
 import { distributeAcross } from './distribute';
 import { edgePattern, edgesOf } from './edgeTreatments';
 import { evaluate, scopeFrom } from './expr';
@@ -119,6 +120,10 @@ function pickRows(n: number, slow: number[], fast: number[]): number[] {
   return [...slow, ...spread(fast, n - slow.length)].sort((a, b) => a - b);
 }
 
+/** The contiguous sub-generator's neck and short-row issues the raglan reports as its own (and the params it shows). */
+const NECK_CODES = new Set(['yoke.short-rows-fit', 'yoke.short-rows-centre', 'yoke.short-rows-close', 'yoke.front-neck-rows', 'yoke.front-neck-fit', 'yoke.no-back-neck', 'yoke.integrated-bands']);
+const NECK_PARAMS = ['neckWidth', 'neckDepth', 'neckCentre', 'neckBackDepth', 'frontCo', 'srPairs', 'srFirst', 'srStep'];
+
 export function generateRaglan(project: Project, spec: YokeSpec, sizeId: Id): YokeResult {
   const spc = stitchesPerCm(project.gauge);
   const rpc = rowsPerCm(project.gauge);
@@ -127,7 +132,7 @@ export function generateRaglan(project: Project, spec: YokeSpec, sizeId: Id): Yo
   const params: Record<string, YokeParam> = {};
   const os = spec.neck.shape === 'off-shoulder';
   // Off-shoulder is a pullover only for now: a cardigan front is worked as a pullover (with an error).
-  if (os && project.garment.opening === 'cardigan') issues.push({ severity: 'error', message: 'An off-shoulder neckline is pullover only for now: choose a pullover front or another neckline.' });
+  if (os && project.garment.opening === 'cardigan') issues.push({ severity: 'error', code: 'raglan.off-shoulder-cardigan', message: 'An off-shoulder neckline is pullover only for now.', fix: fixOf('Choose Front: pullover, or another Neckline (Garment tab).', [field.settings('front', 'Front')]) });
   const cardigan = project.garment.opening === 'cardigan' && !os;
 
   const val = (key: string, label: string, d: DimExpr, unit: YokeParam['unit'], extra: Record<string, number> = {}): number => {
@@ -138,7 +143,7 @@ export function generateRaglan(project: Project, spec: YokeSpec, sizeId: Id): Yo
     else {
       const r = evaluate(d.expr, scopeFrom(s));
       if (r.ok) value = r.value;
-      else issues.push({ severity: 'error', message: `${label}: ${r.error}` });
+      else issues.push({ severity: 'error', code: 'yoke.expr', param: key, message: `${YOKE_LABELS[key] ?? label}: ${exprErrorText(r.error)}`, fix: fixOf(`Correct the expression in ${YOKE_LABELS[key] ?? label}.`, [field.yoke(key)]) });
     }
     params[key] = { label, expr: d.expr, plugged: plugIn(d.expr, s), value, overridden, unit };
     return value;
@@ -154,8 +159,8 @@ export function generateRaglan(project: Project, spec: YokeSpec, sizeId: Id): Yo
     // The fronts cast on, the short rows (whole neck), or the front neck increases and centre cast-on (back start); its
     // shoulder and cap phases unused.
     ny = generateYoke(project, { ...spec, style: 'contiguous', backNeck: { ...spec.backNeck, perRow: dim(0) }, cap: { ...spec.cap, solve: false }, depth: { ...spec.depth, deepen: false } }, sizeId);
-    issues.push(...ny.issues.filter((i) => /^(Short|Front|Neck|First turn|Sts between|The neck width|Integrated)/.test(i.message)));
-    for (const k of ['neckWidth', 'neckDepth', 'neckCentre', 'neckBackDepth', 'frontCo', 'srPairs', 'srFirst', 'srStep']) if (ny.params[k]) params[k] = ny.params[k];
+    issues.push(...ny.issues.filter((i) => NECK_CODES.has(i.code ?? '') || (i.code === 'yoke.expr' && NECK_PARAMS.includes(i.param ?? ''))));
+    for (const k of NECK_PARAMS) if (ny.params[k]) params[k] = ny.params[k];
   }
   const shortRows = o ? o.shortRows : ny!.shortRows;
   const neck = o ? o.neck : ny!.neck;
@@ -174,7 +179,7 @@ export function generateRaglan(project: Project, spec: YokeSpec, sizeId: Id): Yo
   const seam = o ? o.seam : seamOf();
   const top = o ? o.armSts : Math.max(0, sts(val('sleeveTop', 'Sleeve top at the cast-on', spec.raglan?.sleeveTop ?? dim(RAGLAN_SLEEVE_TOP), 'cm')));
   const sleeve0 = top + 2 * seam;
-  if (sleeve0 < 1) issues.push({ severity: 'error', message: 'The sleeve tops have no stitches: widen the sleeve top or the raglan lines.' });
+  if (sleeve0 < 1) issues.push({ severity: 'error', code: 'raglan.no-sleeve-top', param: 'sleeveTop', message: 'The sleeve tops have no stitches.', fix: fixOf(`Make Sleeve top at the cast-on at least ${cmText(ceil1(1 / spc))} (now ${cmText(top / spc)}), or more Line stitches.`, [field.yoke('sleeveTop'), field.yoke('seamSts', 'Line stitches')], { now: cmText(top / spc), need: `≥ ${cmText(ceil1(1 / spc))}` }) });
   const FL = o ? o.ring.leftFront : ny!.castOnZones.leftFront;
   const FR = o ? o.ring.rightFront : ny!.castOnZones.rightFront;
   const ringZones: ZoneCounts = { leftFront: FL, leftSleeve: sleeve0, back: bn, rightSleeve: sleeve0, rightFront: FR };
@@ -196,7 +201,9 @@ export function generateRaglan(project: Project, spec: YokeSpec, sizeId: Id): Yo
   const hidden = o?.fold?.hiddenRows ?? 0;
   Y += hidden;
   if (Y < 2) {
-    issues.push({ severity: 'error', message: `The raglan is ${Y} rows deep: deepen it.` });
+    const extraNow = params.extraDepth?.value ?? 0;
+    const add = ceil1((2 - Y) / rpc);
+    issues.push({ severity: 'error', code: 'raglan.too-shallow', param: 'extraDepth', message: `The raglan is ${rowsCm(Y, rpc)} deep.`, fix: fixOf(`Add ${cmText(add)} to Extra depth (now ${cmText(extraNow)}), or a longer Back length, neck to underarm.`, [field.yoke('extraDepth'), field.yoke('backLength')], { now: cmText(extraNow), need: `≥ ${cmText(extraNow + add)}`, apply: { field: field.yoke('extraDepth'), value: Math.round((extraNow + add) * 10) / 10, unit: 'cm' } }) });
     Y = Math.max(Y, 1);
   }
   // A pullover joins at the end of the neck (whole neck: after the short rows); off-shoulder at the cast-on, with the
@@ -220,25 +227,37 @@ export function generateRaglan(project: Project, spec: YokeSpec, sizeId: Id): Yo
   let N = N0;
   if (bodyNeed(N) > cap || sleeveNeed(N) > cap) {
     N = Math.max(N0, Math.ceil((bodyTarget - bodyBase - 4 * cap) / 2), sleeveFull - sleeve0 - 2 * cap);
-    issues.push({ severity: 'info', message: `Even increasing every row, the raglan doesn't reach the body and sleeve widths in ${Y} rows: the underarm cast-on is raised from ${N0} to ${N} sts. A deeper raglan keeps it smaller.` });
+    issues.push({ severity: 'info', code: 'raglan.underarm-raised', message: `Even increasing every row, the raglan doesn't reach the body and sleeve widths in ${Y} rows: the underarm cast-on is raised from ${N0} to ${N} sts. A deeper raglan keeps it smaller.` });
   }
   const nb = Math.min(cap, Math.max(0, Math.round(bodyNeed(N))));
   const ns = Math.min(cap, Math.max(0, Math.round(sleeveNeed(N))));
-  const narrow = o ? 'Narrow the ring (ring ease) or move the arm arc' : 'Narrow the neck';
-  if (bodyNeed(N) < -0.5) issues.push({ severity: 'warning', message: `With ${N} sts cast on at each underarm the body is ${Math.round(-4 * bodyNeed(N))} sts wider than its target (${bodyTarget} sts) without any raglan increases. ${narrow} or cast on less at the underarm.` });
-  if (sleeveNeed(N) < -0.5) issues.push({ severity: 'warning', message: `With ${N} sts cast on at each underarm the sleeve is ${Math.round(-2 * sleeveNeed(N))} sts wider than its target (${sleeveFull} sts) without any raglan increases. ${o ? 'Narrow the arm arc' : 'Narrow the sleeve top'} or cast on less at the underarm.` });
+  // The most underarm cast-on that keeps the body / sleeve within its target with no raglan increases.
+  const coNow = cmText(N / spc);
+  if (bodyNeed(N) < -0.5) {
+    const most = floor1(Math.max(0, Math.floor((bodyTarget - bodyBase) / 2)) / spc);
+    issues.push({ severity: 'warning', code: 'raglan.body-wider', param: 'underarmCo', message: `With ${N} sts cast on at each underarm the body is ${stsCm(Math.round(-4 * bodyNeed(N)), spc)} wider than Body at the underarm without any raglan increases.`, fix: fixOf(`Make Underarm cast-on, each at most ${cmText(most)} (now ${coNow}), or ${o ? 'less Ring ease' : 'a narrower Neck width, cast on across the back'}.`, [field.yoke('underarmCo'), field.yoke(o ? 'ringEase' : 'neckWidth')], { now: coNow, need: `≤ ${cmText(most)}`, apply: N0 === N ? { field: field.yoke('underarmCo'), value: most, unit: 'cm' } : undefined }) });
+  }
+  if (sleeveNeed(N) < -0.5) {
+    const most = floor1(Math.max(0, sleeveFull - sleeve0) / spc);
+    issues.push({ severity: 'warning', code: 'raglan.sleeve-wider', param: 'underarmCo', message: `With ${N} sts cast on at each underarm the sleeve is ${stsCm(Math.round(-2 * sleeveNeed(N)), spc)} wider than Sleeve at the underarm without any raglan increases.`, fix: fixOf(`Make Underarm cast-on, each at most ${cmText(most)} (now ${coNow}), or a narrower ${o ? 'Arm arc' : 'Sleeve top at the cast-on'}.`, [field.yoke('underarmCo'), field.yoke(o ? 'armArc' : 'sleeveTop')], { now: coNow, need: `≤ ${cmText(most)}`, apply: N0 === N ? { field: field.yoke('underarmCo'), value: most, unit: 'cm' } : undefined }) });
+  }
   const bodyRows = pickRows(nb, slow, fast);
   const sleeveRows = pickRows(ns, slow, fast);
   const bodyFast = Math.max(0, nb - slow.length);
   const sleeveFast = Math.max(0, ns - slow.length);
-  if (bodyFast) issues.push({ severity: 'info', message: `Body: every other row isn't enough, so ${bodyFast} of its ${nb} increase rows are the rows between (increasing on the body every row there).` });
-  if (sleeveFast) issues.push({ severity: 'info', message: `Sleeves: every other row isn't enough, so ${sleeveFast} of their ${ns} increase rows are the rows between.` });
+  if (bodyFast) issues.push({ severity: 'info', code: 'raglan.body-every-row', message: `Body: every other row isn't enough, so ${bodyFast} of its ${nb} increase rows are the rows between (increasing on the body every row there).` });
+  if (sleeveFast) issues.push({ severity: 'info', code: 'raglan.sleeve-every-row', message: `Sleeves: every other row isn't enough, so ${sleeveFast} of their ${ns} increase rows are the rows between.` });
   let neckContinues: YokeResult['neckContinues'];
   if (!o && !shortRows && continuesPast(R, Y, cardigan, frontEdgeCo)) {
     const c = neckContinuation(R, Y, rpc, neckRows, centre, frontEdgeCo, cardigan);
     neckContinues = c.neckContinues;
     issues.push(c.issue);
-  } else if (R > Y) issues.push({ ...(o ? { severity: 'error' as const, code: 'yoke.band-below-split' } : belowSplitFix(R, Y, rpc, shortRows!.pairs)), message: o ? `The band${shortRows?.pairs ? ', increase round and short rows end' : ' and increase round end'} on row ${R}, below the underarm split (row ${Y}). A shallower band, fewer short rows or a smaller off_shoulder_drop.` : `The short rows end on row ${R}, below the underarm split (row ${Y}). Fewer pairs or a deeper raglan.` });
+  } else if (R > Y) {
+    const extraNow = params.extraDepth?.value ?? 0;
+    const add = ceil1((R - Y) / rpc);
+    const band = fixOf(`Add ${cmText(add)} to Extra depth (now ${cmText(extraNow)}), fewer Short-row pairs, or a shallower band (Garment → Edges → Neckband).`, [field.yoke('extraDepth'), field.yoke('srPairs'), field.settings('edges')], { now: cmText(extraNow), need: `≥ ${cmText(extraNow + add)}`, apply: { field: field.yoke('extraDepth'), value: Math.round((extraNow + add) * 10) / 10, unit: 'cm' } });
+    issues.push({ ...(o ? { severity: 'error' as const, code: 'yoke.band-below-split', param: 'extraDepth', fix: band } : belowSplitFix(R, Y, rpc, shortRows!.pairs)), message: o ? `The band${shortRows?.pairs ? ', increase round and short rows end' : ' and increase round end'} on row ${R}, ${rowsCm(R - Y, rpc)} below the underarm split (row ${Y}).` : `The short rows end on row ${R}, ${rowsCm(R - Y, rpc)} below the underarm split (row ${Y}).` });
+  }
   const bodySet = new Set(bodyRows);
   const sleeveSet = new Set(sleeveRows);
   const lastInc = Math.max(0, ...bodyRows, ...sleeveRows);
@@ -307,11 +326,11 @@ export function generateRaglan(project: Project, spec: YokeSpec, sizeId: Id): Yo
     if (shortRows && r >= srFrom && r <= shortRows.endRow) Object.assign(row, shortRowSpan(shortRows, r - srFrom + 1, row, cardigan), plain.has(r) ? { plain: true } : {});
     rows.push(row);
   }
-  if (rows.some((r) => r.total <= 0)) issues.push({ severity: 'error', message: 'A row has no stitches.' });
+  if (rows.some((r) => r.total <= 0)) issues.push({ severity: 'error', code: 'yoke.empty-row', message: 'A row has no stitches.', fix: fixOf('Check the cast-on: Neck width, cast on across the back and Sleeve top at the cast-on.', [field.yoke('neckWidth'), field.yoke('sleeveTop')]) });
 
   const last = rows[rows.length - 1]?.zones ?? z;
   const held = { leftSleeve: last.leftSleeve, body: last.leftFront + last.back + last.rightFront, rightSleeve: last.rightSleeve };
-  if (Object.values(held).some((v) => v <= 0)) issues.push({ severity: 'error', message: `Held stitches at the split: ${held.leftSleeve} / ${held.body} / ${held.rightSleeve}.` });
+  if (Object.values(held).some((v) => v <= 0)) issues.push({ severity: 'error', code: 'yoke.held-empty', message: `Nothing to hold at the split: sleeves ${held.leftSleeve} / body ${held.body} / sleeves ${held.rightSleeve} sts.`, fix: fixOf('Check Sleeve at the underarm, Body at the underarm and Underarm cast-on, each.', [field.yoke('sleeveWidth'), field.yoke('bodyWidth'), field.yoke('underarmCo')]) });
 
   // Phase table.
   const stsAt = (r: number) => (r <= 0 ? castOn : rows[Math.min(r, rows.length) - 1]?.total ?? castOn);
@@ -343,7 +362,11 @@ export function generateRaglan(project: Project, spec: YokeSpec, sizeId: Id): Yo
     // it. The front (centre front) works every row but the short rows.
     const frontRows = rows.filter((r) => !r.span || r.span[0] <= 0).length;
     const below = (frontRows - o.bandRows) / rpc;
-    if (below < 4) issues.push({ severity: 'error', message: `Only ${below.toFixed(1)} cm between the band and the underarm at the front: the raglan has no room to grow. A smaller off_shoulder_drop or a shallower band.` });
+    if (below < 4) {
+      const extraNow = params.extraDepth?.value ?? 0;
+      const add = ceil1(4 - below);
+      issues.push({ severity: 'error', code: 'raglan.band-room', param: 'extraDepth', message: `Only ${cmText(below)} between the band and the underarm at the front: the raglan has no room to grow (it needs 4 cm).`, fix: fixOf(`Add ${cmText(add)} to Extra depth (now ${cmText(extraNow)}), a shallower band (Garment → Edges → Neckband), or a smaller off_shoulder_drop.`, [field.yoke('extraDepth'), field.settings('edges'), field.measurement('off_shoulder_drop')], { now: cmText(extraNow), need: `≥ ${cmText(extraNow + add)}`, apply: { field: field.yoke('extraDepth'), value: Math.round((extraNow + add) * 10) / 10, unit: 'cm' } }) });
+    }
     o.frontRows = frontRows;
   }
 
@@ -394,8 +417,8 @@ type Val = (key: string, label: string, d: DimExpr, unit: YokeParam['unit'], ext
 function offShoulderStart(project: Project, spec: YokeSpec, scope: Record<string, number>, val: Val, sts: (cm: number) => number, rowsOf: (cm: number) => number, seam: number, issues: YokeIssue[]) {
   const os = spec.offShoulder ?? defaultOffShoulder();
   const circ = scope.off_shoulder_circ;
-  if (circ === undefined) issues.push({ severity: 'error', message: 'Off-shoulder needs the off_shoulder_circ measurement (around both upper arms and the torso at band height).' });
-  if (scope.off_shoulder_drop === undefined) issues.push({ severity: 'error', message: 'Off-shoulder needs the off_shoulder_drop measurement (shoulder point down to the band).' });
+  if (circ === undefined) issues.push({ severity: 'error', code: 'raglan.missing-measurement', message: 'Off-shoulder needs the off_shoulder_circ measurement (around both upper arms and the torso at band height).', fix: fixOf('Add off_shoulder_circ to the sizing table (Measurements).', [field.measurement('off_shoulder_circ')]) });
+  if (scope.off_shoulder_drop === undefined) issues.push({ severity: 'error', code: 'raglan.missing-measurement', message: 'Off-shoulder needs the off_shoulder_drop measurement (shoulder point down to the band).', fix: fixOf('Add off_shoulder_drop to the sizing table (Measurements).', [field.measurement('off_shoulder_drop')]) });
   const c = circ ?? 0;
   // No band when the Neckband edge is switched off: the ring is cast on and the raglan starts at once.
   const nbEdge = edgesOf(project).neckband;
@@ -404,16 +427,19 @@ function offShoulderStart(project: Project, spec: YokeSpec, scope: Record<string
   const ringEase = val('ringEase', 'Ring ease (fraction of off_shoulder_circ)', os.ringEase, '');
   const armCm = Math.max(0, val('armArc', 'Arm arc at the ring, each sleeve (between the raglan lines)', os.armArc, 'cm'));
   const backRaise = Math.max(0, val('backRaise', 'Back raise (short rows)', os.backRaise, 'cm'));
-  if (noBand) issues.push({ severity: 'info', message: 'No band (the Neckband is off): the ring is cast on as the top edge, and only its ease (ring ease) holds the garment up.' });
-  else if (bandEase > -0.05) issues.push({ severity: 'warning', message: `Band ease ${Math.round(bandEase * 100)} %: with less than 5 % negative ease the band may slide down.` });
-  else if (bandEase < -0.2) issues.push({ severity: 'warning', message: `Band ease ${Math.round(bandEase * 100)} %: more than 20 % negative ease may be too tight to pull over the arms.` });
+  if (noBand) issues.push({ severity: 'info', code: 'raglan.no-band', message: 'No band (the Neckband is off): the ring is cast on as the top edge, and only its ease (ring ease) holds the garment up.' });
+  else if (bandEase > -0.05) issues.push({ severity: 'warning', code: 'raglan.band-ease-loose', param: 'bandEase', message: `Band ease ${Math.round(bandEase * 100)} %: with less than 5 % negative ease the band may slide down.`, fix: fixOf(`Make Band ease −0.05 (−5 %) or less, down to −0.2 (now ${Math.round(bandEase * 100) / 100}).`, [field.yoke('bandEase')], { now: `${Math.round(bandEase * 100)} %`, need: '−5 % … −20 %', apply: { field: field.yoke('bandEase'), value: -0.05, unit: '' } }) });
+  else if (bandEase < -0.2) issues.push({ severity: 'warning', code: 'raglan.band-ease-tight', param: 'bandEase', message: `Band ease ${Math.round(bandEase * 100)} %: more than 20 % negative ease may be too tight to pull over the arms.`, fix: fixOf(`Make Band ease −0.2 (−20 %) or more, up to −0.05 (now ${Math.round(bandEase * 100) / 100}).`, [field.yoke('bandEase')], { now: `${Math.round(bandEase * 100)} %`, need: '−5 % … −20 %', apply: { field: field.yoke('bandEase'), value: -0.2, unit: '' } }) });
 
   // The ring after the increase round.
   const ringSts = Math.max(0, sts(c * (1 + ringEase)));
   const armSts = sts(armCm);
   const sleeve = armSts + 2 * seam;
   const bodySts = ringSts - 2 * sleeve;
-  if (bodySts <= 0) issues.push({ severity: 'error', message: `The ring (${ringSts} sts) has no room for the body after two sleeve zones of ${sleeve} sts: a smaller arm arc.` });
+  if (bodySts <= 0) {
+    const most = floor1(Math.max(0, Math.floor((ringSts - 1) / 2) - 2 * seam) / (sts(100) / 100 || 1));
+    issues.push({ severity: 'error', code: 'raglan.ring-full', param: 'armArc', message: `The ring (${ringSts} sts) has no room for the body after two sleeve zones of ${sleeve} sts.`, fix: fixOf(`Make Arm arc at most ${cmText(most)} (now ${cmText(armCm)}), or more Ring ease.`, [field.yoke('armArc'), field.yoke('ringEase')], { now: cmText(armCm), need: `≤ ${cmText(most)}`, apply: { field: field.yoke('armArc'), value: most, unit: 'cm' } }) });
+  }
   const back = Math.max(0, Math.floor(bodySts / 2));
   const front = Math.max(0, bodySts - back);
   const ring: ZoneCounts = { leftFront: Math.floor(front / 2), leftSleeve: sleeve, back, rightSleeve: sleeve, rightFront: front - Math.floor(front / 2) };
@@ -429,7 +455,7 @@ function offShoulderStart(project: Project, spec: YokeSpec, scope: Record<string
   const fold = f0 ? { turn: f0.turn, close: f0.close, depthRows, hiddenRows: depthRows + 1 } : undefined;
   const m = Math.max(1, pattern.multiple);
   const bandSts = noBand ? ringSts : Math.max(m, Math.round(sts(c * (1 + bandEase)) / m) * m);
-  if (!noBand && bandSts > ringSts) issues.push({ severity: 'error', message: `The band (${bandSts} sts) is wider than the ring (${ringSts} sts): its ease must be below the ring's.` });
+  if (!noBand && bandSts > ringSts) issues.push({ severity: 'error', code: 'raglan.band-wider-than-ring', param: 'bandEase', message: `The band (${bandSts} sts) is wider than the ring (${ringSts} sts).`, fix: fixOf(`Make Band ease less than Ring ease (now ${Math.round(bandEase * 100)} % and ${Math.round(ringEase * 100)} %).`, [field.yoke('bandEase'), field.yoke('ringEase')], { now: `${Math.round(bandEase * 100)} %`, need: `< ${Math.round(ringEase * 100)} %` }) });
   // The band's zones: the ring's scaled to the band, the rest of the count on the fronts.
   const f = ringSts > 0 ? Math.min(1, bandSts / ringSts) : 0;
   const bSleeve = Math.round(sleeve * f);
@@ -447,8 +473,8 @@ function offShoulderStart(project: Project, spec: YokeSpec, scope: Record<string
   const turns: number[] = [];
   for (let i = 0; i < pairs; i++) turns.push(side - firstTurn - i * step);
   const lastTurn = turns[turns.length - 1] ?? side;
-  if (pairs && lastTurn < 1) issues.push({ ...shortRowsFitFix(pairs, side, firstTurn, step), message: `Short rows: ${pairs} pairs ${step} sts apart don't fit in a front of ${side} sts (the last turn is past centre front). Fewer pairs or a smaller step.` });
-  if (pairs > 1 && step < 2) issues.push({ severity: 'info', message: `Short rows: turns 1 st apart. Fewer pairs spread them more.` });
+  if (pairs && lastTurn < 1) issues.push({ ...shortRowsFitFix(pairs, side, firstTurn, step), message: `Short rows: ${pairs} pairs ${step} sts apart don't fit in a front of ${side} sts: the last turn is past centre front.` });
+  if (pairs > 1 && step < 2) issues.push({ severity: 'info', code: 'yoke.short-rows-close', message: `Short rows: turns 1 st apart. Fewer pairs spread them more.` });
   // The first row after the band and its increase round (row 1 without a band).
   const fromRow = noBand ? 1 : bandRows + 2;
   const endRow = pairs > 0 ? fromRow + 2 * pairs : 0;

@@ -7,6 +7,7 @@ import type { Id, Panel, Project } from './model';
 import { armholeSide, type ComputedPanel, type Issue } from './panel';
 import { regionTransitions } from './regionShaping';
 import { regionSizingOn, regionSources, sizesApart } from './regions';
+import { ceil1, cmText, field, fixOf, waypointWords } from './issues';
 
 export const DEFAULT_REGION_GAP = 2;
 
@@ -44,6 +45,8 @@ export function fitChecks(project: Project, sizeId: Id, computed: { panel: Panel
       out.push(
         projectLevel({
           severity: 'warning',
+          code: 'fit.region-gap',
+          fix: fixOf(`Choose lower and upper body sizes at most ${limit} apart (Measurements → region sizing), or raise the Region sizing gap limit (Project settings).`, [field.measurement('regions'), field.settings('regionGap')], { now: `${apart} sizes`, need: `≤ ${limit}` }),
           message: `Lower body ${name(src.lower)} is ${apart} sizes from upper body ${name(src.upper)} (limit ${limit}): check the shaping between the waist and the underarm.`,
           ref: { kind: 'panel' },
         }),
@@ -63,7 +66,7 @@ export function fitChecks(project: Project, sizeId: Id, computed: { panel: Panel
       out.push({
         panelId: panel.id,
         panelName: panel.name,
-        issue: { severity: 'error', message: `More shaping than the rows allow between ${t.lower.name} and ${t.upper.name}, where ${t.lower.sizes} meets ${t.upper.sizes}: ${t.label}. Bring the sizes closer or lengthen this part. (${issue.message})`, ref },
+        issue: { severity: 'error', code: 'fit.region-shaping', message: `More shaping than the rows allow between ${waypointWords(t.lower.name)} and ${waypointWords(t.upper.name)}, where ${t.lower.sizes} meets ${t.upper.sizes}: ${t.label}. (${issue.message})`, ref, fix: issue.fix ? { ...issue.fix, text: `Bring the sizes closer, or: ${issue.fix.text}` } : fixOf('Bring the sizes closer, or lengthen this part.', [field.measurement('regions')]) },
         replaces: issue,
       });
     }
@@ -83,6 +86,8 @@ export function fitChecks(project: Project, sizeId: Id, computed: { panel: Panel
           panelName: hems.map((x) => x.panel.name).join(' + '),
           issue: {
             severity: 'warning',
+            code: 'fit.hem-narrow',
+            fix: fixOf(`Widen the hem by ${cmText(ceil1((need - total) / hems.length))} on each of ${hems.map((x) => x.panel.name).join(' and ')} (${waypointWords(hems[0].w!.name)} width), or turn off the hem check (Project settings).`, [{ ...field.waypoint(hems[0].w!.id, hems[0].w!.name, 'width'), panelId: p.id }], { now: cm(total), need: `≥ ${cm(need)}` }),
             message: `The hem (${cm(total)} around) is ${cm(need - total)} narrower than the bust plus ease (${cm(need)}): it may not pull over the bust.`,
             ref: { kind: 'waypoint', id: hems[0].w!.id },
           },
@@ -113,7 +118,13 @@ export function fitChecks(project: Project, sizeId: Id, computed: { panel: Panel
         out.push({
           panelId,
           panelName: p.name,
-          issue: { severity: 'warning', message: `The armhole (Front + Back, ${cm(total)}) is shorter than the scye circumference (${cm(scope.scye_circumference)}): the sleeve will be tight at the underarm.`, ref: { kind: 'panel' } },
+          issue: {
+            severity: 'warning',
+            code: 'fit.armhole-short',
+            message: `The armhole (Front + Back, ${cm(total)}) is shorter than the scye circumference (${cm(scope.scye_circumference)}): the sleeve will be tight at the underarm.`,
+            ref: { kind: 'panel' },
+            fix: fixOf(`Deepen the armholes by about ${cmText(ceil1((scope.scye_circumference - total) / 4))} (the underarm waypoint lower on Front and Back), or check scye_circumference.`, [{ ...field.waypoint(p.waypoints.find((w) => w.name === 'underarm')!.id, 'underarm', 'height'), panelId: p.id }, field.measurement('scye_circumference')], { now: cm(total), need: `≥ ${cm(scope.scye_circumference)}` }),
+          },
         });
       }
     }
@@ -125,7 +136,9 @@ export function fitChecks(project: Project, sizeId: Id, computed: { panel: Panel
       if (panel.template !== 'neckband' || !c.ok || !c.waypoints.length) continue;
       const w = c.waypoints[0];
       if (w.widthCm < scope.neck_base - 1e-6) {
-        out.push({ panelId: panel.id, panelName: panel.name, issue: { severity: 'warning', message: `The neckband (${cm(w.widthCm)}) is shorter than the neck base (${cm(scope.neck_base)}): it won't sit around the neck.`, ref: { kind: 'waypoint', id: w.id } } });
+        const f = { ...field.waypoint(w.id, w.name, 'width'), panelId: panel.id };
+        const need = ceil1(scope.neck_base);
+        out.push({ panelId: panel.id, panelName: panel.name, issue: { severity: 'warning', code: 'fit.neckband-short', message: `The neckband (${cm(w.widthCm)}) is shorter than the neck base (${cm(scope.neck_base)}): it won't sit around the neck.`, ref: { kind: 'waypoint', id: w.id }, fix: fixOf(`Make ${f.label} at least ${cmText(need)} (now ${cmText(w.widthCm)}).`, [f], { now: cmText(w.widthCm), need: `≥ ${cmText(need)}`, apply: w.symmetric ? { field: f, value: need, unit: 'cm' } : undefined }) } });
       }
     }
   }

@@ -8,6 +8,7 @@ import type { BandAttach, BandRole, Id, Panel, Project } from './model';
 import { buildScope } from './measurements';
 import type { ComputedPanel, Issue } from './panel';
 import { roundNearest } from './rounding';
+import { ceil1, cmText, field, fixOf, floor1, wpText, type IssueFix } from './issues';
 
 export interface Buttonhole {
   index: number; // 0 = top button
@@ -30,8 +31,11 @@ export interface ButtonPlan {
   holeWidth: number; // cells per buttonhole
   /** For a picked-up band: stitches between buttonholes along the band. */
   spacingSts: number[];
-  issues: { severity: Issue['severity']; message: string }[];
+  issues: { severity: Issue['severity']; message: string; code?: string; fix?: IssueFix }[];
 }
+
+const BUTTONS = field.settings('buttons', 'Buttons (Garment → Edges → Front bands)');
+const BANDS = field.settings('edges', 'Front bands (Garment → Edges)');
 
 /** Cells of one buttonhole in working order on a RS row read right to left: the yarn over, then the k2tog. */
 export function buttonholeCells(project: Project): string[] {
@@ -62,7 +66,7 @@ export function buttonPlan(project: Project, sizeId: Id, cache: PanelCache = new
   const frontEdgeCm = frontEdges(project, holeSide).reduce((a, r) => a + measureEdge(project, r, sizeId, project.settings.pickUp, cache).lengthCm, 0) || bodyEdgeCm;
   const scope = buildScope(project, sizeId);
   const bp = buttonPositions(project, sizeId, frontEdgeCm, scope);
-  for (const e of bp.errors) issues.push({ severity: 'error', message: e });
+  for (const e of bp.errors) issues.push({ severity: 'error', code: 'buttons.expr', message: e, fix: fixOf('Correct the button placement (Garment → Edges → Front bands → Buttons).', [BUTTONS]) });
   const cells = buttonholeCells(project);
   const w = cells.length;
   const hole = bandOnFront(project, holeSide)!;
@@ -82,7 +86,7 @@ export function buttonPlan(project: Project, sizeId: Id, cache: PanelCache = new
   };
 
   for (const [i, h] of bp.positions.entries()) {
-    if (h < 0 || h > frontEdgeCm + 1e-6) issues.push({ severity: 'error', message: `Button ${i + 1} is at ${h.toFixed(1)} cm, outside the front edge (0–${frontEdgeCm.toFixed(1)} cm).` });
+    if (h < 0 || h > frontEdgeCm + 1e-6) issues.push({ severity: 'error', code: 'buttons.outside', message: `Button ${i + 1} is at ${h.toFixed(1)} cm, outside the front edge (0–${frontEdgeCm.toFixed(1)} cm).`, fix: fixOf(`Keep the buttons between 0 and ${frontEdgeCm.toFixed(1)} cm: change the first / last button distances or drag button ${i + 1}.`, [BUTTONS], { now: `${h.toFixed(1)} cm`, need: `0–${frontEdgeCm.toFixed(1)} cm` }) });
   }
 
   if (hole.attach === 'integrated') {
@@ -91,12 +95,12 @@ export function buttonPlan(project: Project, sizeId: Id, cache: PanelCache = new
     const start = half.keep === 'right' ? half.cfX + sel : half.cfX - sel - half.bandSts;
     const x = start + Math.floor((half.bandSts - w) / 2);
     plan.holes = bp.positions.map((h, index) => ({ index, heightCm: h, panelId: holeFront.id, row: rowAt(fc, h), x }));
-    if ((half.bandSts - w) / 2 < 1) issues.push({ severity: 'warning', message: `Buttonholes (${w} sts) leave fewer than 1 band stitch each side in a ${half.bandSts}-st band.` });
+    if ((half.bandSts - w) / 2 < 1) issues.push({ severity: 'warning', code: 'buttons.hole-wide', message: `Buttonholes (${w} sts) leave fewer than 1 band stitch each side in a ${half.bandSts}-st band.`, fix: fixOf(`A narrower buttonhole (at most ${Math.max(1, half.bandSts - 2)} sts) or a wider band.`, [BUTTONS, BANDS], { now: `${w} sts`, need: `≤ ${Math.max(1, half.bandSts - 2)} sts` }) });
   } else {
     const strip = project.panels.find((p) => p.edge === 'frontBands' && p.band === hole.role);
     const sc = strip ? cachedPanel(project, strip.id, sizeId, cache) : null;
     if (!strip || !sc?.ok) {
-      issues.push({ severity: 'warning', message: `No ${hole.role === 'continuous' ? 'front band' : 'buttonhole band'} strip to put the buttonholes on: use Add band strips in Project → Edges.` });
+      issues.push({ severity: 'warning', code: 'buttons.no-strip', message: `No ${hole.role === 'continuous' ? 'front band' : 'buttonhole band'} strip to put the buttonholes on.`, fix: fixOf('Use Add band strips (Garment → Edges → Front bands).', [BANDS]) });
       return plan;
     }
     // Distance along the band from its start (the right front's lower edge for a continuous band).
@@ -117,9 +121,9 @@ export function buttonPlan(project: Project, sizeId: Id, cache: PanelCache = new
       });
       const ordered = [...plan.holes].sort((a, b) => a.x - b.x);
       plan.spacingSts = ordered.slice(1).map((hh, k) => hh.x - ordered[k].x - w);
-      if (Math.min(row - 1, sc.totalRows - row) < 2) issues.push({ severity: 'warning', message: `The band is ${sc.totalRows} rows deep: the buttonholes (row ${row}) are within 2 rows of its edge. Widen the band.` });
+      if (Math.min(row - 1, sc.totalRows - row) < 2) issues.push({ severity: 'warning', code: 'buttons.band-narrow', message: `The band is ${sc.totalRows} rows (${cmText(sc.totalRows / sc.rowsPerCm)}) deep: the buttonholes (row ${row}) are within 2 rows of its edge.`, fix: fixOf(`Make the front band at least ${cmText(ceil1(5 / sc.rowsPerCm))} wide (5 rows; now ${cmText(sc.totalRows / sc.rowsPerCm)}).`, [BANDS], { now: cmText(sc.totalRows / sc.rowsPerCm), need: `≥ ${cmText(ceil1(5 / sc.rowsPerCm))}` }) });
       const closest = Math.min(...plan.spacingSts);
-      if (closest < 2) issues.push({ severity: 'warning', message: `Buttonholes are ${closest} st${closest === 1 ? '' : 's'} apart on the band: too close together.` });
+      if (closest < 2) issues.push({ severity: 'warning', code: 'buttons.close', message: `Buttonholes are ${closest} st${closest === 1 ? '' : 's'} apart on the band: too close together.`, fix: fixOf('Fewer buttons, or a narrower buttonhole.', [BUTTONS], { now: `${closest} sts`, need: '≥ 2 sts' }) });
     } else {
       // Knit sideways from the lower edge: each buttonhole on the row at its height, centred across the band.
       const n = sc.counts[1] ?? 0;
@@ -127,13 +131,13 @@ export function buttonPlan(project: Project, sizeId: Id, cache: PanelCache = new
         const row = Math.max(1, Math.min(sc.totalRows, Math.round(along(h) * sc.rowsPerCm)));
         return { index, heightCm: h, panelId: strip.id, row, x: sc.leftEdge[row] + Math.floor((n - w) / 2) };
       });
-      if ((n - w) / 2 < 1) issues.push({ severity: 'warning', message: `Buttonholes (${w} sts) leave fewer than 1 stitch each side in a ${n}-st band.` });
+      if ((n - w) / 2 < 1) issues.push({ severity: 'warning', code: 'buttons.hole-wide', message: `Buttonholes (${w} sts) leave fewer than 1 stitch each side in a ${n}-st band.`, fix: fixOf(`A narrower buttonhole (at most ${Math.max(1, n - 2)} sts) or a wider band.`, [BUTTONS, BANDS], { now: `${w} sts`, need: `≤ ${Math.max(1, n - 2)} sts` }) });
     }
   }
   if (hole.attach !== 'pickup') {
     const rows = plan.holes.map((h) => h.row).sort((a, b) => a - b);
     const gaps = rows.slice(1).map((r, k) => r - rows[k]);
-    if (gaps.some((g) => g < 4)) issues.push({ severity: 'warning', message: `Buttonholes are only ${Math.min(...gaps)} rows apart: too close together.` });
+    if (gaps.some((g) => g < 4)) issues.push({ severity: 'warning', code: 'buttons.close', message: `Buttonholes are only ${Math.min(...gaps)} rows apart: too close together.`, fix: fixOf('Fewer buttons, or spread them further (first / last button distances).', [BUTTONS], { now: `${Math.min(...gaps)} rows`, need: '≥ 4 rows' }) });
   }
   return plan;
 }
@@ -150,13 +154,13 @@ export function bandChecks(project: Project, sizeId: Id, cache: PanelCache): Ban
   const roles = bandRoles(project);
   const fronts = project.panels.filter((p) => p.half);
   for (const p of staleStrips(project)) {
-    out.push({ panelId: p.id, panelName: p.name, issue: { severity: 'info', message: `${p.name} no longer matches the edge settings (Project → Edges); delete it if you don't need it.`, ref: { kind: 'panel' } } });
+    out.push({ panelId: p.id, panelName: p.name, issue: { severity: 'info', code: 'bands.stale-strip', message: `${p.name} no longer matches the edge settings (Project → Edges); delete it if you don't need it.`, ref: { kind: 'panel' } } });
   }
   if (project.garment.opening !== 'cardigan' || !fronts.length) return out;
   const scope = buildScope(project, sizeId);
   const tol = project.settings.seamToleranceCm;
   const pattern = edgePattern(edgesOf(project).frontBands);
-  const push = (p: Panel, severity: Issue['severity'], message: string) => out.push({ panelId: p.id, panelName: p.name, issue: { severity, message, ref: { kind: 'panel' } } });
+  const push = (p: Panel, severity: Issue['severity'], message: string, code: string, fix?: IssueFix) => out.push({ panelId: p.id, panelName: p.name, issue: { severity, code, message, ref: { kind: 'panel' }, ...(fix && { fix }) } });
 
   // Picked-up and sewn-on strips: length against the edge, and the pick-up against the band's multiple.
   for (const role of roles) {
@@ -170,23 +174,24 @@ export function bandChecks(project: Project, sizeId: Id, cache: PanelCache): Ban
     const edgeCm = m.reduce((a, x) => a + x.lengthCm, 0);
     const pickup = m.reduce((a, x) => a + x.pickup, 0);
     const bandCm = attach === 'pickup' ? (sc.counts[1] ?? 0) / sc.stitchesPerCm : sc.totalRows / sc.rowsPerCm;
-    if (bandCm < edgeCm * 0.9 - 1e-6) push(strip, 'warning', `${strip.name} is ${bandCm.toFixed(1)} cm long, ${(edgeCm - bandCm).toFixed(1)} cm shorter than its edge (${edgeCm.toFixed(1)} cm): it may pull the front up.`);
-    else if (bandCm > edgeCm * 1.05 + tol) push(strip, 'warning', `${strip.name} is ${bandCm.toFixed(1)} cm long, ${(bandCm - edgeCm).toFixed(1)} cm longer than its edge (${edgeCm.toFixed(1)} cm): it may ripple.`);
+    const pick = { target: 'settings' as const, key: 'joins', label: `Pick-up ratio (${join.name})` };
+    if (bandCm < edgeCm * 0.9 - 1e-6) push(strip, 'warning', `${strip.name} is ${bandCm.toFixed(1)} cm long, ${(edgeCm - bandCm).toFixed(1)} cm shorter than its edge (${edgeCm.toFixed(1)} cm): it may pull the front up.`, 'bands.short', fixOf(`Pick up more stitches (a larger ratio on ${join.name}) so the band is at least ${cmText(ceil1(edgeCm * 0.9))} (now ${cmText(bandCm)}).`, [pick], { now: cmText(bandCm), need: `≥ ${cmText(ceil1(edgeCm * 0.9))}` }));
+    else if (bandCm > edgeCm * 1.05 + tol) push(strip, 'warning', `${strip.name} is ${bandCm.toFixed(1)} cm long, ${(bandCm - edgeCm).toFixed(1)} cm longer than its edge (${edgeCm.toFixed(1)} cm): it may ripple.`, 'bands.long', fixOf(`Pick up fewer stitches (a smaller ratio on ${join.name}) so the band is at most ${cmText(floor1(edgeCm * 1.05 + tol))} (now ${cmText(bandCm)}).`, [pick], { now: cmText(bandCm), need: `≤ ${cmText(floor1(edgeCm * 1.05 + tol))}` }));
     if (attach === 'pickup' && pattern.multiple > 1 && ((pickup - pattern.offset) % pattern.multiple + pattern.multiple) % pattern.multiple !== 0) {
       const sts = sc.counts[0] ?? 0;
-      push(strip, 'info', `Picking up ${pickup} sts doesn't fit ${pattern.name} (${pattern.multiple}n${pattern.offset ? ` + ${pattern.offset}` : ''}); the band rounds to ${sts}: pick up ${sts - pickup > 0 ? `${sts - pickup} more` : `${pickup - sts} fewer`}.`);
+      push(strip, 'info', `Picking up ${pickup} sts doesn't fit ${pattern.name} (${pattern.multiple}n${pattern.offset ? ` + ${pattern.offset}` : ''}); the band rounds to ${sts}: pick up ${sts - pickup > 0 ? `${sts - pickup} more` : `${pickup - sts} fewer`}.`, 'bands.pickup-multiple');
     }
   }
   if (roles.includes('continuous') && edgesOf(project).neckband.enabled) {
     const strip = project.panels.find((p) => p.band === 'continuous');
-    if (strip) push(strip, 'warning', 'A continuous front band goes around the neck, and a neckband is switched on too.');
+    if (strip) push(strip, 'warning', 'A continuous front band goes around the neck, and a neckband is switched on too.', 'bands.double-neck', fixOf('Switch off the Neckband, or choose separate front bands (Garment → Edges).', [field.settings('edges')]));
   }
 
   // Buttons and buttonholes.
   const plan = buttonPlan(project, sizeId, cache);
   if (plan) {
     const p = project.panels.find((x) => x.id === (plan.holes[0]?.panelId ?? plan.holeFrontId)) ?? fronts[0];
-    for (const i of plan.issues) push(p, i.severity, i.message);
+    for (const i of plan.issues) push(p, i.severity, i.message, i.code ?? 'buttons', i.fix);
   }
 
   // Closed width: both fronts' fabric plus the bands, less the overlap, against the whole front's target.
@@ -201,7 +206,7 @@ export function bandChecks(project: Project, sizeId: Id, cache: PanelCache): Ban
       const closed = 2 * fabric + 2 * bandW - overlap;
       if (closed < w.wholeCm - tol) {
         const rounding = w.stitchRounding[0]?.steps.find((st) => st.rule === 'multiple' && st.to < st.from);
-        push(front, 'warning', `Closed at ${w.name}, the fronts measure ${closed.toFixed(1)} cm (2 × ${fabric.toFixed(1)} + 2 × ${bandW} band − ${overlap} overlap), ${(w.wholeCm - closed).toFixed(1)} cm short of the front's ${w.wholeCm.toFixed(1)} cm${rounding ? ` (each front was rounded down to its pattern multiple)` : ''}.`);
+        push(front, 'warning', `Closed at ${wpText(w.name)}, the fronts measure ${closed.toFixed(1)} cm (2 × ${fabric.toFixed(1)} + 2 × ${bandW} band − ${overlap} overlap), ${(w.wholeCm - closed).toFixed(1)} cm short of the front's ${w.wholeCm.toFixed(1)} cm${rounding ? ` (each front was rounded down to its pattern multiple)` : ''}.`, 'bands.closed-narrow', fixOf(`Make the band ${cmText(ceil1((w.wholeCm - closed) / 2))} wider each, or the overlap smaller (now ${overlap} cm).`, [field.settings('edges'), field.settings('buttons', 'Overlap when closed')], { now: cmText(closed), need: `≥ ${cmText(ceil1(w.wholeCm - tol))}` }));
       }
     }
   }

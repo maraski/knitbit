@@ -106,7 +106,7 @@ describe('simple panels', () => {
     panel.waypoints = [newWaypoint('a', 0, 'nope'), newWaypoint('b', 10, 40)];
     const c = computePanel(p, panel, p.baseSizeId);
     expect(c.ok).toBe(false);
-    expect(c.issues[0].message).toMatch(/Unknown name "nope"/);
+    expect(c.issues[0].message).toMatch(/“nope” isn't a measurement/);
   });
 
   it('uses per-size overrides', () => {
