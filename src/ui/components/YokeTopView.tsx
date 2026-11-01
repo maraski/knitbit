@@ -398,7 +398,8 @@ function TopSchematic({ y, g, P, labels, scale, units }: { y: YokeResult; g: Top
     t('rs', at(inner, mid(3), -2), 'right sleeve');
     t('rs2', at(inner, mid(3), 11), `${y.held.rightSleeve} sts · hold`);
     t('bk', at(inner, 0, 4), `back`);
-    t('fr', at(out, Math.PI, 16), `fronts · body ${y.held.body} sts + 2 × ${y.underarmCo} underarm cast-on`);
+    // Below the "neck continues" note when the neck is still open at the split.
+    t('fr', at(out, Math.PI, y.neckContinues ? 30 : 16), `fronts · body ${y.held.body} sts + 2 × ${y.underarmCo} underarm cast-on`);
   }
   if (labels && scale) parts.push(<NeckNotes key="notes" y={y} g={g} P={P} scale={scale} />);
   return <g className="yoke-top-schematic">{parts}</g>;
@@ -468,6 +469,13 @@ function NeckNotes({ y, g, P, scale }: { y: YokeResult; g: TopGeometry; P: (x: n
     lines.forEach((line, i) =>
       parts.push(<text key={`neck${i}`} x={q.x} y={q.y - 8 - 12 * (lines.length - 1 - i)} textAnchor="middle" className="yoke-note">{line}</text>),
     );
+  }
+  const nc = y.neckContinues;
+  const last = g.rings[g.rings.length - 1];
+  if (nc && last) {
+    // The neck is still open at the split: the front body works the rest (always labelled, it changes the body).
+    const q = at(last.r1, Math.PI);
+    parts.push(<text key="ncont" x={q.x} y={q.y + 16} textAnchor="middle" className="yoke-note">neck continues into the front body ({nc.rows} rows)</text>);
   }
   return <g className="yoke-notes">{parts}</g>;
 }

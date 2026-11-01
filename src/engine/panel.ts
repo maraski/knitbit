@@ -13,15 +13,15 @@ import { resolveDefinitions } from './expr';
 import { rowsPerCm, stitchesPerCm } from './gauge';
 import { missingAliasHint } from './fit';
 import { buildScope, evaluateDim } from './measurements';
-import type { FrontHalf, Id, ManualEvent, Panel, Project, Segment, SegmentMethod, ShapingPlacement } from './model';
-import { defaultAutoMethod, defaultPrincess } from './model';
+import type { FrontHalf, Id, ManualEvent, Neckline, Panel, Project, Segment, SegmentMethod, ShapingPlacement } from './model';
+import { defaultAutoMethod, defaultPrincess, dim } from './model';
 import { roundNearest, roundRows, roundStitches, type RoundingResult } from './rounding';
 import { cmText, issueKey, type IssueFix } from './issues';
 import { bustValues, computeBust, type ComputedBust } from './bust';
 import { sideEdgeLength } from './edges';
 import { measureEdge } from './joins';
 import { computeYokePanel, yokeIssues } from './yokePanel';
-import { YOKE_NAMES, yokeNames, type YokeResult } from './contiguous';
+import { YOKE_NAMES, yokeNames, yokeNeckContinues, type YokeResult } from './contiguous';
 import { defaultSymbol } from './symbols';
 import { bandOnFront } from './bands';
 import { edgePattern } from './edgeTreatments';
@@ -518,6 +518,10 @@ function computePanelRaw(project: Project, panel: Panel, sizeId: Id): ComputedPa
   const joinH = joinWp ? values[`${waypointKey(joinWp.name)}.height`] : undefined;
   const inRoundAt = (h: number) => inTheRound || (joinH !== undefined && h <= joinH + 1e-9);
   const scope = { ...buildScope(project, sizeId), ...panelExtras(project, panel, sizeId), ...values };
+  // A front neck deeper than the yoke's split: the body pieces from the yoke start with it still open, and the Front
+  // works the rest of it (its own neckline, if it has one, wins).
+  const yokeNeck = topDown && !panel.yoke && (panel.fromYoke === 'front' || panel.fromYoke === 'back') ? yokeNeckContinues(project, sizeId) : null;
+  const neckline = panel.neckline ?? (yokeNeck && panel.fromYoke === 'front' ? yokeNeckline(yokeNeck.shape) : null);
   const frame = half ? halfFrame(project, half, spc, scope) : null;
   const rawSections = panel.sections.flatMap((sec) => {
     const a = evaluateDim(sec.fromHeight, sizeId, scope);
@@ -645,13 +649,21 @@ function computePanelRaw(project: Project, panel: Panel, sizeId: Id): ComputedPa
   // from the row after the join. Top-down: flat from row 1 down to the join, then rounds.
   const joinRow = joinWp ? wps.find((w) => w.id === joinWp.id)!.row : null;
   let roundPart: { from: number; to: number } | null = null;
-  if (inTheRound) roundPart = { from: 1, to: totalRows };
+  if (inTheRound && topDown && yokeNeck) {
+    // A body from the yoke while the front neck is still open: worked flat (back and front together, the front open
+    // at centre front) until the neck closes, then in the round.
+    let split = yokeNeck.neck.rows;
+    if (split % 2 === 0) split += 1; // the centre is cast on on a RS row
+    roundPart = split < totalRows ? { from: split + 1, to: totalRows } : null;
+    const what = panel.fromYoke === 'front' ? `The front neck closes on row ${split}` : `The front neck is open down to row ${split}`;
+    issues.push({ severity: 'info', code: 'body.flat-until-neck', message: `${what}: the body is worked flat until then, in the round from row ${split + 1}.`, ref: panel.fromYoke === 'front' ? { kind: 'neckline' } : { kind: 'panel' } });
+  } else if (inTheRound) roundPart = { from: 1, to: totalRows };
   else if (joinRow !== null) {
     let from = joinRow + 1;
     // Top-down with a front neckline: the fronts are joined at the centre when the neck shaping is done. If that is
     // below the underarm join (a deep V), the body stays flat until then.
-    if (topDown && panel.neckline) {
-      const d = evaluateDim(panel.neckline.depth, sizeId, scope);
+    if (topDown && neckline) {
+      const d = evaluateDim(neckline.depth, sizeId, scope);
       if (d.ok) {
         let split = roundRows(d.value.value * rpc).value;
         if (split % 2 === 0) split += 1; // the centre is cast on on a RS row
@@ -835,8 +847,11 @@ function computePanelRaw(project: Project, panel: Panel, sizeId: Id): ComputedPa
   const neckLeft = new Array<number | null>(totalRows + 1).fill(null);
   const neckRight = new Array<number | null>(totalRows + 1).fill(null);
   let neck: ComputedNeck | null = null;
-  if (panel.neckline) {
-    neck = computeNeck(project, panel, sizeId, { spc, rpc, totalRows, leftEdge, rightEdge, flat, isRS, atStart: topDown }, issues);
+  if (neckline) {
+    // The yoke's neck carries on: its increases on the rows the yoke planned (as distances from the closing row).
+    const dists = yokeNeck && !panel.neckline ? yokeNeck.neck.increaseRows.map((r) => yokeNeck.neck.rows - r) : undefined;
+    neck = computeNeck(project, panel, neckline, sizeId, { spc, rpc, totalRows, leftEdge, rightEdge, flat, isRS, atStart: topDown, dists }, issues);
+    if (neck && dists && totalRows - neck.splitRow < 2 * rpc) issues.push({ severity: 'warning', code: 'body.neck-near-hem', message: `The front neck is still open ${cmText(Math.max(0, Math.round(((totalRows - neck.splitRow) / rpc) * 10) / 10))} above the lower edge: a shallower neck or a longer body.`, ref: { kind: 'neckline' } });
     if (neck) {
       // The left shoulder's neck edge is that piece's right edge, and vice versa.
       for (const e of neck.events) e.symbol ??= defaultSymbol(e.kind, 'right', e.delta);
@@ -901,7 +916,8 @@ function computePanelRaw(project: Project, panel: Panel, sizeId: Id): ComputedPa
       const o = neck.openRow;
       const remainL = (neckLeft[o] ?? 0) - leftEdge[o];
       const remainR = rightEdge[o] - (neckRight[o] ?? 0);
-      if (remainL > 0 || remainR > 0) {
+      // (A neck from the yoke: the stitches each side come from the yoke.)
+      if ((remainL > 0 || remainR > 0) && !dists) {
         const where = neck.atStart ? 'are cast on at the shoulders' : 'remain at the top';
         issues.push({ severity: 'info', message: `${Math.max(0, remainL)} + ${Math.max(0, remainR)} shoulder sts ${where}.`, ref: { kind: 'neckline' } });
       }
@@ -928,6 +944,7 @@ function computePanelRaw(project: Project, panel: Panel, sizeId: Id): ComputedPa
       underarmRow: underarm ? underarm.row : null,
     });
     for (const i of bust?.issues ?? []) issues.push({ ...i, message: `Bust: ${i.message}`, ref: { kind: 'bust' } });
+    if (bust?.shortRows && neck && yokeNeck && bust.shortRows.afterRow < neck.splitRow) issues.push({ severity: 'info', code: 'bust.open-front', message: 'Bust: the short rows are worked while the front neck is still open (each side turns on its own and works to the neck edge).', ref: { kind: 'bust' } });
     if (bust?.darts) {
       // Darts add stitches inside the panel; draw them as extra width shared by both sides.
       for (let r = 0; r <= totalRows; r++) {
@@ -1275,14 +1292,29 @@ function mirrorManual(list: ManualEvent[], method: SegmentMethod, rc: RowCtx, _f
 
 // ---------- neckline ----------
 
+/**
+ * The neckline a Front from the yoke works when the yoke's front neck continues past the split: the yoke's shape, as
+ * deep as the rows still to work, as wide as the opening at the split (the increases still to come and the centre).
+ */
+function yokeNeckline(shape: Neckline['shape']): Neckline {
+  return {
+    shape: shape === 'v' ? 'v' : shape === 'square' ? 'square' : 'round',
+    width: dim('(2 * yoke.neck_per_side + yoke.neck_centre) * st_w'),
+    depth: dim('yoke.neck_rows * row_h'),
+    centre: 'bindoff',
+    centreWidth: dim('yoke.neck_centre * st_w'),
+    side: 'any',
+  };
+}
+
 function computeNeck(
   project: Project,
   panel: Panel,
+  nk: Neckline,
   sizeId: Id,
-  g: { spc: number; rpc: number; totalRows: number; leftEdge: number[]; rightEdge: number[]; flat: boolean; isRS: (r: number) => boolean; atStart: boolean },
+  g: { spc: number; rpc: number; totalRows: number; leftEdge: number[]; rightEdge: number[]; flat: boolean; isRS: (r: number) => boolean; atStart: boolean; dists?: number[] },
   issues: Issue[],
 ): ComputedNeck | null {
-  const nk = panel.neckline!;
   const ref: IssueRef = { kind: 'neckline' };
   const scope = { ...buildScope(project, sizeId), ...panelExtras(project, panel, sizeId), ...resolvePanelDims(project, panel, sizeId).values };
   const defs = {
@@ -1347,7 +1379,8 @@ function computeNeck(
   const room = span.to - span.from + 1;
   let dists: number[] = [];
   const verb = g.atStart ? 'increases' : 'decreases';
-  if (perSide > 0) {
+  if (g.dists && g.dists.length === perSide && g.dists.every((d) => d >= 1 && d <= room)) dists = g.dists;
+  else if (perSide > 0) {
     if (nk.shape === 'v') {
       // Spread to the open end; side parity is about real rows, so place in row space.
       const s = distributeAuto(perSide, span, { side: nk.side, align: g.atStart ? 'start' : 'end' });

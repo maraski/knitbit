@@ -32,10 +32,12 @@ export function projectChecks(project: Project): Check[] {
     for (const { panel, c } of computed) {
       for (const issue of c.issues) if (!replaced.has(issue)) out.push({ panelId: panel.id, panelName: panel.name, sizeId: size.id, sizeName: size.name, issue });
     }
-    // Panels joined in the round below a waypoint are knitted together there: their rounds must match.
+    // Panels joined in the round below a waypoint are knitted together there: their rounds must match. Top-down, a
+    // front neck below the join keeps the body flat until it closes, so rounds count from the last panel's first round.
     const joined = computed.filter(({ panel, c }) => panel.joinAt && !panel.inTheRound && c.ok && c.roundRows);
     if (joined.length >= 2) {
-      const rounds = joined.map(({ c }) => c.roundRows!.to - c.roundRows!.from + 1);
+      const from = joined.every(({ c }) => c.topDown) ? Math.max(...joined.map(({ c }) => c.roundRows!.from)) : null;
+      const rounds = joined.map(({ c }) => c.roundRows!.to - (from ?? c.roundRows!.from) + 1);
       if (new Set(rounds).size > 1) {
         const text = joined.map(({ panel }, i) => `${panel.name} ${rounds[i]}`).join(', ');
         for (const { panel } of joined) {
@@ -45,7 +47,7 @@ export function projectChecks(project: Project): Check[] {
         // Same rounds: note when side shaping falls on different rounds (fine to knit, worth seeing).
         const shapingRounds = joined.map(({ c }) => {
           const rows = new Set<number>();
-          for (const seg of c.segments) for (const e of [...seg.left.events, ...seg.right.events]) if (e.row >= c.roundRows!.from && e.row <= c.roundRows!.to) rows.add(c.topDown ? e.row - c.roundRows!.from : e.row);
+          for (const seg of c.segments) for (const e of [...seg.left.events, ...seg.right.events]) if (e.row >= (from ?? c.roundRows!.from) && e.row <= c.roundRows!.to) rows.add(c.topDown ? e.row - (from ?? c.roundRows!.from) : e.row);
           return [...rows].sort((a, b) => a - b).join(',');
         });
         if (new Set(shapingRounds).size > 1) {
