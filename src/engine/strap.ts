@@ -4,10 +4,16 @@
 // and the shoulder line is `neck_side.width + 2 × strap_w`; the end of the armhole shaping follows it in when it would
 // be wider, and moves up the armhole when its decreases need more rows.
 //
+// Contiguous yoke and modified raglan: the strap is the shoulder seam, `strap_w × row gauge` rows. 'neck': the yoke's
+// neck width is solved so the back still reaches its width after the shoulders; 'armhole': the neck stays and the
+// back's width is the neck plus the seam's increases (the cross back is no longer followed). The classic raglan has
+// no shoulder seam: nothing to set.
+//
 // The setting works by writing linked expressions into the bodices' fields (one undo step). A field the knitter types
 // over is no longer linked (the readout offers to re-link it); each field's own value from before it was linked is
 // kept in `strap.saved` and restored when the strap stops driving it. Projects without a strap are unchanged.
 
+import { generateYoke, STRAP_YOKE_BACK, STRAP_YOKE_NECK } from './contiguous';
 import { garmentChoice } from './garmentSetup';
 import { resolveDefinitions } from './expr';
 import { buildScope } from './measurements';
@@ -15,9 +21,9 @@ import type { DimExpr, Id, Panel, Project, StrapGives, StrapSettings, Waypoint }
 import { dim } from './model';
 import { computePanel, resolvePanelDims } from './panel';
 
-export type StrapField = 'neckline.width' | 'neckline.centre' | 'neck_side.width' | 'shoulder.width' | 'armhole_end.width' | 'armhole_end.height';
+export type StrapField = 'neckline.width' | 'neckline.centre' | 'neck_side.width' | 'shoulder.width' | 'armhole_end.width' | 'armhole_end.height' | 'yoke.neckWidth' | 'yoke.backWidth';
 
-const FIELDS: StrapField[] = ['neckline.width', 'neckline.centre', 'neck_side.width', 'shoulder.width', 'armhole_end.width', 'armhole_end.height'];
+const FIELDS: StrapField[] = ['neckline.width', 'neckline.centre', 'neck_side.width', 'shoulder.width', 'armhole_end.width', 'armhole_end.height', 'yoke.neckWidth', 'yoke.backWidth'];
 
 /** Field labels as the properties show them. */
 export const STRAP_FIELD_LABELS: Record<StrapField, string> = {
@@ -27,6 +33,8 @@ export const STRAP_FIELD_LABELS: Record<StrapField, string> = {
   'shoulder.width': 'shoulder width',
   'armhole_end.width': 'armhole_end width',
   'armhole_end.height': 'armhole_end height',
+  'yoke.neckWidth': 'Neck width, cast on across the back',
+  'yoke.backWidth': 'Back width after the markers move',
 };
 
 export const STRAP_NECK = 'shoulder.width - 2 * strap_w';
@@ -43,6 +51,12 @@ export const isStrapPiece = (p: Panel) => (p.template === 'back' || p.template =
 
 export const strapPieces = (p: Project) => p.panels.filter(isStrapPiece);
 
+/** A yoke with shoulder seams (contiguous, modified raglan): its seam is the strap. A raglan yoke has none. */
+export const isStrapYoke = (p: Panel) => !!p.yoke && p.yoke.style !== 'raglan';
+
+/** Everything the setting links: the bodices, or the yoke. */
+const strapTargets = (p: Project) => p.panels.filter((x) => isStrapPiece(x) || isStrapYoke(x));
+
 /**
  * Where the strap setting applies: 'panels' (seamed / top-down bodices), 'raglan' (no shoulder seam: nothing to
  * set), 'yoke' (contiguous and modified raglan: set on the yoke, not yet here), or null (no bodices).
@@ -50,11 +64,14 @@ export const strapPieces = (p: Project) => p.panels.filter(isStrapPiece);
 export function strapScope(p: Project): 'panels' | 'raglan' | 'yoke' | null {
   const m = garmentChoice(p).method;
   if (m === 'raglan') return 'raglan';
-  if (m === 'contiguous' || m === 'modified-raglan') return 'yoke';
+  // An off-shoulder modified raglan is a raglan yoke (raglan lines, no seam).
+  if (m === 'contiguous' || m === 'modified-raglan') return p.panels.some(isStrapYoke) ? 'yoke' : 'raglan';
   return strapPieces(p).length ? 'panels' : null;
 }
 
 function getField(p: Panel, f: StrapField): DimExpr | null {
+  if (f === 'yoke.neckWidth') return isStrapYoke(p) ? p.yoke!.neck.width ?? dim('back_neck_width') : null;
+  if (f === 'yoke.backWidth') return isStrapYoke(p) ? p.yoke!.shoulder.backWidth : null;
   if (f === 'neckline.width') return p.neckline?.width ?? null;
   if (f === 'neckline.centre') return p.neckline?.centreWidth ?? null;
   const [name, prop] = f.split('.') as [string, 'width' | 'height'];
@@ -63,6 +80,8 @@ function getField(p: Panel, f: StrapField): DimExpr | null {
 }
 
 function setField(p: Panel, f: StrapField, d: DimExpr): Panel {
+  if (f === 'yoke.neckWidth') return { ...p, yoke: { ...p.yoke!, neck: { ...p.yoke!.neck, width: d } } };
+  if (f === 'yoke.backWidth') return { ...p, yoke: { ...p.yoke!, shoulder: { ...p.yoke!.shoulder, backWidth: d } } };
   if (f === 'neckline.width') return p.neckline ? { ...p, neckline: { ...p.neckline, width: d } } : p;
   if (f === 'neckline.centre') return p.neckline ? { ...p, neckline: { ...p.neckline, centreWidth: d } } : p;
   const [name, prop] = f.split('.') as [string, 'width' | 'height'];
@@ -95,6 +114,9 @@ const round = (x: number) => Math.round(x * 1e6) / 1e6;
 function linkedExprs(p: Panel, gives: StrapGives, saved: Record<string, DimExpr>): Partial<Record<StrapField, string>> {
   const orig = (f: StrapField) => (saved[f] ?? getField(p, f))!.expr;
   const out: Partial<Record<StrapField, string>> = {};
+  // A yoke: the generator solves the linked one (the neck, or the back width) for the seam, and a wider neck keeps
+  // the front neck's shaping (contiguous.ts).
+  if (isStrapYoke(p)) return gives === 'neck' ? { 'yoke.neckWidth': STRAP_YOKE_NECK } : { 'yoke.backWidth': STRAP_YOKE_BACK };
   if (p.neckline) out['neckline.width'] = NECK_FOLLOWS;
   if (gives === 'neck') {
     out['neck_side.width'] = STRAP_NECK;
@@ -157,7 +179,7 @@ function withPieces(p: Project, fn: (x: Panel, saved: Record<string, DimExpr>) =
   // Saved values of pieces that are gone (replaced by a method change) go with them.
   const saved = Object.fromEntries(Object.entries(strap?.saved ?? {}).filter(([id]) => p.panels.some((x) => x.id === id)));
   const panels = p.panels.map((x) => {
-    if (!isStrapPiece(x)) return x;
+    if (!isStrapPiece(x) && !isStrapYoke(x)) return x;
     const r = fn(x, saved[x.id] ?? {});
     if (!r) return x;
     if (Object.keys(r.saved).length) saved[x.id] = r.saved;
@@ -182,6 +204,8 @@ export function derivedStrap(p: Project, sizeId: Id, piece?: Panel): number | nu
  * plain number when every size has the same strap, else the Back's own expressions, else a fixed value per size.
  */
 export function defaultStrapWidth(p: Project): DimExpr {
+  const yoke = p.panels.find(isStrapYoke);
+  if (yoke) return defaultYokeStrap(p, yoke);
   const back = strapPieces(p).find((q) => q.template === 'back') ?? strapPieces(p)[0];
   const vals = p.sizes.map((s) => ({ id: s.id, v: derivedStrap(p, s.id, back) }));
   const known = vals.filter((x): x is { id: Id; v: number } => x.v !== null);
@@ -200,6 +224,15 @@ export function defaultStrapWidth(p: Project): DimExpr {
   if (ok) return dim(text);
   const base = known.find((x) => x.id === p.baseSizeId) ?? known[0];
   return dim(r1(base.v), Object.fromEntries(known.filter((x) => x !== base).map((x) => [x.id, r1(x.v)])));
+}
+
+/** The yoke's seam as it is in each size, to 0.1 cm (finer than a row, so it gives the same rows back). */
+function defaultYokeStrap(p: Project, yoke: Panel): DimExpr {
+  const r1 = (x: number) => Math.round(x * 10) / 10;
+  const vals = p.sizes.map((s) => ({ id: s.id, v: r1(generateYoke(p, yoke.yoke!, s.id).derived.seamCm) }));
+  if (!vals.length) return dim(BOAT_STRAP);
+  const base = vals.find((x) => x.id === p.baseSizeId) ?? vals[0];
+  return dim(base.v, Object.fromEntries(vals.filter((x) => x.id !== base.id && x.v !== base.v).map((x) => [x.id, x.v])));
 }
 
 /**
@@ -235,14 +268,13 @@ export function relinkStrap(p: Project, panelId: Id): Project {
  */
 export function applyStrap(p: Project, opts: { reset?: boolean } = {}, notes: string[] = []): Project {
   let strap = p.garment.strap;
-  const pieces = strapPieces(p);
-  if (!pieces.length) return p;
+  if (!strapTargets(p).length) return p;
   if (!strap) {
     if (garmentChoice(p).neckline !== 'boat') return p;
     strap = { width: dim(BOAT_STRAP), gives: 'neck', saved: {} };
     notes.push('A boat neck leaves a 3 cm strap: Garment → Shoulders → Strap width.');
   }
-  const neckKeys: StrapField[] = ['neckline.width', 'neckline.centre', 'neck_side.width'];
+  const neckKeys: StrapField[] = ['neckline.width', 'neckline.centre', 'neck_side.width', 'yoke.neckWidth'];
   const s = strap;
   return withPieces(
     p,
@@ -260,7 +292,7 @@ export function applyStrap(p: Project, opts: { reset?: boolean } = {}, notes: st
 /** Which of a piece's fields the strap drives now, and which of them were typed over (no longer linked). */
 export function strapLinks(p: Project, panel: Panel): { linked: StrapField[]; unlinked: StrapField[] } {
   const strap = p.garment.strap;
-  if (!strap || !isStrapPiece(panel)) return { linked: [], unlinked: [] };
+  if (!strap || !(isStrapPiece(panel) || isStrapYoke(panel))) return { linked: [], unlinked: [] };
   const want = linkedExprs(panel, strap.gives, strap.saved[panel.id] ?? {});
   const linked: StrapField[] = [];
   const unlinked: StrapField[] = [];
@@ -291,4 +323,19 @@ export function strapReadout(p: Project, panel: Panel, sizeId: Id): StrapReadout
   const ns = c.waypoints.find((w) => w.key === 'neck_side');
   if (!sh || !ns) return null;
   return { strapCm: (sh.widthCm - ns.widthCm) / 2, strapSts: (sh.stitches - ns.stitches) / 2, neckCm: ns.widthCm, shoulderCm: sh.widthCm };
+}
+
+export interface YokeStrapReadout {
+  strapCm: number;
+  rows: number;
+  neckCm: number;
+  /** The back at the end of the shoulders (before the markers move), as the yoke's own readout gives it. */
+  backCm: number;
+}
+
+/** The yoke's strap (its shoulder seam) in a size: cm and rows, the neck cast-on and the back at the end of A. */
+export function yokeStrapReadout(p: Project, panel: Panel, sizeId: Id): YokeStrapReadout | null {
+  if (!isStrapYoke(panel)) return null;
+  const y = generateYoke(p, panel.yoke!, sizeId);
+  return { strapCm: y.derived.seamCm, rows: y.counts.A, neckCm: y.neck.backNeck / y.stitchesPerCm, backCm: y.derived.backEndOfACm };
 }

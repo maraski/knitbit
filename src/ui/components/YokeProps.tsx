@@ -1,14 +1,16 @@
 import { useEffect, useState } from 'react';
-import { backNeckPositions, defaultShortRows, yokeWithNeck, type YokeParam } from '../../engine/contiguous';
+import { backNeckPositions, defaultShortRows, STRAP_YOKE_BACK, STRAP_YOKE_NECK, yokeWithNeck, type YokeParam } from '../../engine/contiguous';
 import { generateBodyAndSleeves, missingYokePanels } from '../../engine/contiguousGarment';
 import { NECKLINES, necklinesFor, setNeckline } from '../../engine/garmentSetup';
 import { dim, type DimExpr, type NecklineShape, type YokeSpec } from '../../engine/model';
 import { computePanel } from '../../engine/panel';
+import { strapLinks, strapScope, yokeStrapReadout } from '../../engine/strap';
 import { SYMBOLS } from '../../engine/symbols';
 import { editPanel } from '../edit';
 import { len } from '../format';
 import { ExprField } from './ExprField';
 import { IssueList, type PropsContext } from './Properties';
+import { YokeStrapLine } from './StrapSettings';
 
 const UNIT_LABEL: Record<YokeParam['unit'], string> = { cm: 'cm', rows: 'rows', sts: 'sts', '': '' };
 
@@ -22,9 +24,14 @@ export function YokeProps({ ctx }: { ctx: PropsContext }) {
   const setYoke = (fn: (s: YokeSpec) => void, key: string | null = null) => update((p) => editPanel(p, panel.id, (pp) => fn(pp.yoke!)), key);
   // The yoke's own names (the boat neck's centre and back length use them), as this size works them.
   const local: Record<string, number> = y ? { neck_w: y.params.neckWidth?.value ?? ctx.scope.back_neck_width, neck_depth: y.params.neckDepth?.value ?? 0, back_depth: y.params.neckBackDepth?.value ?? ctx.scope.back_neck_drop } : {};
+  // The strap's solved neck or back width (the linked fields name them).
+  if (y?.strap) Object.assign(local, { [STRAP_YOKE_NECK]: y.params.neckWidth?.value ?? 0, [STRAP_YOKE_BACK]: y.params.backWidth?.value ?? 0 });
   const scope = { ...ctx.scope, ...local };
-  const cm = (label: string, get: (s: YokeSpec) => DimExpr, set: (s: YokeSpec, d: DimExpr) => void, key: string) => (
-    <ExprField label={label} value={get(spec)} sizeId={sizeId} sizeName={sizeName} scope={scope} units={ctx.units} fieldKey={`yoke.${key}`} onChange={(d, k) => setYoke((s) => set(s, d), `yoke.${panel.id}.${k}`)} />
+  const linked = strapLinks(project, panel).linked;
+  // A strap-solved neck keeps the back-start front neck's increases per side: the centre takes the rest.
+  const keptShaping = y?.strap?.gives === 'neck' && !modified;
+  const cm = (label: string, get: (s: YokeSpec) => DimExpr, set: (s: YokeSpec, d: DimExpr) => void, key: string, note?: string) => (
+    <ExprField label={label} value={get(spec)} sizeId={sizeId} sizeName={sizeName} scope={scope} units={ctx.units} fieldKey={`yoke.${key}`} note={note} onChange={(d, k) => setYoke((s) => set(s, d), `yoke.${panel.id}.${k}`)} />
   );
   const num = (label: string, param: string, get: (s: YokeSpec) => DimExpr, set: (s: YokeSpec, d: DimExpr) => void) => (
     <ParamField label={label} value={get(spec)} param={y?.params[param]} sizeId={sizeId} sizeName={sizeName} onChange={(d, k) => setYoke((s) => set(s, d), `yoke.${panel.id}.${param}.${k}`)} />
@@ -119,22 +126,31 @@ export function YokeProps({ ctx }: { ctx: PropsContext }) {
       )}
 
       <h4>A · Shoulders</h4>
-      <div className="field">
-        <label>Until</label>
-        <select value={spec.shoulder.mode} onChange={(e) => setYoke((s) => void (s.shoulder.mode = e.target.value as 'cross-back' | 'length'))}>
-          <option value="cross-back">the back reaches the cross back</option>
-          <option value="length">the seam reaches the shoulder length</option>
-        </select>
-      </div>
-      {spec.shoulder.mode === 'cross-back'
-        ? cm('Back width after the markers move (cm)', (s) => s.shoulder.backWidth, (s, d) => (s.shoulder.backWidth = d), 'backWidth')
+      {strapScope(project) === 'yoke' && <YokeStrapLine project={project} panel={panel} sizeId={sizeId} units={ctx.units} update={update} />}
+      {y?.strap ? (
+        <p className="hint">
+          The strap width (Garment → Shoulders) sets the seam: {y.strap.rows} rows,{' '}
+          {y.strap.gives === 'neck' ? 'the neck width is solved so the back reaches its width below' : 'the neck is kept and the back width follows (the cross back is no longer followed)'}. The seam length setting isn’t used while the strap is linked.
+        </p>
+      ) : (
+        <div className="field">
+          <label>Until</label>
+          <select value={spec.shoulder.mode} onChange={(e) => setYoke((s) => void (s.shoulder.mode = e.target.value as 'cross-back' | 'length'))}>
+            <option value="cross-back">the back reaches the cross back</option>
+            <option value="length">the seam reaches the shoulder length</option>
+          </select>
+        </div>
+      )}
+      {spec.shoulder.mode === 'cross-back' || y?.strap
+        ? cm('Back width after the markers move (cm)', (s) => s.shoulder.backWidth, (s, d) => (s.shoulder.backWidth = d), 'backWidth', linked.includes('yoke.backWidth') ? 'from strap width' : undefined)
         : (
           <>
             {cm('Shoulder seam length (cm)', (s) => s.shoulder.length, (s, d) => (s.shoulder.length = d), 'length')}
             {cm('Shorten the seam by (cm)', (s) => s.shoulder.shorten, (s, d) => (s.shoulder.shorten = d), 'shorten')}
           </>
         )}
-      {num('Extra rows (increases tighten the seam)', 'extraRows', (s) => s.shoulder.extraRows, (s, d) => (s.shoulder.extraRows = d))}
+      {num(y?.strap ? 'Extra rows (with the strap: the back is 2 sts wider each)' : 'Extra rows (increases tighten the seam)', 'extraRows', (s) => s.shoulder.extraRows, (s, d) => (s.shoulder.extraRows = d))}
+      {strapScope(project) === 'yoke' && <StrapAllSizes ctx={ctx} />}
 
       <h4>B · Back neck</h4>
       {num('Increases per row (2–4)', 'backNeckPerRow', (s) => s.backNeck.perRow, (s, d) => (s.backNeck.perRow = d))}
@@ -165,10 +181,11 @@ export function YokeProps({ ctx }: { ctx: PropsContext }) {
           {NECKLINES.filter((n) => n.id === spec.neck.shape || necklinesFor(modified ? 'modified-raglan' : 'contiguous', project.garment.opening).includes(n.id)).map((n) => <option key={n.id} value={n.id}>{n.label}</option>)}
         </select>
       </div>
-      {cm('Neck width, cast on across the back (cm)', (s) => s.neck.width ?? dim('back_neck_width'), (s, d) => (s.neck.width = d), 'neckWidth')}
+      {cm('Neck width, cast on across the back (cm)', (s) => s.neck.width ?? dim('back_neck_width'), (s, d) => (s.neck.width = d), 'neckWidth', linked.includes('yoke.neckWidth') ? 'from strap width' : undefined)}
       {cm(spec.neck.shape === 'boat' ? 'Front depth, from the strap top (cm)' : 'Depth below the neck point (cm)', (s) => s.neck.depth, (s, d) => (s.neck.depth = d), 'neckDepth')}
       {spec.neck.shape === 'boat' && cm('Back depth, from the strap top (cm)', (s) => s.neck.backDepth ?? dim('back_neck_drop'), (s, d) => (s.neck.backDepth = d), 'neckBackDepth')}
-      {spec.neck.shape !== 'v' && spec.neck.shape !== 'square' && cm('Centre (cm)', (s) => s.neck.centre, (s, d) => (s.neck.centre = d), 'neckCentre')}
+      {spec.neck.shape !== 'v' && spec.neck.shape !== 'square' && cm('Centre (cm)', (s) => s.neck.centre, (s, d) => (s.neck.centre = d), 'neckCentre', keptShaping ? `from strap width: the shaping is kept, ${y!.neck.centre} sts cast on` : undefined)}
+      {spec.neck.shape === 'v' && keptShaping && y!.neck.centre > 0 && <p className="hint">From strap width: the V keeps its shaping, so it has a flat bottom of {y!.neck.centre} sts cast on.</p>}
       {y && !y.shortRows && <NeckWorked y={y} cardigan={project.garment.opening === 'cardigan'} rpc={y.rowsPerCm} />}
 
       <h4>C, D · Sleeve cap</h4>
@@ -393,6 +410,41 @@ function BackNeckPositions({ ctx }: { ctx: PropsContext }) {
 
 function prevBack(y: NonNullable<PropsContext['computed']['yoke']>, row: number): number {
   return row <= 1 ? y.castOnZones.back : y.rows[row - 2].zones.back;
+}
+
+/** The strap (shoulder seam) in every size side by side: cm and rows, the neck cast-on and the back at the end of A. */
+function StrapAllSizes({ ctx }: { ctx: PropsContext }) {
+  const { project, panel } = ctx;
+  const all = project.sizes.map((s) => ({ s, r: yokeStrapReadout(project, panel, s.id) }));
+  const cm = (x: number) => len(Math.round(x * 10) / 10, ctx.units);
+  return (
+    <div className="table-scroll">
+      <table className="yoke-table">
+        <thead>
+          <tr>
+            <th>Size</th>
+            <th>Strap</th>
+            <th>Rows</th>
+            <th>Neck</th>
+            <th>Back at end of A</th>
+          </tr>
+        </thead>
+        <tbody>
+          {all.map(({ s, r }) =>
+            r ? (
+              <tr key={s.id} className={s.id === ctx.sizeId ? 'current' : ''}>
+                <td>{s.name}</td>
+                <td>{cm(r.strapCm)}</td>
+                <td>{r.rows}</td>
+                <td>{cm(r.neckCm)}</td>
+                <td>{cm(r.backCm)}</td>
+              </tr>
+            ) : null,
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
 }
 
 /** Every size side by side: rows per phase, cast-on, split, underarm cast-on, held stitches. */
