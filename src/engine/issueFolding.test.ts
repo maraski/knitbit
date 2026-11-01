@@ -173,12 +173,12 @@ describe('fixes on the yoke and neckline errors', () => {
     expect(err(p, 'M', 'yoke.short-rows-below-split')?.fix?.fields[0].key).toBe('srPairs');
   });
 
-  it('neck wider than the shoulders names the Opening width and its limit', () => {
+  it('neck wider than the panel names the Opening width and its limit', () => {
     const p0 = build('seamed', 'round');
     const front = p0.panels.find((x) => x.name === 'Front')!;
     const p = { ...p0, panels: p0.panels.map((x) => (x.id === front.id ? { ...x, neckline: { ...x.neckline!, width: dim(`${x.neckline!.width.expr} + 4`) } } : x)) };
     const i = computePanel(p, p.panels.find((x) => x.id === front.id)!, sizeId(p, 'M')).issues.find((x) => x.code === 'neckline.wider-than-top')!;
-    expect(i.message).toMatch(/^Neck wider than the shoulders/);
+    expect(i.message).toMatch(/^Neck wider than the panel/);
     expect(i.fix).toMatchObject({ fields: [{ target: 'neckline', panelId: front.id, key: 'width', label: 'Opening width' }] });
     expect(i.fix!.text).toMatch(/^Make the neckline's Opening width at most [\d.]+ cm \(now [\d.]+ cm\)/);
   });

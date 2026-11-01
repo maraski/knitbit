@@ -14,10 +14,11 @@ interface Props {
   onChange: (next: DimExpr, key: string) => void;
   fieldKey: string; // undo-coalescing key
   detail?: React.ReactNode; // e.g. "→ 134 sts"
+  note?: string; // shown by the label, e.g. "from strap width"
 }
 
 /** An expression input with its evaluated value and an optional fixed value for the current size. */
-export function ExprField({ label, value, sizeId, sizeName, scope, units, onChange, fieldKey, detail }: Props) {
+export function ExprField({ label, value, sizeId, sizeName, scope, units, onChange, fieldKey, detail, note }: Props) {
   const result = evaluateDim({ expr: value.expr, overrides: {} }, sizeId, scope);
   const overridden = sizeId in value.overrides;
   const [ov, setOv] = useState('');
@@ -38,7 +39,10 @@ export function ExprField({ label, value, sizeId, sizeName, scope, units, onChan
 
   return (
     <div className={`field expr-field${overridden ? ' is-overridden' : ''}`}>
-      <label>{label}</label>
+      <label>
+        {label}
+        {note && <span className="field-note"> · {note}</span>}
+      </label>
       <input
         className="expr"
         value={value.expr}

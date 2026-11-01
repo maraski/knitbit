@@ -8,6 +8,7 @@ import { rowsPerCm, stitchesPerCm } from './gauge';
 import { buildScope } from './measurements';
 import type { FrontOpening, Panel, Project } from './model';
 import { computePanel, type ComputedPanel } from './panel';
+import { NECK_FOLLOWS, STRAP_NECK } from './strap';
 import { fixtureProject, sizeId } from './testFixtures';
 
 const base = () => ({ ...fixtureProject(), panels: [], joins: [] });
@@ -66,7 +67,7 @@ describe('boat neck: seamed and top-down panels', () => {
     const at = (k: string) => back.waypoints.find((w) => w.key === k)!;
     const rise = at('neck_side').heightCm - at('shoulder').heightCm;
     const share = (at('shoulder').widthCm - at('neck_side').widthCm) / (sc.shoulder_w - sc.back_neck_width);
-    expect(rise).toBeCloseTo(sc.shoulder_drop * share, 5);
+    expect(rise).toBeCloseTo(Math.max(4 * sc.row_h, sc.shoulder_drop * share), 5);
     expect(rise).toBeLessThan(sc.shoulder_drop / 2);
     // A round neck keeps the whole drop.
     const r = garment('seamed', 'closed', 'round');
@@ -188,24 +189,35 @@ describe('boat neck: changing the neckline', () => {
     const r = garment('seamed', 'closed', 'round');
     const b = setNeckline(r, 'boat');
     expect(garmentChoice(b).neckline).toBe('boat');
+    // A new boat neck: its 3 cm is the strap, and the neck follows it.
+    expect(b.garment.strap).toMatchObject({ width: { expr: '3' }, gives: 'neck' });
     for (const name of ['Back', 'Front']) {
       expect(named(b, name).neckline!.shape).toBe('boat');
-      expect(neckSide(named(b, name)).width.expr).toBe('shoulder_w - 6');
+      expect(neckSide(named(b, name)).width.expr).toBe(STRAP_NECK);
+      expect(named(b, name).neckline!.width.expr).toBe(NECK_FOLLOWS);
     }
     expect(named(b, 'Back').neckline!.depth.expr).toBe('2');
     expect(named(b, 'Front').neckline!.depth.expr).toBe('4');
     const M = sizeId(b, 'M');
     expect(errors(b, M)).toEqual([]);
+    // Back to round: the strap becomes the round neck's own, so the pieces come out as the round garment's.
     const back = setNeckline(b, 'round');
-    expect(named(back, 'Back').neckline).toEqual(named(r, 'Back').neckline);
-    expect(neckSide(named(back, 'Back'))).toEqual(neckSide(named(r, 'Back')));
-    expect(neckSide(named(back, 'Front'))).toEqual(neckSide(named(r, 'Front')));
+    expect(back.garment.strap!.width.expr).toBe('(shoulder_w - back_neck_width) / 2');
+    for (const name of ['Back', 'Front']) {
+      expect(named(back, name).neckline!.depth).toEqual(named(r, name).neckline!.depth);
+      for (const s of back.sizes) {
+        const a = computePanel(back, named(back, name), s.id);
+        const c = computePanel(r, named(r, name), s.id);
+        expect(a.counts, `${name} ${s.name}`).toEqual(c.counts);
+        expect(a.neck!.centreSts).toBe(c.neck!.centreSts);
+      }
+    }
   });
 
   it('a straight top-down back stays straight; the yoke takes the boat defaults and back depth', () => {
     const t = setNeckline(garment('top-down', 'closed', 'round'), 'boat');
     expect(named(t, 'Back').neckline).toBeNull();
-    expect(neckSide(named(t, 'Back')).width.expr).toBe('shoulder_w - 6');
+    expect(neckSide(named(t, 'Back')).width.expr).toBe(STRAP_NECK);
     expect(errors(t, sizeId(t, 'M'))).toEqual([]);
     const y = setNeckline(garment('contiguous', 'closed', 'round'), 'boat');
     const spec = y.panels.find((x) => x.yoke)!.yoke!;

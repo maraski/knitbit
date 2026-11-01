@@ -113,6 +113,12 @@ export function buildScope(project: Project, sizeId: Id): Record<string, number>
   const cuff = project.edges?.cuff;
   const depth = cuff && cuff.enabled && cuff.method === 'with-panel' ? evaluateDim(cuff.depth, sizeId, scope) : null;
   scope.cuff_depth = !cuff ? 5 : depth?.ok ? depth.value.value : 0;
+  // Shoulder strap (cm), only once the garment has one: the bodices' linked fields read it.
+  const strap = project.garment.strap;
+  if (strap) {
+    const w = evaluateDim(strap.width, sizeId, scope);
+    if (w.ok) scope.strap_w = w.value.value;
+  }
   return scope;
 }
 
