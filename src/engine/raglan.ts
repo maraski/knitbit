@@ -20,7 +20,7 @@
 // takes it to the ring (front | arm arc | back | arm arc), optional German short rows raise the back, and then the
 // raglan rates are solved as above over the rest of the depth (armhole_depth − off_shoulder_drop + the back raise).
 
-import { defaultShortRows, defaultYoke, generateYoke, shortRowSpan, ZONES, type PhaseSummary, type YokeCastOn, type YokeInc, type YokeIssue, type YokeParam, type YokePhase, type YokeResult, type YokeRow, type ZoneCounts } from './contiguous';
+import { belowSplitFix, defaultShortRows, shortRowsFitFix, defaultYoke, generateYoke, shortRowSpan, ZONES, type PhaseSummary, type YokeCastOn, type YokeInc, type YokeIssue, type YokeParam, type YokePhase, type YokeResult, type YokeRow, type ZoneCounts } from './contiguous';
 import { plugIn } from './bust';
 import { distributeAcross } from './distribute';
 import { edgePattern, edgesOf } from './edgeTreatments';
@@ -231,7 +231,7 @@ export function generateRaglan(project: Project, spec: YokeSpec, sizeId: Id): Yo
   const sleeveFast = Math.max(0, ns - slow.length);
   if (bodyFast) issues.push({ severity: 'info', message: `Body: every other row isn't enough, so ${bodyFast} of its ${nb} increase rows are the rows between (increasing on the body every row there).` });
   if (sleeveFast) issues.push({ severity: 'info', message: `Sleeves: every other row isn't enough, so ${sleeveFast} of their ${ns} increase rows are the rows between.` });
-  if (R > Y) issues.push({ severity: 'error', message: o ? `The band${shortRows?.pairs ? ', increase round and short rows end' : ' and increase round end'} on row ${R}, below the underarm split (row ${Y}). A shallower band, fewer short rows or a smaller off_shoulder_drop.` : shortRows ? `The short rows end on row ${R}, below the underarm split (row ${Y}). Fewer pairs or a deeper raglan.` : `The front neck closes on row ${R}, below the underarm split (row ${Y}). Make the neck shallower or the raglan deeper.` });
+  if (R > Y) issues.push({ ...(o ? { severity: 'error' as const, code: 'yoke.band-below-split' } : belowSplitFix(R, Y, rpc, shortRows, params.neckDepth?.value ?? 0, spec.neck.shape === 'boat')), message: o ? `The band${shortRows?.pairs ? ', increase round and short rows end' : ' and increase round end'} on row ${R}, below the underarm split (row ${Y}). A shallower band, fewer short rows or a smaller off_shoulder_drop.` : shortRows ? `The short rows end on row ${R}, below the underarm split (row ${Y}). Fewer pairs or a deeper raglan.` : `The front neck closes on row ${R}, below the underarm split (row ${Y}). Make the neck shallower or the raglan deeper.` });
   const bodySet = new Set(bodyRows);
   const sleeveSet = new Set(sleeveRows);
   const lastInc = Math.max(0, ...bodyRows, ...sleeveRows);
@@ -439,7 +439,7 @@ function offShoulderStart(project: Project, spec: YokeSpec, scope: Record<string
   const turns: number[] = [];
   for (let i = 0; i < pairs; i++) turns.push(side - firstTurn - i * step);
   const lastTurn = turns[turns.length - 1] ?? side;
-  if (pairs && lastTurn < 1) issues.push({ severity: 'error', message: `Short rows: ${pairs} pairs ${step} sts apart don't fit in a front of ${side} sts (the last turn is past centre front). Fewer pairs or a smaller step.` });
+  if (pairs && lastTurn < 1) issues.push({ ...shortRowsFitFix(pairs, side, firstTurn, step), message: `Short rows: ${pairs} pairs ${step} sts apart don't fit in a front of ${side} sts (the last turn is past centre front). Fewer pairs or a smaller step.` });
   if (pairs > 1 && step < 2) issues.push({ severity: 'info', message: `Short rows: turns 1 st apart. Fewer pairs spread them more.` });
   // The first row after the band and its increase round (row 1 without a band).
   const fromRow = noBand ? 1 : bandRows + 2;

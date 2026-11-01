@@ -3,7 +3,7 @@
 
 import { sideEdgeLength } from './edges';
 import { straightNeck, type EdgeKey, type EdgeRef, type Id, type Join, type JoinTag, type Project } from './model';
-import { computePanel, type ComputedPanel } from './panel';
+import { computePanel, rootCause, type ComputedPanel, type RootCause } from './panel';
 import { roundNearest } from './rounding';
 
 export const JOIN_TAGS: Record<JoinTag, { label: string; color: string }> = {
@@ -40,6 +40,8 @@ export interface EdgeMeasure {
   pickup: number;
   parts: string[]; // human-readable breakdown
   rowRange: [number, number] | null; // knit rows covered (side edges)
+  /** The panel can't be computed: its root cause (the measure is a knock-on of it). */
+  cause?: RootCause;
 }
 
 export function edgeLabel(project: Project, ref: EdgeRef): string {
@@ -129,7 +131,7 @@ export function measureEdge(
   const panel = project.panels.find((p) => p.id === ref.panelId);
   if (!panel) return blankMeasure(label, 'The panel no longer exists.');
   const c = cachedPanel(project, ref.panelId, sizeId, cache);
-  if (!c || !c.ok) return blankMeasure(label, 'The panel cannot be computed in this size.');
+  if (!c || !c.ok) return { ...blankMeasure(label, 'The panel cannot be computed in this size.'), ...(c && { cause: rootCause(panel, c.issues) }) };
   const spc = c.stitchesPerCm;
   const rpc = c.rowsPerCm;
   const perRow = ratio.rows > 0 ? ratio.stitches / ratio.rows : 0.75;

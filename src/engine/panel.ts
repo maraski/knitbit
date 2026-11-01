@@ -16,11 +16,12 @@ import { buildScope, evaluateDim } from './measurements';
 import type { FrontHalf, Id, ManualEvent, Panel, Project, Segment, SegmentMethod, ShapingPlacement } from './model';
 import { defaultAutoMethod, defaultPrincess } from './model';
 import { roundNearest, roundRows, roundStitches, type RoundingResult } from './rounding';
+import { cmText, issueKey, type IssueFix } from './issues';
 import { bustValues, computeBust, type ComputedBust } from './bust';
 import { sideEdgeLength } from './edges';
 import { measureEdge } from './joins';
-import { computeYokePanel } from './yokePanel';
-import { yokeNames, type YokeResult } from './contiguous';
+import { computeYokePanel, yokeIssues } from './yokePanel';
+import { YOKE_NAMES, yokeNames, type YokeResult } from './contiguous';
 import { defaultSymbol } from './symbols';
 import { bandOnFront } from './bands';
 import { edgePattern } from './edgeTreatments';
@@ -50,6 +51,25 @@ export interface Issue {
   severity: 'error' | 'warning' | 'info';
   message: string;
   ref: IssueRef;
+  /** Stable id of the kind of problem, e.g. 'yoke.neck-below-split' (for grouping, tests and docs). */
+  code?: string;
+  /** What to change: the field(s), this size's value and what it needs. */
+  fix?: IssueFix;
+  /** A knock-on: the key (`issueKey`) of the root issue in another panel that this one waits on. */
+  causedBy?: string;
+}
+
+/** The issue that stops a panel computing, as a piece that needs it reports it: its key and a message naming it. */
+export interface RootCause {
+  key: string;
+  message: string;
+}
+
+/** The root cause of a panel that can't be computed (its first error, or that error's own root). */
+export function rootCause(panel: { id: Id; name: string }, issues: Issue[]): RootCause | undefined {
+  const i = issues.find((x) => x.severity === 'error');
+  if (!i) return undefined;
+  return i.causedBy ? { key: i.causedBy, message: i.message } : { key: issueKey(panel.id, i), message: `Waits on ${panel.name}: ${i.message}` };
 }
 
 export interface ComputedWaypoint {
@@ -282,7 +302,7 @@ const EDGE_NAMES = ['edge_len', 'edge_rows', 'edge_pickup'];
  * The edges a strip (band, neckband) is joined to, for `edge_len` (cm along them), `edge_rows` and `edge_pickup`
  * (the pick-up helper's count at the join's ratio): the other side of the first join this panel is part of.
  */
-export function joinedEdge(project: Project, panel: Panel, sizeId: Id): { lengthCm: number; rows: number; pickup: number; source: string } | { error: string } {
+export function joinedEdge(project: Project, panel: Panel, sizeId: Id): { lengthCm: number; rows: number; pickup: number; source: string } | { error: string; cause?: RootCause } {
   const key = `${panel.id}|${sizeId}`;
   if (measuring.has(key)) return { error: 'edge_len refers back to this panel.' };
   const j = (project.joins ?? []).find((x) => x.partner.some((r) => r.panelId === panel.id) || x.edges.some((r) => r.panelId === panel.id));
@@ -298,7 +318,7 @@ export function joinedEdge(project: Project, panel: Panel, sizeId: Id): { length
     for (const r of other) {
       if (measuring.has(`${r.panelId}|${sizeId}`)) return { error: 'edge_len: the joined panels measure each other.' };
       const m = measureEdge(project, r, sizeId, ratio);
-      if (!m.ok) return { error: `${m.label}: ${m.error}` };
+      if (!m.ok) return { error: `${m.label}: ${m.error}`, cause: m.cause };
       lengthCm += m.lengthCm;
       rows += m.rows;
       pickup += m.pickup;
@@ -314,15 +334,18 @@ export function joinedEdge(project: Project, panel: Panel, sizeId: Id): { length
  * Uses the seam join that contains one of this panel's edges, if any (the other side's side edges);
  * otherwise the Front + Back panels' armholes (left edge, underarm → shoulder).
  */
-export function armholeLength(project: Project, panel: Panel, sizeId: Id): { value: number; source: string } | { error: string } {
+export function armholeLength(project: Project, panel: Panel, sizeId: Id): { value: number; source: string } | { error: string; cause?: RootCause } {
   const key = `${panel.id}|${sizeId}`;
   if (measuring.has(key)) return { error: 'armhole_len refers back to this panel.' };
   measuring.add(key);
+  // A panel to measure that can't be computed: the error is a knock-on of its root cause.
+  let cause: RootCause | undefined;
   try {
     const measure = (panelId: Id, side: Edge, from: Id, to: Id): number | null => {
       const other = project.panels.find((p) => p.id === panelId);
       if (!other || other.id === panel.id || measuring.has(`${other.id}|${sizeId}`)) return null;
       const c = computePanel(project, other, sizeId);
+      if (!c.ok) cause ??= rootCause(other, c.issues);
       return c.ok ? sideEdgeLength(c, side, from, to)?.lengthCm ?? null : null;
     };
     for (const j of project.joins ?? []) {
@@ -333,7 +356,7 @@ export function armholeLength(project: Project, panel: Panel, sizeId: Id): { val
       for (const ref of mine) {
         if (ref.edge.kind !== 'side') return { error: `The seam "${j.name}" has a non-side edge; armhole_len needs side edges.` };
         const v = measure(ref.panelId, ref.edge.side, ref.edge.from, ref.edge.to);
-        if (v === null) return { error: `Could not measure an edge of the seam "${j.name}".` };
+        if (v === null) return { error: `Could not measure an edge of the seam "${j.name}".`, cause };
         total += v;
       }
       return { value: total, source: `seam "${j.name}"` };
@@ -354,7 +377,7 @@ export function armholeLength(project: Project, panel: Panel, sizeId: Id): { val
         return { value: 2 * Math.hypot(m.armhole_depth, across) + 2 * across * 0.4, source: 'an estimate (no Front and Back panels to measure)' };
       }
       const v = measure(body.id, armholeSide(body), u.id, sh.id);
-      if (v === null) return { error: `Could not measure the ${body.name} armhole.` };
+      if (v === null) return { error: `Could not measure the ${body.name} armhole.`, cause };
       total += v;
       names.push(body.name);
     }
@@ -367,6 +390,27 @@ export function armholeLength(project: Project, panel: Panel, sizeId: Id): { val
 /** The edge an armhole is on: the left edge, except on a left cardigan front (whose left edge is the front edge). */
 export function armholeSide(panel: Panel): Edge {
   return panel.half?.side === 'left' ? 'right' : 'left';
+}
+
+/**
+ * Definitions whose error only says that a failed source's name is missing (`Unknown name "yoke.back_w"`), or that
+ * they depend on such a definition: knock-ons of the source's own error.
+ */
+function knockOnErrors(errors: Record<string, string>, failedNames: Set<string>): Set<string> {
+  const folded = new Set<string>();
+  if (!failedNames.size) return folded;
+  for (let grew = true; grew; ) {
+    grew = false;
+    for (const [k, e] of Object.entries(errors)) {
+      if (folded.has(k)) continue;
+      const m = /^Unknown name "([\w.]+)"$/.exec(e) ?? /^Depends on "([\w.]+)", which has an error$/.exec(e);
+      if (m && (failedNames.has(m[1]) || folded.has(m[1]))) {
+        folded.add(k);
+        grew = true;
+      }
+    }
+  }
+  return folded;
 }
 
 function emptyPanel(panel: Panel, sizeId: Id, spc: number, rpc: number, issues: Issue[]): ComputedPanel {
@@ -430,27 +474,29 @@ function computePanelRaw(project: Project, panel: Panel, sizeId: Id): ComputedPa
   });
 
   // ---- evaluate expressions ----
+  // Names from other panels that failed: the source's error is reported once (a knock-on when another panel's
+  // error is behind it), and the waypoints' "Unknown name" errors it causes are left out.
+  const failedNames = new Set<string>();
+  const sourceFailed = (names: readonly string[], cause: RootCause | undefined, code: string, error: string) => {
+    for (const n of names) failedNames.add(n);
+    issues.push(cause ? { severity: 'error', code, message: cause.message, ref: { kind: 'panel' }, causedBy: cause.key } : { severity: 'error', message: error, ref: { kind: 'panel' } });
+  };
   if (usesName(panel, 'armhole_len')) {
     const a = armholeLength(project, panel, sizeId);
-    issues.push(
-      'value' in a
-        ? { severity: 'info', message: `armhole_len = ${a.value.toFixed(1)} cm, from ${a.source}.`, ref: { kind: 'panel' } }
-        : { severity: 'error', message: `armhole_len: ${a.error}`, ref: { kind: 'panel' } },
-    );
+    if ('value' in a) issues.push({ severity: 'info', message: `armhole_len = ${a.value.toFixed(1)} cm, from ${a.source}.`, ref: { kind: 'panel' } });
+    else sourceFailed(['armhole_len'], a.cause, 'knock-on.armhole', `armhole_len: ${a.error}`);
   }
   if (EDGE_NAMES.some((n) => usesName(panel, n))) {
     const j = joinedEdge(project, panel, sizeId);
-    issues.push(
-      'lengthCm' in j
-        ? { severity: 'info', message: `edge_len = ${j.lengthCm.toFixed(1)} cm, edge_rows = ${j.rows}, edge_pickup = ${j.pickup} sts, from ${j.source}.`, ref: { kind: 'panel' } }
-        : { severity: 'error', message: `edge_len: ${j.error}`, ref: { kind: 'panel' } },
-    );
+    if ('lengthCm' in j) issues.push({ severity: 'info', message: `edge_len = ${j.lengthCm.toFixed(1)} cm, edge_rows = ${j.rows}, edge_pickup = ${j.pickup} sts, from ${j.source}.`, ref: { kind: 'panel' } });
+    else sourceFailed(EDGE_NAMES, j.cause, 'knock-on.edge', `edge_len: ${j.error}`);
   }
   if (usesYoke(panel)) {
     const n = yokeNames(project, sizeId);
-    if ('error' in n) issues.push({ severity: 'error', message: `yoke.*: ${n.error}`, ref: { kind: 'panel' } });
+    if ('error' in n) sourceFailed(YOKE_NAMES, n.source && rootCause(n.source.panel, yokeIssues(n.source.yoke)), 'knock-on.yoke', `yoke.*: ${n.error}`);
   }
   const { values, errors } = resolvePanelDims(project, panel, sizeId);
+  const folded = knockOnErrors(errors, failedNames);
   let failed = false;
   panel.waypoints.forEach((wp, i) => {
     const k = keys[i];
@@ -458,7 +504,7 @@ function computePanelRaw(project: Project, panel: Panel, sizeId: Id): ComputedPa
       const e = errors[`${k}.${field}`];
       if (e) {
         failed = true;
-        issues.push({ severity: 'error', message: `${wp.name} ${field}: ${e}`, ref: { kind: 'waypoint', id: wp.id } });
+        if (!folded.has(`${k}.${field}`)) issues.push({ severity: 'error', message: `${wp.name} ${field}: ${e}`, ref: { kind: 'waypoint', id: wp.id } });
       }
     }
   });
@@ -835,9 +881,17 @@ function computePanelRaw(project: Project, panel: Panel, sizeId: Id): ComputedPa
           // reaching the armhole shaping), and the field that narrows the opening (with a strap: the strap width).
           const at = `${((neckRight[r]! - neckLeft[r]!) / spc).toFixed(1)} cm`;
           const there = `${((rightEdge[r] - leftEdge[r]) / spc).toFixed(1)} cm`;
-          const narrow = project.garment.strap ? 'widen the strap (Garment → Strap width)' : 'narrow the neckline opening width (and the neck_side width with it)';
+          const strap = !!project.garment.strap;
+          const narrow = strap ? 'widen the strap (Garment → Strap width)' : 'narrow the neckline opening width (and the neck_side width with it)';
+          // The opening narrower by the missing stitches each side fits.
+          const need = cmText(Math.floor(((neck.widthSts + 2 * Math.min(sl, sr)) / spc) * 10) / 10);
+          const now = cmText(neck.widthSts / spc);
           issues.push({
             severity: 'error',
+            code: 'neckline.wider-than-top',
+            fix: strap
+              ? { text: `Widen the strap (Garment → Strap width) so the opening is at most ${need} (now ${now}), or make the neck shallower.`, fields: [{ target: 'settings', key: 'strap', label: 'Strap width' }], now, need: `≤ ${need}` }
+              : { text: `Make the neckline's Opening width at most ${need} (now ${now}), or widen the waypoint at the top of the shoulders.`, fields: [{ target: 'neckline', panelId: panel.id, key: 'width', label: 'Opening width' }], now, need: `≤ ${need}` },
             message: `Neck wider than the panel at row ${r}: the opening is ${at} where the panel is ${there}, so the ${sl < 0 ? 'left' : 'right'} side would have ${roundNearest(Math.min(sl, sr))} sts. To fix: ${narrow}, make the neck shallower, or widen the panel at that height.`,
             ref: { kind: 'neckline' },
           });

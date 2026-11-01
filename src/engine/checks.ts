@@ -7,6 +7,7 @@ import { contiguousChecks } from './contiguousChecks';
 import { sleeveChecks } from './sleeveChecks';
 import type { Id, Project } from './model';
 import { computePanel, type Issue } from './panel';
+import { issueKey, type IssueFix } from './issues';
 
 export interface Check {
   panelId: Id;
@@ -62,24 +63,42 @@ export interface CheckGroup {
   panelId: Id;
   panelName: string;
   issue: Issue; // representative (first size)
-  sizes: { id: Id; name: string; message: string }[];
+  sizes: { id: Id; name: string; message: string; fix?: IssueFix }[];
+  /** Problems caused by this one (in other panels and joins), grouped the same way. */
+  knockOns: CheckGroup[];
 }
 
-/** Group checks that point at the same place with the same kind of message, so one problem in ten sizes is one row. */
+/**
+ * Group checks that point at the same place with the same kind of message, so one problem in ten sizes is one row.
+ * A knock-on (`causedBy`) is nested under its root's group when the root is in the list.
+ */
 export function groupChecks(checks: Check[]): CheckGroup[] {
   const groups = new Map<string, CheckGroup>();
   for (const c of checks) {
-    const pattern = c.issue.message.replace(/-?\d+(\.\d+)?/g, '#');
-    const key = `${c.panelId}|${JSON.stringify(c.issue.ref)}|${c.issue.severity}|${pattern}`;
+    const key = issueKey(c.panelId, c.issue) + (c.issue.causedBy ? `<${c.issue.causedBy}` : '');
     let g = groups.get(key);
     if (!g) {
-      g = { key, panelId: c.panelId, panelName: c.panelName, issue: c.issue, sizes: [] };
+      g = { key, panelId: c.panelId, panelName: c.panelName, issue: c.issue, sizes: [], knockOns: [] };
       groups.set(key, g);
     }
-    g.sizes.push({ id: c.sizeId, name: c.sizeName, message: c.issue.message });
+    g.sizes.push({ id: c.sizeId, name: c.sizeName, message: c.issue.message, ...(c.issue.fix && { fix: c.issue.fix }) });
+  }
+  const top: CheckGroup[] = [];
+  for (const g of groups.values()) {
+    const root = g.issue.causedBy ? groups.get(g.issue.causedBy) : undefined;
+    if (root) root.knockOns.push(g);
+    else top.push(g);
   }
   const rank = { error: 0, warning: 1, info: 2 };
-  return [...groups.values()].sort((a, b) => rank[a.issue.severity] - rank[b.issue.severity]);
+  const bySeverity = (a: CheckGroup, b: CheckGroup) => rank[a.issue.severity] - rank[b.issue.severity];
+  for (const g of top) g.knockOns.sort(bySeverity);
+  return top.sort(bySeverity);
+}
+
+/** The checks that are root causes: knock-ons whose root is in the same size's checks are left out (for counting). */
+export function rootChecks(checks: Check[]): Check[] {
+  const keys = new Set(checks.map((c) => `${c.sizeId}|${issueKey(c.panelId, c.issue)}`));
+  return checks.filter((c) => !c.issue.causedBy || !keys.has(`${c.sizeId}|${c.issue.causedBy}`));
 }
 
 function joinChecks(project: Project, sizeId: Id, sizeName: string, cache: PanelCache): Check[] {
@@ -92,7 +111,10 @@ function joinChecks(project: Project, sizeId: Id, sizeName: string, cache: Panel
     const ref = { kind: 'join' as const, id: join.id };
     const r = joinReport(project, join, sizeId, cache);
     for (const m of [...r.a.measures, ...(r.b?.measures ?? [])]) {
-      if (!m.ok) out.push({ ...base, issue: { severity: 'warning', message: `${join.name}: ${m.label}: ${m.error}`, ref } });
+      if (!m.ok) {
+        // A panel that can't be computed: a knock-on of its root cause.
+        out.push({ ...base, issue: m.cause ? { severity: 'warning', code: 'knock-on.join', message: `${join.name}: ${m.label} can't be measured until that panel can be computed.`, ref, causedBy: m.cause.key } : { severity: 'warning', message: `${join.name}: ${m.label}: ${m.error}`, ref } });
+      }
     }
     if (join.tag === 'seam') {
       if (!join.partner.length || !join.edges.length) {

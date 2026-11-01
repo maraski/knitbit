@@ -8,6 +8,7 @@ import { JOIN_TAGS, sameEdge } from '../../engine/joins';
 import type { EdgeKey, JoinTag } from '../../engine/model';
 import { produce } from '../edit';
 import type { ComputedPanel, ComputedWaypoint, Issue } from '../../engine/panel';
+import { issueKeyPanel } from '../../engine/issues';
 import type { Units } from '../../engine/units';
 import type { MarkerActions } from '../markerActions';
 import { editPanel } from '../edit';
@@ -25,6 +26,8 @@ export interface PropsContext {
   units: Units;
   update: (fn: (p: Project) => Project, key?: string | null) => void;
   select: (s: Selection) => void;
+  /** Show another panel (a knock-on issue's root cause). */
+  openPanel?: (panelId: Id) => void;
   markers: MarkerActions;
   selection: Selection;
 }
@@ -472,13 +475,18 @@ export function IssueList({ issues, ctx }: { issues: Issue[]; ctx: PropsContext 
   if (!issues.length) return null;
   return (
     <ul className="issues">
-      {issues.map((i, k) => (
-        <li key={k} className={`issue issue-${i.severity}`}>
-          <button className="link" onClick={() => ctx.select(i.ref.kind === 'panel' ? { kind: 'panel' } : i.ref)}>
-            {i.message}
-          </button>
-        </li>
-      ))}
+      {issues.map((i, k) => {
+        // A knock-on: its message names the panel it waits on; the link goes there.
+        const root = i.causedBy ? ctx.project.panels.find((p) => p.id === issueKeyPanel(i.causedBy!)) : undefined;
+        return (
+          <li key={k} className={`issue issue-${i.severity}${root ? ' issue-knock-on' : ''}`}>
+            <button className="link" onClick={() => (root ? ctx.openPanel?.(root.id) : ctx.select(i.ref.kind === 'panel' ? { kind: 'panel' } : i.ref))} title={root ? `Show ${root.name}` : undefined}>
+              {i.message}
+            </button>
+            {i.fix?.text && <div className="issue-fix"><strong>Fix:</strong> {i.fix.text}</div>}
+          </li>
+        );
+      })}
     </ul>
   );
 }

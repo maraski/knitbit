@@ -192,7 +192,8 @@ removed; delete them in the console if you want the space back.
   - `grading.ts`: size and measurement operations (rename everywhere, increment rules, base size, zigzag check).
   - `symbols.ts`: the stitch symbol set and what each does as a shaping marker.
   - `manual.ts`: hand-editing shaping markers (move, add, remove, retype, reset).
-  - `checks.ts`: project-wide checks for the check panel; `fitChecks.ts`: the checks from the sizing data (below).
+  - `checks.ts`: project-wide checks for the check panel (grouping, knock-on nesting); `fitChecks.ts`: the checks from the
+    sizing data (below). `issues.ts`: the shared issue model (`IssueFix`, `FieldRef`, `issueKey`).
   - `bust.ts`: bust shaping (formulas with numbers plugged in, short-row wedges, horizontal and vertical darts).
   - `joins.ts`: measuring tagged edges, seam comparison, pick-up suggestions. `edges.ts`: edge length along the outline.
   - `waypointDrag.ts`: proportional waypoint height/width edits, linked panels, match.
@@ -219,9 +220,10 @@ removed; delete them in the console if you want the space back.
   (header facts and the size tables), `text.ts` (Helvetica-safe text), `fileName.ts`, `pdf.ts` (jsPDF + svg2pdf.js:
   page frame and renderers), `schematics.ts` (print scale, waypoint and yoke-phase tables), `render.tsx` (a view drawn
   off-screen with its CSS inlined, for svg2pdf now and PNG later; its own small chunk), `views.ts` (the app hands it
-  `Schematic`, so the bundler keeps the engine in the main chunk). jsPDF and svg2pdf.js are imported only here.
-  `ui/components/ExportDialog.tsx` is the dialog; `ui/schematicBands.ts` is a cardigan front's band and buttons, shared
-  by the Schematic tab and the export.
+  `Schematic`, so the bundler keeps the engine in the main chunk), `tiles.ts` (cutting a chart into page tiles),
+  `ChartSheet.tsx` (one tile as SVG), `sheetDom.tsx` (renders it off-screen for svg2pdf), `charts.tsx` (the chart
+  pages). jsPDF and svg2pdf.js are imported only here. `ui/components/ExportDialog.tsx` is the dialog;
+  `ui/schematicBands.ts` is a cardigan front's band and buttons, shared by the Schematic tab and the export.
 - `firestore.rules`, `firebase.json`, `.env.example`: Firebase security rules and config (see *Cloud save setup*).
 - `samples/`: the sample sizing table (`sizing_table_ysolda_cm.csv`, and `.json` with the same data).
 - `src/engine/fixtures/`: test data: the old sample table, and schema-1 and schema-2 project files.
@@ -229,12 +231,13 @@ removed; delete them in the console if you want the space back.
 ## Export (PDF)
 
 **Export…** in the toolbar makes a PDF to knit from (the plan and the user's decisions: `docs/export-plan.md`). Built
-so far: page 1 and the size tables (milestone E1) and a schematic page per piece (E2). Stitch charts (E3), PNG (E4)
-and the extras (E5) come next.
+so far: page 1 and the size tables (milestone E1), a schematic page per piece (E2) and the stitch charts (E3). PNG
+(E4) and the extras (E5) come next.
 
 - **Dialog** (`ExportDialog.tsx`, lazy): tick sizes (the current size is ticked; *All*, *Just this size*), A4 or US
   Letter (remembered in `localStorage` `knitbit.export.v1`), and the sections built so far (body measurements,
-  finished measurements, key numbers per piece, schematics; the header is always there). It warns before exporting when a project,
+  finished measurements, key numbers per piece, schematics, stitch charts; the header is always there). With charts
+  ticked, *Collapse plain middle* starts from the Chart tab's setting. It warns before exporting when a project,
   size, piece or measurement name or a custom symbol has characters the PDF font can't draw (they print as "?").
 - **File name**: `<project>-<size>.pdf`, or `<project>-<n>-sizes.pdf`; characters not allowed in file names become `-`.
 - **Every page**: a header band (project · size(s), "p. N of M"), and a footer with the construction credit when the
@@ -266,6 +269,21 @@ and the extras (E5) come next.
   below, as the yoke's Front view) with a table of its phases (rows, depth, stitches after, increases), the cast-on and
   the split. A piece that can't be computed in a size gets a page saying why. Width labels and the short-row note are
   pushed apart where waypoints are close, which happens at print scale (also in the app).
+- **Stitch charts** (per ticked size, after the schematics): every piece's chart from `buildChart` (a cardigan pair
+  once, the left front; a sleeve once), drawn as on the Chart tab: the app's glyphs, short rows (SR1…), repeats, a
+  front band's stripe, yoke zones, markers and phases, buttonholes, top-down charts with row 1 at the top. A chart
+  bigger than a page is cut into **tiles** (`tiles.ts`): cells 4.5 mm, shrunk toward 3.5 mm only when that saves
+  tiles; neighbouring tiles share one row and one stitch (printed lighter), so they line up laid side by side. Tiles
+  are read the way the chart is knitted: the first rows first, each band from the right (stitch 1). One tile per
+  page, portrait or landscape (whichever prints fewer tiles); tiles with no stitches at all (a centred yoke's
+  corners) aren't printed. Each tile has its rows and stitches in the title, a small map of the tiles (this one
+  black, unprinted ones grey), row numbers on both sides, stitch numbers above and below, the stitch count where it
+  changes and on its first row, and "Continues ← on p. N · ↑ on p. M" / "From → p. K" links. The piece's **key**
+  (the symbols it uses; custom symbols with their abbreviation) sits under the first tile, or on its own page right
+  after it. Colours are the app's tints, read once from the CSS variables and written as plain attributes; every
+  symbol is also a black glyph and held stitches are hatched, so a black-and-white print loses nothing. Grid lines
+  are one SVG path per tile, not a `<pattern>` (faster in svg2pdf). Speed: about 60 ms a tile, so a garment's charts
+  take 1–3 s (much slower in a background tab, where the browser slows timers).
 - **Text** is the PDF's built-in Helvetica (no font embedded): `−` prints as `-`, `≈` as `~`, and arrows (→ ← ↑ ↓)
   are drawn as small vector shapes with svg2pdf.js.
 - **Size**: jsPDF + svg2pdf.js are about 160 kB gzip, in their own chunk (`pdf-*.js`) loaded only when you export;
@@ -1119,6 +1137,44 @@ Sleeves** pickers for the current size. Each region of each size follows the siz
 row's values become **manual values** of the new size (the existing per-size overrides, so you type over them in the
 grid), its per-size panel overrides are copied, and formulas recompute. Custom sizes are marked *custom*, are left out
 of the zigzag check, count as their row when comparing sizes, and can use region sizing like any size.
+
+## The Checks bar
+
+The Checks bar at the foot of the schematic lists every problem in every panel, join and size (`projectChecks` in
+`src/engine/checks.ts`). *All sizes* (the default) shows one row per problem with the sizes it occurs in and the
+current size's numbers; *This size* keeps the current size only; *Show notes* adds the info notes.
+
+**Root causes and knock-ons.** When a piece can't be computed, everything that needs it fails too: a yoke that can't
+be worked leaves the Back, Front and sleeves without their held stitches, and the joins that measure them without an
+edge. These are *knock-ons*: each reports one issue (*"Waits on Yoke: …"*, or *"… can't be measured until that panel
+can be computed"* on a join) with `causedBy` set to the root issue's key, instead of the old `yoke.*: …` and
+`Unknown name "yoke.back_w"` pairs. The Checks bar shows the root's row with *▸ +N knock-on problems in Back, Front, …*
+(click to expand); the properties of a waiting piece show the *Waits on* issue, which links to the root's panel. The
+same applies to a sleeve whose `armhole_len` can't be measured and a strip whose `edge_len` can't (the panel it
+measures fails). Only issues caused by a failed source are folded: a separate problem on the same piece keeps its own
+row.
+
+**Counting.** The pills count root causes per size: knock-ons whose root is in the list aren't counted again. Example
+(sample table, 22 × 30): New garment → Contiguous yoke, V, pullover, yoke *Depth below the neck point* = 25 cm shows
+**4 errors · 5 warnings** (one error row for 4XS–XS, with 10 knock-ons folded under it; the warnings are the yoke's
+own armhole/body notes) where it used to show 36 errors · 29 warnings.
+
+**Fix.** Some issues say what to change, under the message: the field (by its label in the properties), this size's
+value and what it needs, per size when the sizes differ (*Fix: Make Depth below the neck point at most 19 cm (now
+25 cm), or add 5.7 cm to Extra depth. Depth below the neck point: ≤ 19 cm (4XS) · ≤ 20.3 cm (3XS) · …*). So far: the
+yoke's neck or short rows ending below the split, short rows that don't fit in the front, the shoulder phase with no
+rows, and a neckline wider than the panel's top.
+
+**The issue model** (`Issue` in `panel.ts`; `message` and `ref` as always):
+
+| Field | Meaning |
+|---|---|
+| `code` | stable id of the kind of problem: `yoke.neck-below-split`, `yoke.short-rows-below-split`, `yoke.short-rows-fit`, `yoke.shoulder-phase`, `yoke.band-below-split`, `neckline.wider-than-top`, `knock-on.yoke` / `.armhole` / `.edge` / `.join` |
+| `fix` | `{ text, fields: FieldRef[], now?, need?, apply? }`: what to change; `fields` name the yoke param (`YokeResult.params` key), neckline field, waypoint …; `apply` is reserved for a one-click change |
+| `causedBy` | the root issue's key (`issueKey(panelId, issue)`: panel, ref, severity and the message with its numbers left out), for a knock-on |
+
+The yoke generators' `YokeIssue` carries `code`, `fix` and `param` (the `YokeResult.params` key to change), and the
+yoke panel passes them on.
 
 ## Checks from the sizing data
 
