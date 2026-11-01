@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { projectChecks } from './checks';
 import { joinReport } from './joins';
-import { defaultYoke, generateYoke } from './contiguous';
+import { defaultYoke, generateYoke, STRAP_YOKE_NECK } from './contiguous';
 import { defaultEdges } from './edgeTreatments';
 import { buildGarment, garmentChoice, isYokeMethod, setNeckline, type GarmentSpec } from './garmentSetup';
 import { rowsPerCm, stitchesPerCm } from './gauge';
 import { buildScope } from './measurements';
-import type { FrontOpening, Panel, Project } from './model';
+import { dim, type FrontOpening, type Panel, type Project } from './model';
 import { computePanel, type ComputedPanel } from './panel';
 import { NECK_FOLLOWS, STRAP_NECK } from './strap';
 import { fixtureProject, sizeId } from './testFixtures';
@@ -119,7 +119,7 @@ describe('boat neck: seamed and top-down panels', () => {
 describe('boat neck: contiguous yoke', () => {
   for (const opening of ['closed', 'cardigan'] as const) {
     // The whole-neck start is the modified raglan's (the contiguous method makes the back start).
-    it(`whole-neck start, ${opening}: cast on the wide neck, short rows raise the back by front − back depth`, () => {
+    it(`whole-neck start, ${opening}: a 3 cm strap seam, the neck solved for it; short rows raise the back by front − back depth`, () => {
       const p = garment('modified-raglan', opening);
       const spc = stitchesPerCm(p.gauge);
       const rpc = rowsPerCm(p.gauge);
@@ -129,11 +129,14 @@ describe('boat neck: contiguous yoke', () => {
         expect(errors(p, s.id), s.name).toEqual([]);
         const y = generateYoke(p, yoke.yoke!, s.id);
         const sc = buildScope(p, s.id);
-        expect(y.castOnZones.back).toBe(Math.round((sc.shoulder_w - 6) * spc));
+        // The strap is the seam (3 cm), the back still reaches its width: the neck is what's left.
+        expect(y.counts.A).toBe(Math.round(3 * rpc));
+        expect(y.params.neckWidth.expr).toBe(STRAP_YOKE_NECK);
+        expect(y.castOnZones.back).toBe(Math.round(y.params.neckWidth.value * spc));
         expect(y.params.neckBackDepth.value).toBe(2);
         expect(y.params.srPairs.value).toBe(Math.round((4 - 2) * rpc / 2));
         // Neck to underarm: the strap's share of the shoulder drop, plus the armhole, less the back depth.
-        const share = Math.min(1, 6 / (sc.shoulder_w - sc.back_neck_width));
+        const share = Math.min(1, (sc.shoulder_w - y.params.neckWidth.value) / (sc.shoulder_w - sc.back_neck_width));
         expect(y.params.backLength.value).toBeCloseTo(sc.shoulder_drop * share + sc.armhole_depth - 2, 5);
       }
     });
@@ -221,7 +224,9 @@ describe('boat neck: changing the neckline', () => {
     expect(errors(t, sizeId(t, 'M'))).toEqual([]);
     const y = setNeckline(garment('contiguous', 'closed', 'round'), 'boat');
     const spec = y.panels.find((x) => x.yoke)!.yoke!;
-    expect(spec.neck).toEqual(defaultYoke('boat').neck);
+    // The yoke's neck is the strap's (a new boat neck gets a 3 cm strap).
+    expect(spec.neck).toEqual({ ...defaultYoke('boat').neck, width: dim(STRAP_YOKE_NECK) });
+    expect(y.garment.strap?.width.expr).toBe('3');
     expect(spec.depth.backLength).toEqual(defaultYoke('boat').depth.backLength);
     const again = setNeckline(y, 'round').panels.find((x) => x.yoke)!.yoke!;
     expect(again.neck.backDepth).toBeUndefined();

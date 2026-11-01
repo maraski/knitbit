@@ -19,7 +19,7 @@ import { evaluate, scopeFrom } from './expr';
 import { rowsPerCm, stitchesPerCm } from './gauge';
 import { buildScope } from './measurements';
 import { cmText, type IssueFix } from './issues';
-import type { DimExpr, Id, NecklineShape, Project, StitchPattern, YokeSpec, YokeStart } from './model';
+import type { DimExpr, Id, NecklineShape, Project, StitchPattern, StrapGives, YokeSpec, YokeStart } from './model';
 import { dim, newPanel, type Panel } from './model';
 import { backNeckFor, bodiceNeck, FRONT_NECKS } from './templates';
 import { defaultRaglan, generateRaglan, offShoulderRaised } from './raglan';
@@ -146,6 +146,9 @@ export interface YokeResult {
   };
   stitchesPerCm: number;
   rowsPerCm: number;
+  /** The garment's strap drives this yoke (see `yokeStrap`): the seam is `rows` long; 'neck' solved the neck cast-on
+   * (`neckSts`), 'armhole' the back's width after the shoulders (`backSts`, the markers moved). */
+  strap?: { gives: StrapGives; rows: number; incRows: number; neckSts: number; backSts: number };
   /** A raglan yoke (raglan.ts): the sleeve top at the cast-on, the rows the body and the sleeves increase on (4 sts
    * each), how many of those are extra rows beyond every other row, and the raglan line's length. */
   raglan?: { sleeveTopSts: number; bodyRows: number[]; sleeveRows: number[]; bodyFast: number; sleeveFast: number; lineCm: number };
@@ -308,13 +311,88 @@ export function neckRest(nc: YokeResult['neckContinues'], cardigan: boolean): nu
   return !nc ? 0 : 2 * nc.perSide + (cardigan ? 2 * nc.frontEdgeCo : nc.centre);
 }
 
+// ---------- strap width ----------
+
+/** A yoke's neck width linked to the garment's strap (Strap gives at: Neck): the generator solves it. */
+export const STRAP_YOKE_NECK = 'strap_neck_w';
+/** A yoke's back width linked to the strap (Strap gives at: Armhole): the back is the neck plus the seam's increases. */
+export const STRAP_YOKE_BACK = 'strap_back_w';
+
+const linkedTo = (d: DimExpr | undefined, name: string, sizeId: Id) => !!d && d.expr.trim() === name && !(sizeId in d.overrides);
+
+/**
+ * Does the garment's strap drive this yoke in this size: its seam `rows` long (strap × row gauge), and what gives.
+ * Only through the linked fields (typing over one unlinks it); a yoke without them works as before.
+ */
+export function yokeStrap(spec: YokeSpec, sizeId: Id, scope: Record<string, number>, rpc: number): { gives: StrapGives; rows: number } | null {
+  const w = scope.strap_w;
+  if (w === undefined || spec.style === 'raglan') return null;
+  const rows = Math.max(1, Math.round(w * rpc));
+  if (linkedTo(spec.neck.width, STRAP_YOKE_NECK, sizeId)) return { gives: 'neck', rows };
+  if (linkedTo(spec.shoulder.backWidth, STRAP_YOKE_BACK, sizeId)) return { gives: 'armhole', rows };
+  return null;
+}
+
 // ---------- generator ----------
 
 export function generateYoke(project: Project, spec: YokeSpec, sizeId: Id): YokeResult {
   if (spec.style === 'raglan') return generateRaglan(project, spec, sizeId);
+  const scope = buildScope(project, sizeId);
+  const strap = yokeStrap(spec, sizeId, scope, rowsPerCm(project.gauge));
+  if (strap?.gives !== 'neck') return workYoke(project, spec, sizeId, scope, strap);
+  // Strap gives at the neck: the seam is the strap and the back still reaches its width, so the neck is what's left,
+  // back = neck + 2 × (seam increase rows − extra rows) + back neck increases − 2 × marker move. A first pass (with the
+  // neck as it was before it was linked) counts the increases; none of them depend on the neck.
+  const spc = stitchesPerCm(project.gauge);
+  const yp = project.panels.find((x) => x.yoke === spec) ?? project.panels.find((x) => x.yoke && x.yoke.style !== 'raglan');
+  const was = (yp && project.garment.strap?.saved[yp.id]?.['yoke.neckWidth']) || dim('back_neck_width');
+  const withNeck = (d: DimExpr): YokeSpec => ({ ...spec, neck: { ...spec.neck, width: d } });
+  const first = workYoke(project, withNeck(linkedTo(was, STRAP_YOKE_NECK, sizeId) ? dim('back_neck_width') : was), sizeId, scope, { gives: 'armhole', rows: strap.rows, solving: true });
+  // The front neck keeps its shaping (increases per side, as with the neck it had): a wider neck's extra width goes
+  // to the centre cast-on (a V gets a flat bottom), as the panels' necks do.
+  const k = (first.capTopSts - first.seamSts) / 2;
+  const target = Math.round((first.params.backWidth?.value ?? 0) * spc);
+  const extra = Math.round(first.params.extraRows?.value ?? 0);
+  const grow = first.strap!.backSts + 2 * k - first.neck.backNeck; // 2 × increase rows + back neck increases
+  let bn = target + 2 * k - grow + 2 * extra;
+  // The back reaches its width with this neck or one stitch wider (as the seam rounds without a strap): the one
+  // nearer the neck as it was, so a strap set to the seam the yoke had moves nothing.
+  if (Math.abs(bn + 1 - first.neck.backNeck) < Math.abs(bn - first.neck.backNeck)) bn += 1;
+  const r = workYoke(project, withNeck(dim(Math.max(1, bn) / spc)), sizeId, scope, { ...strap, perSide: first.neck.perSide });
+  r.params.neckWidth = {
+    label: 'Neck width (cast on across the back)',
+    expr: STRAP_YOKE_NECK,
+    plugged: `(${target} + 2 × ${k} − ${grow}${extra ? ` + 2 × ${extra}` : ''}) sts / ${Math.round(spc * 100) / 100}`,
+    value: Math.max(1, bn) / spc,
+    overridden: false,
+    unit: 'cm',
+  };
+  r.strap = { ...r.strap!, gives: 'neck' };
+  if (bn < 1) {
+    // Each seam increase row is one more stitch on the back each side: the widest strap that leaves a neck.
+    const s0 = first.strap!;
+    const backNeckIncs = grow - 2 * s0.incRows;
+    const mostRows = Math.floor((target + 2 * k - backNeckIncs + 2 * extra - 1) / 2) + (s0.rows - s0.incRows);
+    const most = Math.floor((mostRows / rowsPerCm(project.gauge)) * 10) / 10;
+    r.issues.push({
+      severity: 'error',
+      code: 'yoke.strap-too-wide',
+      param: 'backWidth',
+      message: `A ${cmText(scope.strap_w)} strap (${strap.rows} rows) leaves no neck: its increases alone make the back ${cmText((grow - 2 * k) / spc)} wide, more than Back width after the markers move (${cmText(target / spc)}).`,
+      fix: { text: `Make the strap narrower (about ${cmText(Math.max(0, most))} at most), widen Back width after the markers move, or let the strap give at the armhole.`, fields: [{ target: 'yoke', key: 'backWidth', label: 'Back width after the markers move' }], now: cmText(scope.strap_w), need: `≤ ${cmText(Math.max(0, most))}` },
+    });
+    r.ok = false;
+  } else if (scope.back_neck_width && bn / spc < 0.75 * scope.back_neck_width) {
+    r.issues.push({ severity: 'warning', code: 'yoke.strap-narrow-neck', param: 'neckWidth', message: `The ${cmText(scope.strap_w)} strap leaves a ${cmText(bn / spc)} back neck, much narrower than back_neck_width (${cmText(scope.back_neck_width)}): check that the neck goes over the head. A narrower strap, or letting it give at the armhole, keeps the neck.` });
+  }
+  return r;
+}
+
+/** `strap`: the seam is `rows` long (see `generateYoke`); `solving` = the neck solve's first pass; `perSide` = the front
+ * neck increases each side to keep (back start). */
+function workYoke(project: Project, spec: YokeSpec, sizeId: Id, scope: Record<string, number>, strap: { gives: StrapGives; rows: number; solving?: boolean; perSide?: number } | null): YokeResult {
   const spc = stitchesPerCm(project.gauge);
   const rpc = rowsPerCm(project.gauge);
-  const scope = buildScope(project, sizeId);
   const issues: YokeIssue[] = [];
   const params: Record<string, YokeParam> = {};
   const cardigan = project.garment.opening === 'cardigan';
@@ -408,8 +486,25 @@ export function generateYoke(project: Project, spec: YokeSpec, sizeId: Id): Yoke
 
   // ---- phase A: shoulder rows ----
   const extra = Math.round(val('extraRows', 'Extra seam rows', spec.shoulder.extraRows, 'rows'));
+  // The shoulders need A increase rows; the half rows of a pullover's short rows make none.
+  const incRowsTo = (r: number) => {
+    let n = 0;
+    for (let i = 1; i <= r; i++) if (!plain.has(i)) n++;
+    return n;
+  };
   let A: number;
-  if (spec.shoulder.mode === 'length') {
+  let strapOut: YokeResult['strap'];
+  if (strap) {
+    // The strap is the seam: A rows of it. Back after A and the marker move = bn + 2 × increase rows + B − 2k.
+    A = strap.rows;
+    const backSts = bn + 2 * incRowsTo(A) + bTotal - 2 * k;
+    if (strap.gives === 'armhole' && !strap.solving) {
+      params.backWidth = { label: 'Back width after the shoulders', expr: STRAP_YOKE_BACK, plugged: `(${bn} + 2 × ${incRowsTo(A)}${bTotal ? ` + ${bTotal}` : ''}${k ? ` − 2 × ${k}` : ''}) sts / ${Math.round(spc * 100) / 100}`, value: backSts / spc, overridden: false, unit: 'cm' };
+      const cb = scope.cross_back_w ?? scope.cross_back;
+      issues.push({ severity: 'info', code: 'yoke.strap-armhole', param: 'backWidth', message: `The strap gives at the armhole: the neck stays and the back is ${cmText(backSts / spc)} after the markers move${cb !== undefined ? `, so the cross back (${cmText(cb)}) is no longer followed` : ''}. By design: set Strap gives at to Neck to follow it.` });
+    } else val('backWidth', 'Back width after the shoulders', spec.shoulder.backWidth, 'cm');
+    strapOut = { gives: strap.gives, rows: A, incRows: incRowsTo(A), neckSts: bn, backSts };
+  } else if (spec.shoulder.mode === 'length') {
     const len = val('shoulderLength', 'Shoulder seam length', spec.shoulder.length, 'cm');
     const shorten = val('shorten', 'Shorten the seam by', spec.shoulder.shorten, 'cm');
     A = rowsOf(len - shorten) + extra;
@@ -430,13 +525,7 @@ export function generateYoke(project: Project, spec: YokeSpec, sizeId: Id): Yoke
     issues.push({ severity: 'error', code: 'yoke.shoulder-phase', param: spec.shoulder.mode === 'length' ? 'shoulderLength' : 'backWidth', fix, message: `The shoulder phase has ${A} rows: the back is already as wide as the target. Narrow the back neck or widen the target.` });
     A = Math.max(1, A);
   }
-  // The shoulders need A increase rows; the half rows of a pullover's short rows make none.
-  const incRowsTo = (r: number) => {
-    let n = 0;
-    for (let i = 1; i <= r; i++) if (!plain.has(i)) n++;
-    return n;
-  };
-  if (plain.size && spec.shoulder.mode !== 'length') {
+  if (plain.size && spec.shoulder.mode !== 'length' && !strap) {
     const need = A;
     while (incRowsTo(A) < need) A++;
   }
@@ -457,7 +546,7 @@ export function generateYoke(project: Project, spec: YokeSpec, sizeId: Id): Yoke
   // The fronts start at the neck points: the neck opening is the back neck. V: no centre; square: all centre.
   // A whole-neck start has none of this: no neck increases and no cast-on; the short rows end on row R.
   const centreRaw = spec.neck.shape === 'square' ? bn : spec.neck.shape === 'v' ? 0 : Math.min(bn, sts(centreCm));
-  const perSide = wholeNeck ? 0 : Math.max(0, Math.floor((bn - centreRaw) / 2));
+  const perSide = wholeNeck ? 0 : strap?.perSide !== undefined ? Math.min(strap.perSide, Math.floor(bn / 2)) : Math.max(0, Math.floor((bn - centreRaw) / 2));
   const centre = bn - 2 * perSide; // pullover cast-on at centre front
   const depthRows = Math.max(1, rowsOf(depthCm));
   let R = depthRows;
@@ -730,6 +819,7 @@ export function generateYoke(project: Project, spec: YokeSpec, sizeId: Id): Yoke
     },
     stitchesPerCm: spc,
     rowsPerCm: rpc,
+    ...(strapOut ? { strap: strapOut } : {}),
   };
 }
 

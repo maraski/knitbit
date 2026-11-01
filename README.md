@@ -470,8 +470,10 @@ duplicate (⧉) or delete (×) any panel there. Options: knitting direction, nec
 - *Contiguous yoke*: the wide neck is cast on across the back. The back depth replaces `back_neck_drop`: the
   whole-neck start's short rows raise the back by front depth − back depth (`round(max(0, neck_depth − back_depth) /
   row_h / 2)` pairs), and the back length from the neck to the underarm is `shoulder_drop × min(1, (shoulder_w −
-  neck_w) / (shoulder_w − back_neck_width)) + armhole_depth − back_depth`. The shoulder phase is short (about 3 cm of
-  seam), as a 3 cm strap is.
+  neck_w) / (shoulder_w − back_neck_width)) + armhole_depth − back_depth`. A new boat yoke gets the 3 cm strap as its
+  shoulder seam (9 rows at 30 rows / 10 cm; the cast-on narrows to fit, see *Strap width on the yoke*). Boat yokes saved
+  before keep their own, shorter seam (about 2 rows, the cast-on `shoulder_w − 6` being already wider than the cross
+  back) until you set the strap.
 - Choosing *Boat* in the Garment tab sets the fronts, the back (and both tops) or the yoke to these defaults;
   choosing another shape puts the round back neck and the full shoulder slope back (and the strap becomes the round
   neck's own, so nothing else moves). Projects saved with an earlier boat neck (`shoulder_w − 6` typed into the fields,
@@ -505,9 +507,37 @@ shoulder line, and **Strap gives at** says what moves when you change it (`src/e
   shaping, where the front is narrower than the opening (XS, S, 1X, 2X; cardigan 2X, 4X). Its error says so: *Neck
   wider than the panel at row 27: the opening is 37.3 cm where the panel is 36.4 cm … To fix: widen the strap
   (Garment → Strap width), make the neck shallower, or widen the panel at that height.*
-- **Raglan** (classic) has no shoulder seam: the Garment tab says so and shows no setting. The **contiguous** and
-  **modified raglan** yokes take their seam from the yoke's neck and back widths (a strap setting for them is planned).
+- **Raglan** (classic, and the off-shoulder raglan) has no shoulder seam: the Garment tab says so and shows no setting;
+  the neck width and the sleeve top shape the top of the yoke.
 - Projects without the setting (all older ones) are unchanged; `strap_w` only exists once it is set.
+
+#### Strap width on the yoke
+
+On the **contiguous yoke** (back-neck start) and the **modified raglan** (whole-neck start) the strap is the **shoulder
+seam**: phase A works `round(strap_w × row gauge)` rows (3 cm = 9 rows at 30 rows / 10 cm), whatever the shoulder mode
+and seam length say. Each seam row adds a stitch to the back at each side (half rows of the short rows add none), so
+the back after the shoulders and the marker move is `neck + 2 × increase rows + back neck increases − 2 × marker move`.
+**Strap gives at** picks which side of that the yoke solves:
+
+| Gives at | Linked field | So |
+|---|---|---|
+| **Neck** (default) | *Neck width, cast on across the back* = `strap_neck_w` | the neck is solved so the back still reaches *Back width after the markers move* (`cross_back_w + 1`), or one stitch more as the seam rounds; extra rows widen the back 2 sts each, as before. A back-start front neck keeps its increases per side: the extra width goes to the centre cast-on (a V gets a flat bottom). The modified raglan's front cast-on (`neck_w`) follows the neck |
+| **Armhole** | *Back width after the markers move* = `strap_back_w` | the neck stays; the back width is whatever the seam gives (narrower than the cross back for a short seam). An info says the cross back is no longer followed: by design |
+
+- The default seam is long (27 rows = 9 cm in M), so a 2–5 cm strap in *Neck* mode widens the neck a lot (M: 25–34 cm
+  back start, 30–38 cm whole neck); in *Armhole* mode the back narrows instead (M: 23–32 cm after the shoulders).
+- **Readout**: *Strap (shoulder seam) 3.0 cm · 9 rows · neck 30.9 cm · back at the end of the shoulders 42.7 cm* (M, round, back start) in the
+  Garment tab and at the top of *A · Shoulders* in the yoke properties, with a table of every size below the shoulder
+  fields. While linked, the yoke properties replace the *Until* choice with a note (the seam length setting isn't used).
+- **Turning it on moves nothing**: until it is set, the field shows the seam each size has now (to 0.1 cm, finer than a
+  row); in *Neck* mode the solved neck is the one the yoke had (of the two that round to the same seam).
+- A strap so wide that its increases alone make the back wider than its target is an error (*A 20 cm strap (60 rows)
+  leaves no neck …*, with the widest strap that fits); one that leaves a back neck under ¾ of `back_neck_width` is a
+  warning (check that it goes over the head).
+- **Sample table** (22 × 30, every size, pullover and cardigan, round / V (contiguous) / square / boat, straps 2, 3, 4,
+  5 cm, both modes): the seam is exactly the strap's rows, and there are no errors, except those a whole-neck square
+  cardigan already has without the strap (its short rows don't fit in the smallest sizes; *Neck* mode widens the front
+  and clears them).
 
 **Set-in cap height follows the armhole.** `armhole_len` is the armhole the sleeve is sewn into, measured along the
 edges: the other side of a seam join that contains one of the sleeve's edges, or else the Front + Back panels' left
