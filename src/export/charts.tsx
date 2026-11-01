@@ -10,7 +10,10 @@ import type { CustomSymbol } from '../engine/model';
 import { ChartSheet, KeySwatches, readPalette, sheetGutters, type Palette, type SheetLayout } from './ChartSheet';
 import type { Orientation, RenderContext, Writer } from './pdf';
 import type { Part } from './plan';
-import { renderSvg } from './sheetDom';
+
+// sheetDom (react-dom's createRoot) is loaded on first use: imported statically here, Rolldown split the whole engine
+// out of the main chunk into a chunk of its own.
+let renderSvg: typeof import('./sheetDom').renderSvg;
 import { pieceEntries } from './tables';
 import { fitGrid, layoutTiles, tileRange, type Tile, type TileGrid } from './tiles';
 
@@ -196,6 +199,7 @@ async function drawPiece(w: Writer, ctx: RenderContext, label: string, sizeName:
 export async function drawCharts(w: Writer, part: Part, ctx: RenderContext): Promise<void> {
   const sizeId = part.sizeId!;
   const sizeName = ctx.project.sizes.find((s) => s.id === sizeId)?.name ?? '?';
+  renderSvg ??= (await import('./sheetDom')).renderSvg;
   const palette = readPalette();
   for (const entry of pieceEntries(ctx.project)) {
     const c = cachedPanel(ctx.project, entry.panel.id, sizeId, ctx.cache);
