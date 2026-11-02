@@ -46,6 +46,7 @@ const MeasurementsView = lazy(() => import('./components/MeasurementsView').then
 const ImportDialog = lazy(() => import('./components/ImportDialog').then((m) => ({ default: m.ImportDialog })));
 const NewGarmentDialog = lazy(() => import('./components/NewGarmentDialog').then((m) => ({ default: m.NewGarmentDialog })));
 // Export…: the dialog, and on Export the PDF code with jsPDF (src/export/), each loaded on first use.
+const PngDialog = lazy(() => import('./components/PngDialog').then((m) => ({ default: m.PngDialog })));
 const ExportDialog = lazy(() => import('./components/ExportDialog').then((m) => ({ default: m.ExportDialog })));
 // Signed-in Open…: loaded on first use, with the sync code it needs (kept out of the main chunk).
 const ProjectsDialog = lazy(() => import('./components/ProjectsDialog').then((m) => ({ default: m.ProjectsDialog })));
@@ -98,6 +99,7 @@ export function App({ start }: { start: StartState }) {
   }, []);
   const [importing, setImporting] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [pngOpen, setPngOpen] = useState(false);
   // New garment dialog; 'first' = first run (nothing saved yet).
   const [newGarment, setNewGarment] = useState<'closed' | 'open' | 'first'>(start.firstRun ? 'first' : 'closed');
 
@@ -433,6 +435,12 @@ export function App({ start }: { start: StartState }) {
                 <button onClick={() => window.dispatchEvent(new Event('knitbit:fit'))} title="Fit (F)">Fit</button>
               </>
             )}
+            {(center === 'layout' ? project.panels.length > 0 : center !== 'measurements' && !!panel && !!computed && size) && (
+              <>
+                {center === 'chart' && <span className="spacer" />}
+                <button onClick={() => setPngOpen(true)} title="Save this view as a PNG image">PNG…</button>
+              </>
+            )}
           </div>
           <PanelToggle side="right" open={side.panels.right} onClick={() => side.toggle('right')} />
           </div>
@@ -621,6 +629,11 @@ export function App({ start }: { start: StartState }) {
               void startSample(null);
             }}
           />
+        </Suspense>
+      )}
+      {pngOpen && size && center !== 'measurements' && (
+        <Suspense fallback={null}>
+          <PngDialog view={{ project, view: center, yoke: panel?.yoke ? yokeView : undefined, panelId: panel?.id ?? null, sizeId: size.id, mode: sizeMode, compare, align }} onClose={() => setPngOpen(false)} />
         </Suspense>
       )}
       {exporting && size && (

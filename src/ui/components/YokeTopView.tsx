@@ -10,6 +10,7 @@ import { stitchReadout } from '../../engine/yokeShaping';
 import { len } from '../format';
 import { cellFill, Glyph, Swatch } from '../glyphs';
 import { sizeColor } from '../sizeColors';
+import { LEGEND_SVG_H, SizeLegendSvg } from './SizeLegendSvg';
 import { YokeKey } from './YokeKey';
 import { cancelDrag, pinchView, TOUCH_SLOP, usePinch, useTouchUi, zoomView } from '../touch';
 
@@ -33,6 +34,11 @@ interface Props {
   mode: Mode;
   compare: ComputedPanel[];
   units: Units;
+  /**
+   * Off-screen export (PDF, PNG): no key box, hover, touch grips, button dragging or zoom; the yoke fitted to this box
+   * (px). Only the svg is rendered, with its scale in `data-px-per-cm`.
+   */
+  exportMode?: { width: number; height: number };
 }
 
 interface ViewState {
@@ -108,9 +114,10 @@ function ringArc(ring: TopRing, r: number, P: (x: number, y: number) => { x: num
 
 // ---------- the view ----------
 
-export function YokeTopView({ project, panel, computed: c, view, mode, compare, units, buttons }: Props) {
+export function YokeTopView({ project, panel, computed: c, view, mode, compare, units, buttons, exportMode }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
-  const [size, setSize] = useState({ w: 800, h: 600 });
+  const [paneSize, setSize] = useState({ w: 800, h: 600 });
+  const size = exportMode ? { w: exportMode.width, h: exportMode.height } : paneSize;
   const [vs, setVs] = useState<ViewState | null>(null);
   const [hover, setHover] = useState<{ sx: number; sy: number; text: string } | null>(null);
   const drag = useRef<{ x: number; y: number; ox: number; oy: number; moved: boolean } | null>(null);
@@ -123,13 +130,16 @@ export function YokeTopView({ project, panel, computed: c, view, mode, compare, 
   const all = useMemo(() => compare.filter((x) => x.yoke).map((x) => ({ c: x, g: topGeometry(x.yoke!, fold) })), [compare, fold]);
   const maxR = Math.max(geo?.outerR ?? 1, ...(mode === 'overlay' ? all.map((a) => a.g.outerR) : []));
 
-  // The key box sits at the top left in one-size mode: fit the drawing below it.
-  const keyH = mode === 'single' ? KEY_H : 0;
-  const fit = useCallback(() => {
-    const scale = Math.max(0.5, Math.min(size.w - 2 * PAD, size.h - keyH - 2 * PAD - 40) / (2 * maxR));
+  // The key box sits at the top left in one-size mode: fit the drawing below it. The export has no key or hint line,
+  // but the overlay's legend at the foot.
+  const keyH = mode === 'single' && !exportMode ? KEY_H : 0;
+  const footH = exportMode ? (mode === 'overlay' ? LEGEND_SVG_H : 0) : 40;
+  const fitFor = useCallback((w: number, h: number): ViewState => {
+    const scale = Math.max(0.5, Math.min(w - 2 * PAD, h - keyH - 2 * PAD - footH) / (2 * maxR));
     // Centred in the space under the key and above the hint line.
-    setVs({ scale, ox: size.w / 2, oy: keyH + (size.h - keyH - 40) / 2 });
-  }, [size.w, size.h, maxR, keyH]);
+    return { scale, ox: w / 2, oy: keyH + (h - keyH - footH) / 2 };
+  }, [maxR, keyH, footH]);
+  const fit = useCallback(() => setVs(fitFor(size.w, size.h)), [fitFor, size.w, size.h]);
 
   useLayoutEffect(() => {
     const el = wrapRef.current;
@@ -175,7 +185,7 @@ export function YokeTopView({ project, panel, computed: c, view, mode, compare, 
   const chart = useMemo(() => (view === 'chart' && y && c.ok ? buildChart(project, panel, c) : null), [view, y, c, project, panel]);
 
   if (!y || !geo) return <div className="canvas yoke-top"><p className="muted pad">This yoke can't be drawn in this size.</p></div>;
-  const v = vs ?? { scale: 4, ox: size.w / 2, oy: size.h / 2 };
+  const v = exportMode ? fitFor(size.w, size.h) : (vs ?? { scale: 4, ox: size.w / 2, oy: size.h / 2 });
   const P = (x: number, yy: number) => ({ x: v.ox + x * v.scale, y: v.oy + yy * v.scale });
 
   const onPointerDown = (e: React.PointerEvent) => {
@@ -241,7 +251,7 @@ export function YokeTopView({ project, panel, computed: c, view, mode, compare, 
         yokeButtons.push(
           <g
             key={`b${i}${side}`}
-            className={`button-mark ${hole ? 'hole' : 'button'}${buttons.onDrag ? ' draggable' : ''}`}
+            className={`button-mark ${hole ? 'hole' : 'button'}${buttons.onDrag && !exportMode ? ' draggable' : ''}`}
             onPointerDown={(e) => {
               if (!buttons.onDrag || e.button !== 0) return;
               e.stopPropagation();
@@ -258,6 +268,7 @@ export function YokeTopView({ project, panel, computed: c, view, mode, compare, 
     });
   }
 
+  if (mode === 'grid' && exportMode) return <TopGrid project={project} all={all} width={size.w} height={size.h} />;
   if (mode === 'grid') {
     return (
       <div className="canvas yoke-top yoke-grid" ref={wrapRef}>
@@ -275,9 +286,8 @@ export function YokeTopView({ project, panel, computed: c, view, mode, compare, 
     );
   }
 
-  return (
-    <div className="canvas yoke-top" ref={wrapRef} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerLeave={(e) => e.pointerType !== 'touch' && setHover(null)}>
-      <svg width={size.w} height={size.h} className="schematic">
+  const drawing = (
+      <svg width={size.w} height={size.h} className={`schematic${exportMode ? ' yoke-top' : ''}`} {...(exportMode && { viewBox: `0 0 ${size.w} ${size.h}`, 'data-px-per-cm': v.scale })}>
         {mode === 'overlay' ? (
           all.map(({ c: cc, g }, k) => {
             const color = sizeColor(project.sizes.findIndex((s) => s.id === cc.sizeId), project.sizes.length);
@@ -299,7 +309,13 @@ export function YokeTopView({ project, panel, computed: c, view, mode, compare, 
           <TopChart y={y} g={geo} P={P} scale={v.scale} chart={chart} custom={project.symbols ?? []} size={size} />
         )}
         {yokeButtons}
+        {exportMode && mode === 'overlay' && <SizeLegendSvg project={project} sizes={all.map((a) => a.c.sizeId)} current={c.sizeId} x={12} y={size.h - LEGEND_SVG_H + 8} width={size.w - 24} />}
       </svg>
+  );
+  if (exportMode) return drawing;
+  return (
+    <div className="canvas yoke-top" ref={wrapRef} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerLeave={(e) => e.pointerType !== 'touch' && setHover(null)}>
+      {drawing}
       {mode === 'overlay' && (
         <div className="size-legend">
           {all.map(({ c: cc }) => (
@@ -328,6 +344,38 @@ export function YokeTopView({ project, panel, computed: c, view, mode, compare, 
         Seen from above: back at the top, fronts at the bottom, the left sleeve on the right · rings = rows, knitted outward from the cast-on {y.offShoulder ? 'band below the shoulders' : 'round the back neck'} · {touchUi ? 'pinch to zoom · drag to pan · tap a stitch for its count' : 'scroll to zoom · drag to pan · F to fit'}
       </div>
     </div>
+  );
+}
+
+/** The grid of sizes as one svg, for the export: the cards of the Grid mode, as many to a row as fit the box. */
+function TopGrid({ project, all, width, height }: { project: Project; all: { c: ComputedPanel; g: TopGeometry }[]; width: number; height: number }) {
+  const n = Math.max(1, all.length);
+  const CAP = 18; // caption line under each card
+  let best = { cols: 1, card: 0 };
+  for (let cols = 1; cols <= n; cols++) {
+    const card = Math.min((width - 12) / cols - 12, (height - 12) / Math.ceil(n / cols) - 12 - CAP);
+    if (card > best.card) best = { cols, card };
+  }
+  const { cols, card } = best;
+  const cellW = (width - 12) / cols;
+  return (
+    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} className="schematic">
+      {all.map(({ c: cc, g }, i) => {
+        const x = 12 + (i % cols) * cellW + (cellW - 12 - card) / 2;
+        const y = 12 + Math.floor(i / cols) * (card + 12 + CAP);
+        const k = card / (g.outerR * 2.5);
+        const cx = x + card / 2;
+        const cy = y + card / 2;
+        return (
+          <g key={cc.sizeId} className="yoke-top">
+            <TopSchematic y={cc.yoke!} g={g} P={(px, py) => ({ x: cx + px * k, y: cy + py * k })} labels={false} />
+            <text x={cx} y={y + card + 13} textAnchor="middle">
+              {project.sizes.find((s) => s.id === cc.sizeId)?.name} · {cc.yoke!.counts.total} rows · {cc.yoke!.held.leftSleeve} / {cc.yoke!.held.body} / {cc.yoke!.held.rightSleeve}
+            </text>
+          </g>
+        );
+      })}
+    </svg>
   );
 }
 

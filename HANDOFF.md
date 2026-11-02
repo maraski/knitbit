@@ -27,7 +27,7 @@ M9), `6ee297f` (M10 + bust/princess options), `89c2318` (painted stitches, shapi
 > README's *Garment options* table): cross back is followed (shoulder width is a style option); the yoke splits by
 > back length and deepens until the cap is at most half rapid; body increases low in the armhole with `underarm_co`;
 > edge settings never add or remove panels (explicit *Add strips* / *Add yoke, body and sleeves*); the yoke is drawn
-> from above. Not done: PNG export and the extras (E4, E5 of `docs/export-plan.md`; E1 page 1 and the size tables, E2 schematics and E3 stitch charts are built), integrated
+> from above. Not done: the export extras (E5 of `docs/export-plan.md`; E1 page 1 and the size tables, E2 schematics, E3 stitch charts and E4 PNG are built), integrated
 > bands on a contiguous yoke, neckband knit with the panel, dragging back-neck increases on the chart.
 
 ## 1. Project goal and architecture
@@ -472,6 +472,20 @@ Main chunk unchanged (89.70 kB gzip); `pdf-*.js` 165 kB gzip. Checked by eye in 
 (16 tiles + key), a seamed garment with bust short rows, a contiguous yoke. To look at a PDF from the preview
 without a download: POST the blob from `javascript_tool` to a small local Node server that writes it to disk, then
 render pages with PDFKit (a short Swift script).
+
+E4 is built (2026-11-02, branch `claude/export-e4-png-2d08da`): `exportMode?: { width, height }` on `LayoutView`,
+`YokeTopView` and `SizeGrid` (Schematic's also covers its overlay and grid now): no tools, selection, hover, touch
+grips, button dragging or zoom, fitted to the box, only the `<svg>` returned (`data-px-per-cm` on Layout and the yoke
+top view). `LayoutView`'s `update` / `selectedPanel` / `onSelect*` became optional for that. `YokeTopView`'s export
+grid is one SVG (`TopGrid`), and its export svg carries the `yoke-top` class so the zone tints (scoped to
+`.yoke-top`) still apply. Overlays draw their legend with `SizeLegendSvg` (its own module: in `SizeGrid.tsx` it landed
+in the main chunk); the Schematic's overlay legend is added by `pngViews.tsx` around it, for the same reason.
+`export/pngViews.tsx` builds the view from a `PngSpec` (tab, piece, size, mode, compare, align, pane px, collapse);
+`export/png.ts` has `pngScale` (canvas limit 16 000 px a side, 268 M px), `svgToPng`, `buildPng`, `describe`.
+`ui/components/PngDialog.tsx` (lazy) reads the pane's size from the DOM when it opens. Main chunk 82.59 → 82.83 kB
+gzip. Checked by eye in the browser (PNGs posted to a local receiver): sample project schematic / chart / layout in
+all modes, a contiguous yoke's top view (schematic, chart, overlay, grid) and laid flat, and the 3× fallback (row
+gauge 110: saved at 1.4×). Known: the yoke's HTML key box isn't in the PNG; the laid-flat yoke exports one size.
 
 Old outline (kept for reference):
 1. Add `jspdf` + `svg2pdf.js` (exact versions pinned).

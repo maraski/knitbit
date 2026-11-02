@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { sizeText } from './EstMark';
 import { SizeGrid, SizeLegend } from './SizeGrid';
+import { LEGEND_SVG_H, SizeLegendSvg } from './SizeLegendSvg';
 import { JOIN_TAGS } from '../../engine/joins';
 import { alignShift, arrangeT, bbox, isUnarranged, localOutline, place, toLocal, type AlignRef, type Placement, type Rotation } from '../../engine/layout';
 import type { Id, Project } from '../../engine/model';
@@ -13,15 +14,21 @@ import { cancelDrag, pinchView, slop, usePinch, useTouchUi, zoomView } from '../
 
 interface Props {
   project: Project;
-  update: (fn: (p: Project) => Project, key?: string | null) => void;
+  /** Moving panels; omitted = read-only (the export). */
+  update?: (fn: (p: Project) => Project, key?: string | null) => void;
   sizeId: Id;
   mode: SizeMode;
   compare: Id[]; // sizes shown in overlay / grid, in size order
   align: AlignRef;
   computed: (panelId: Id, sizeId: Id) => ComputedPanel;
-  selectedPanel: Id | null;
-  onSelectPanel: (id: Id) => void;
-  onSelectJoin: (id: Id) => void;
+  selectedPanel?: Id | null;
+  onSelectPanel?: (id: Id) => void;
+  onSelectJoin?: (id: Id) => void;
+  /**
+   * Off-screen export (PDF, PNG): no tools, selection, hover, touch grips or zoom; the arrangement fitted to this box
+   * (px). Only the svg is rendered, with its scale in `data-px-per-cm`.
+   */
+  exportMode?: { width: number; height: number };
 }
 
 interface View {
@@ -32,9 +39,13 @@ interface View {
 
 const PAD = 40;
 
-export function LayoutView({ project, update, sizeId, mode, compare, align, computed, selectedPanel, onSelectPanel, onSelectJoin }: Props) {
+const noop = () => {};
+
+export function LayoutView({ project, update = noop, sizeId, mode, compare, align, computed, selectedPanel: selectedProp = null, onSelectPanel = noop, onSelectJoin = noop, exportMode }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
-  const [size, setSize] = useState({ w: 900, h: 600 });
+  const [paneSize, setSize] = useState({ w: 900, h: 600 });
+  const size = exportMode ? { w: exportMode.width, h: exportMode.height } : paneSize;
+  const selectedPanel = exportMode ? null : selectedProp;
   const [view, setView] = useState<View | null>(null);
   const drag = useRef<{ kind: 'pan' | 'panel'; id?: Id; x: number; y: number; start: Placement; ox: number; oy: number; key: string; moved: boolean } | null>(null);
 
@@ -74,12 +85,13 @@ export function LayoutView({ project, update, sizeId, mode, compare, align, comp
     return () => ro.disconnect();
   }, []);
 
-  const fit = () => {
+  const fitFor = (box: { w: number; h: number }): View => {
     const bw = Math.max(1, world.maxX - world.minX);
     const bh = Math.max(1, world.maxY - world.minY);
-    const scale = Math.max(0.3, Math.min((size.w - 2 * PAD) / bw, (size.h - 2 * PAD) / bh));
-    setView({ scale, ox: PAD + (size.w - 2 * PAD - bw * scale) / 2 - world.minX * scale, oy: PAD + (size.h - 2 * PAD - bh * scale) / 2 + world.maxY * scale });
+    const scale = Math.max(0.3, Math.min((box.w - 2 * PAD) / bw, (box.h - 2 * PAD) / bh));
+    return { scale, ox: PAD + (box.w - 2 * PAD - bw * scale) / 2 - world.minX * scale, oy: PAD + (box.h - 2 * PAD - bh * scale) / 2 + world.maxY * scale };
   };
+  const fit = () => setView(fitFor(size));
   const fitKey = `${size.w}x${size.h}|${mode}|${project.panels.length}`;
   const fitted = useRef('');
   useEffect(() => {
@@ -107,7 +119,7 @@ export function LayoutView({ project, update, sizeId, mode, compare, align, comp
     return () => el.removeEventListener('wheel', onWheel);
   }, []);
   // Two fingers zoom and pan; a second finger landing puts back a panel the first one started moving.
-  const touchUi = useTouchUi();
+  const touchUi = useTouchUi() && !exportMode;
   usePinch(wrapRef, {
     start: () => {
       if (drag.current?.kind === 'panel') cancelDrag(drag.current.key);
@@ -116,7 +128,9 @@ export function LayoutView({ project, update, sizeId, mode, compare, align, comp
     move: (s) => setView((v) => v && pinchView(v, s, 0.2, 60)),
   });
 
-  const v = view ?? { scale: 3, ox: size.w / 2, oy: size.h / 2 };
+  // The overlay's legend is drawn under the arrangement in the export.
+  const legendH = exportMode && mode === 'overlay' ? LEGEND_SVG_H : 0;
+  const v = exportMode ? fitFor({ w: size.w, h: size.h - legendH }) : (view ?? { scale: 3, ox: size.w / 2, oy: size.h / 2 });
   const scr = (p: Point) => ({ x: v.ox + p.x * v.scale, y: v.oy - p.y * v.scale });
   const d = (pts: Point[], close = false) => pts.map((p, i) => { const q = scr(p); return `${i ? 'L' : 'M'}${q.x.toFixed(1)},${q.y.toFixed(1)}`; }).join('') + (close ? 'Z' : '');
 
@@ -183,6 +197,7 @@ export function LayoutView({ project, update, sizeId, mode, compare, align, comp
   };
 
   if (mode === 'grid') {
+    if (exportMode) return <SizeGridLayout project={project} placements={placements} compare={sizesShown} computed={computed} size={size} exportMode={exportMode} />;
     return (
       <div className="canvas layout" ref={wrapRef}>
         <SizeGridLayout project={project} placements={placements} compare={sizesShown} computed={computed} size={size} />
@@ -233,9 +248,8 @@ export function LayoutView({ project, update, sizeId, mode, compare, align, comp
   }
 
   const sizeIndex = (sid: Id) => project.sizes.findIndex((s) => s.id === sid);
-  return (
-    <div className="canvas layout" ref={wrapRef} onPointerDown={(e) => onPointerDown(e)} onPointerMove={onPointerMove} onPointerUp={onPointerUp}>
-      <svg width={size.w} height={size.h} className={`schematic layout-svg${touchUi ? ' touch' : ''}`}>
+  const drawing = (
+      <svg width={size.w} height={size.h} className={`schematic layout-svg${touchUi ? ' touch' : ''}`} {...(exportMode && { viewBox: `0 0 ${size.w} ${size.h}`, 'data-px-per-cm': v.scale })}>
         {shapes
           .slice()
           .sort((a, b) => sizeIndex(b.sizeId) - sizeIndex(a.sizeId))
@@ -265,7 +279,13 @@ export function LayoutView({ project, update, sizeId, mode, compare, align, comp
             </text>
           );
         })}
+        {exportMode && mode === 'overlay' && <SizeLegendSvg project={project} sizes={sizesShown} current={sizeId} align={align} x={12} y={size.h - legendH + 8} width={size.w - 24} />}
       </svg>
+  );
+  if (exportMode) return drawing;
+  return (
+    <div className="canvas layout" ref={wrapRef} onPointerDown={(e) => onPointerDown(e)} onPointerMove={onPointerMove} onPointerUp={onPointerUp}>
+      {drawing}
       <div className="layout-tools">
         <button onClick={autoArrange} title="Back and front side by side, sleeves either side, the rest underneath">Auto-arrange (T)</button>
         <button onClick={() => rotateSelected(90)} disabled={!selectedPanel} title="Rotate the selected panel 90° anticlockwise">⟲</button>
@@ -286,7 +306,7 @@ function snap(x: number) {
 }
 
 /** Small multiples: the whole arrangement once per size, all at one scale. */
-function SizeGridLayout({ project, placements, compare, computed, size }: { project: Project; placements: Record<Id, Placement>; compare: Id[]; computed: (p: Id, s: Id) => ComputedPanel; size: { w: number; h: number } }) {
+function SizeGridLayout({ project, placements, compare, computed, size, exportMode }: { project: Project; placements: Record<Id, Placement>; compare: Id[]; computed: (p: Id, s: Id) => ComputedPanel; size: { w: number; h: number }; exportMode?: { width: number; height: number } }) {
   const cells = compare.map((sid) => ({
     sid,
     name: (() => { const s = project.sizes.find((z) => z.id === sid); return s ? sizeText(s, project) : ''; })(),
@@ -296,5 +316,5 @@ function SizeGridLayout({ project, placements, compare, computed, size }: { proj
       return c.ok && at ? [localOutline(c).map((p) => place(p, at))] : [];
     }),
   }));
-  return <SizeGrid cells={cells} size={size} project={project} />;
+  return <SizeGrid cells={cells} size={size} project={project} exportMode={exportMode} />;
 }
