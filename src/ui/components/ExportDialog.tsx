@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import type { Id, Project } from '../../engine/model';
 import { pdfFileName } from '../../export/fileName';
-import { orderedSizes, readySections, SECTIONS, type Paper, type SectionId } from '../../export/plan';
+import { availableSections, orderedSizes, readySections, type Paper, type SectionId } from '../../export/plan';
 import { unprintable } from '../../export/text';
 import { downloadBlob } from '../fileio';
 import './ExportDialog.css';
@@ -42,6 +42,8 @@ function printProblems(project: Project): { where: string; chars: string[] }[] {
     ...project.panels.map((p) => ({ where: `Piece “${p.name}”`, text: p.name })),
     ...project.measurements.map((m) => ({ where: `Measurement “${m.name}”`, text: m.label })),
     ...(project.symbols ?? []).map((s) => ({ where: `Symbol “${s.label}”`, text: `${s.label} ${s.abbr}` })),
+    ...(project.joins ?? []).map((j) => ({ where: `Join “${j.name}”`, text: `${j.name} ${j.note}` })),
+    { where: 'Notes', text: project.notes ?? '' },
   ];
   return items.map((i) => ({ where: i.where, chars: unprintable(i.text) })).filter((i) => i.chars.length);
 }
@@ -56,7 +58,7 @@ interface Props {
 export function ExportDialog({ project, sizeId, onClose }: Props) {
   const [sizes, setSizes] = useState<Id[]>([sizeId]);
   const [paper, setPaperState] = useState<Paper>(readPaper);
-  const [sections, setSections] = useState<SectionId[]>(readySections);
+  const [sections, setSections] = useState<SectionId[]>(() => readySections(project));
   const [collapse, setCollapse] = useState(readCollapse);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -125,7 +127,7 @@ export function ExportDialog({ project, sizeId, onClose }: Props) {
                 <label className="check">
                   <input type="checkbox" checked disabled /> Header (name, gauge, units, sizes)
                 </label>
-                {SECTIONS.filter((s) => s.ready).map((s) => (
+                {availableSections(project).map((s) => (
                   <label key={s.id} className="check">
                     <input type="checkbox" checked={sections.includes(s.id)} onChange={() => setSections(toggle(sections, s.id))} />
                     {s.label}

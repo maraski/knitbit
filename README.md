@@ -236,18 +236,24 @@ removed; delete them in the console if you want the space back.
 ## Export (PDF)
 
 **Export…** in the toolbar makes a PDF to knit from (the plan and the user's decisions: `docs/export-plan.md`). Built
-so far: page 1 and the size tables (milestone E1), a schematic page per piece (E2) and the stitch charts (E3), plus a
-PNG of the view on screen (E4, see *Export (PNG)*). The extras (E5) come next.
+so far: page 1 and the size tables (milestone E1), a schematic page per piece (E2), the stitch charts (E3), a PNG
+of the view on screen (E4, see *Export (PNG)*), and the extras (E5): notes, the yoke top view, the layout and the
+joins table.
 
 - **Dialog** (`ExportDialog.tsx`, lazy): tick sizes (the current size is ticked; *All*, *Just this size*), A4 or US
-  Letter (remembered in `localStorage` `knitbit.export.v1`), and the sections built so far (body measurements,
-  finished measurements, key numbers per piece, schematics, stitch charts; the header is always there). With charts
+  Letter (remembered in `localStorage` `knitbit.export.v1`), and the sections built so far that the project has
+  something for (notes, body measurements, finished measurements, key numbers per piece, schematics, yoke top view,
+  layout, joins, stitch charts; the header is always there; notes only with notes, the top view only with a yoke,
+  joins only with joins). With charts
   ticked, *Collapse plain middle* starts from the Chart tab's setting. It warns before exporting when a project,
-  size, piece or measurement name or a custom symbol has characters the PDF font can't draw (they print as "?").
+  size, piece, measurement or join name, a custom symbol, a join note or the notes have characters the PDF font
+  can't draw (they print as "?").
 - **File name**: `<project>-<size>.pdf`, or `<project>-<n>-sizes.pdf`; characters not allowed in file names become `-`.
 - **Every page**: a header band (project · size(s), "p. N of M"), and a footer with the construction credit when the
   project uses the contiguous method (and the credit setting is on), then "Made with Knitbit · date". Margins 12 mm.
-- **Page 1**: the project name, gauge, units, the ticked sizes and the date, the method; then three tables, each with
+- **Page 1**: the project name, gauge, units, the ticked sizes and the date, the method; the project's **notes**
+  (Garment tab › Project › *Notes*) as typed, line breaks kept, wrapped and flowing onto the next page when long;
+  then three tables, each with
   a column per ticked size (base size marked `*`), flowing onto the next page with the heading row repeated:
   1. **Body measurements**: the Measurements tab's values (no rules or estimate marks).
   2. **Finished measurements**: what the garment measures once knitted, from the computed stitch and row counts
@@ -274,7 +280,19 @@ PNG of the view on screen (E4, see *Export (PNG)*). The extras (E5) come next.
   below, as the yoke's Front view) with a table of its phases (rows, depth, stitches after, increases), the cast-on and
   the split. A piece that can't be computed in a size gets a page saying why. Width labels and the short-row note are
   pushed apart where waypoints are close, which happens at print scale (also in the app).
-- **Stitch charts** (per ticked size, after the schematics): every piece's chart from `buildChart` (a cardigan pair
+- **Yoke top view** (contiguous and raglan yokes, per ticked size, after the schematics): a page per yoke with the
+  yoke seen from above, as the Schematic tab's top view in one size (`YokeTopView` `exportMode`; a cardigan's buttons
+  marked), fitted to the page, portrait or landscape, with its scale ("scale 1 : 3.9": the view fits itself, so the
+  scale isn't a round number).
+- **Layout** (per ticked size): the Layout tab in one size, read-only (`LayoutView` `exportMode`), fitted the same way,
+  room kept under it for the joins table, which flows on below.
+- **Joins** (per ticked size, under the layout, or on a new page without it): every join in the project's order, from
+  `joinReport`, built by `joinRows` in `tables.ts`: the name and kind on the left; on the right what to do with the
+  counts ("pick up 90 sts along 52 rows (3 sts per 4 rows) and 50 sts"; a seam "sew 93 rows (32 cm) to 93 rows
+  (31.4 cm); the first side is 0.6 cm longer", with "ease it in" past the seam tolerance; "240 sts held live";
+  "10 sts along the cast-on edges"), the edges it joins and its note. A join that can't be measured in that size says
+  why.
+- **Stitch charts** (per ticked size, after the schematics and joins): every piece's chart from `buildChart` (a cardigan pair
   once, the left front; a sleeve once), drawn as on the Chart tab: the app's glyphs, short rows (SR1…), repeats, a
   front band's stripe, yoke zones, markers and phases, buttonholes, top-down charts with row 1 at the top. A chart
   bigger than a page is cut into **tiles** (`tiles.ts`): cells 4.5 mm, shrunk toward 3.5 mm only when that saves
@@ -1409,6 +1427,7 @@ Saved files are `*.knitbit.json`. All lengths are in cm, whatever the display un
                "strap": { "width": Dim, "gives": "neck" | "armhole",   // optional: strap_w (see Shoulder strap width)
                           "saved": { "<panelId>": { "neck_side.width": Dim, … } } } },   // fields' own values
   "tags": ["contiguous"],                      // free-form; "contiguous" is added/removed with that construction
+  "notes": "Yarn: 6 skeins DK",                // optional free text, printed under the PDF header (absent = none)
   "edges": { "hem": Edge, "cuff": Edge, "neckband": Edge, "frontBands": Edge },   // optional (see Edge treatments)
   "cardigan": {                                // optional (see Cardigan bands and buttons)
     "bands": "separate" | "continuous",

@@ -6,7 +6,7 @@ import { namePart, pdfFileName, pngFileName } from './fileName';
 import { planExport, readySections } from './plan';
 import { printScale, scaleText, waypointTable, yokeTable } from './schematics';
 import { cachedPanel } from '../engine/joins';
-import { bodyTable, DASH, exportDate, finishedTable, headerInfo, pieceEntries, piecesTable } from './tables';
+import { bodyTable, DASH, exportDate, finishedTable, headerInfo, joinLine, joinRows, pieceEntries, piecesTable } from './tables';
 import { helveticaText, splitArrows, unprintable } from './text';
 
 const base = () => ({ ...fixtureProject(), panels: [], joins: [] });
@@ -43,16 +43,91 @@ describe('plan', () => {
   it('header first, then the size tables once; per-size sections only when built', () => {
     const p = garment();
     const parts = planExport(p, { sizeIds: [sizeId(p, 'L'), sizeId(p, 'M')], paper: 'a4', sections: readySections() });
-    expect(parts.map((x) => x.section)).toEqual(['header', 'body', 'finished', 'pieces', 'schematics', 'charts', 'schematics', 'charts']);
+    // No notes: no notes section.
+    expect(parts.map((x) => x.section)).toEqual(['header', 'body', 'finished', 'pieces', 'schematics', 'layout', 'joins', 'charts', 'schematics', 'layout', 'joins', 'charts']);
     expect(parts[0].newPage).toBe(true);
     // The tables flow on.
     expect(parts.slice(1, 4).every((x) => !x.newPage)).toBe(true);
-    // Per size, in the project's order: schematics on a new page, the charts start their own pages (portrait or landscape).
+    // Per size, in the project's order: schematics on a new page, the layout and the charts start their own pages
+    // (portrait or landscape), the joins flow on under the layout. No yoke: no top view.
     expect(parts.slice(4).map((x) => [x.section, x.sizeId, x.newPage])).toEqual([
-      ['schematics', sizeId(p, 'M'), true], ['charts', sizeId(p, 'M'), false],
-      ['schematics', sizeId(p, 'L'), true], ['charts', sizeId(p, 'L'), false],
+      ['schematics', sizeId(p, 'M'), true], ['layout', sizeId(p, 'M'), false], ['joins', sizeId(p, 'M'), false], ['charts', sizeId(p, 'M'), false],
+      ['schematics', sizeId(p, 'L'), true], ['layout', sizeId(p, 'L'), false], ['joins', sizeId(p, 'L'), false], ['charts', sizeId(p, 'L'), false],
     ]);
+    // Without the layout the joins start a page.
+    expect(planExport(p, { sizeIds: [sizeId(p, 'M')], paper: 'a4', sections: ['joins'] })[1]).toMatchObject({ section: 'joins', newPage: true });
+    // A yoke gets its top view after the schematics.
+    const y = garment({ method: 'contiguous', sleeve: 'contiguous' });
+    expect(planExport(y, { sizeIds: [sizeId(y, 'M')], paper: 'a4', sections: readySections(y) }).slice(4).map((x) => x.section)).toEqual(['schematics', 'yoke', 'layout', 'joins', 'charts']);
     expect(planExport(p, { sizeIds: [], paper: 'a4', sections: ['finished', 'charts'] }).map((x) => x.section)).toEqual(['header', 'finished']);
+  });
+});
+
+describe('plan: E5 sections', () => {
+  it('notes right after the header, only when the project has some', () => {
+    const p = { ...garment(), notes: 'Yarn: 6 skeins DK' };
+    expect(readySections(p)).toContain('notes');
+    expect(readySections({ ...p, notes: '  ' })).not.toContain('notes');
+    const parts = planExport(p, { sizeIds: [sizeId(p, 'M')], paper: 'a4', sections: readySections(p) });
+    expect(parts.slice(0, 3).map((x) => [x.section, x.newPage])).toEqual([['header', true], ['notes', false], ['body', false]]);
+  });
+  it('joins only for a project with joins', () => {
+    const p = garment();
+    expect(readySections({ ...p, joins: [] })).not.toContain('joins');
+    expect(planExport({ ...p, joins: [] }, { sizeIds: [sizeId(p, 'M')], paper: 'a4', sections: ['joins'] }).map((x) => x.section)).toEqual(['header']);
+  });
+});
+
+describe('joins table', () => {
+  const tdGarment = () => garment({ method: 'top-down' });
+
+  it('a top-down garment: every join with its stitch counts', () => {
+    const p = tdGarment();
+    const rows = joinRows(p, sizeId(p, 'M'));
+    expect(rows.map((r) => r.name)).toEqual(p.joins!.map((j) => j.name));
+    expect(rows.every((r) => !r.problem)).toBe(true);
+    const neck = rows.find((r) => r.name.startsWith('Neckband'))!;
+    expect(neck.kind).toBe('Pick up stitches');
+    expect(joinLine(neck)).toMatch(/^Neckband picked up: pick up \d+ sts along \d+ rows \(3 sts per 4 rows\) and \d+ sts$/);
+    expect(neck.edges).toBe('Back · neckline, Front · neckline');
+    expect(rows.find((r) => r.kind === 'Cast on')!.text).toMatch(/^\d+ sts along the cast-on edges$/);
+    // Bigger sizes pick up more.
+    const pick = (id: string) => Number(/pick up (\d+)/.exec(joinRows(p, id).find((r) => r.name.startsWith('Neckband'))!.text)![1]);
+    expect(pick(p.sizes.at(-1)!.id)).toBeGreaterThan(pick(p.sizes[0].id));
+  });
+
+  it('the pick-up count and ratio as joinReport has them; a custom ratio; notes', () => {
+    const p = tdGarment();
+    const j = p.joins!.find((x) => x.tag === 'pickup' && x.name.startsWith('Neckband'))!;
+    j.ratio = { stitches: 2, rows: 3 };
+    j.note = 'Use a smaller needle ';
+    const r = joinRows(p, sizeId(p, 'M')).find((x) => x.name === j.name)!;
+    expect(r.text).toContain('(2 sts per 3 rows)');
+    expect(r.note).toBe('Use a smaller needle');
+  });
+
+  it('seams compare both sides; a seam within tolerance says so without a warning', () => {
+    const p = garment();
+    const rows = joinRows(p, sizeId(p, 'M'));
+    const side = rows.find((r) => r.name === 'Left side seam')!;
+    expect(side.text).toMatch(/^sew \d+ rows \([\d.]+ cm\) to \d+ rows \([\d.]+ cm\)/);
+    expect(side.text).not.toContain('tolerance');
+    expect(side.edges).toContain(', sewn to Back');
+    expect(rows.find((r) => r.name === 'Shoulder seams')!.text).toMatch(/^sew \d+ sts \([\d.]+ cm\) to \d+ sts/);
+  });
+
+  it('a contiguous yoke: held stitches', () => {
+    const p = garment({ method: 'contiguous', sleeve: 'contiguous' });
+    expect(joinRows(p, sizeId(p, 'M')).find((r) => r.name.startsWith('Body'))!.text).toMatch(/^\d+ sts held live$/);
+  });
+
+  it("an edge that can't be measured says so", () => {
+    const p = tdGarment();
+    p.joins!.push({ id: 'j_x', name: '', tag: 'seam', edges: [{ panelId: 'gone', edge: { kind: 'bottom' } }], partner: [], ratio: null, note: '' });
+    const r = joinRows(p, sizeId(p, 'M')).at(-1)!;
+    expect(r.name).toBe('Seam');
+    expect(r.problem).toBe(true);
+    expect(r.text).toBe("can't be measured in this size (The panel no longer exists)");
   });
 });
 

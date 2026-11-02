@@ -129,6 +129,16 @@ export function GarmentSettings({ project, update, sizeId }: Props & { sizeId: I
       <EdgeSettings project={project} sizeId={sizeId} update={update} />
       <h4>Project</h4>
       <TagsField project={project} update={update} />
+      <div className="field">
+        <label htmlFor="project-notes">Notes</label>
+        <textarea
+          id="project-notes"
+          rows={3}
+          value={project.notes ?? ''}
+          placeholder="Yarn, needles, changes you made… (printed under the PDF header)"
+          onChange={(e) => update((p) => ({ ...p, notes: e.target.value || undefined }), 'project.notes')}
+        />
+      </div>
       <label className="check">
         <input type="checkbox" checked={project.settings.exportCredit !== false} onChange={(e) => update((p) => ({ ...p, settings: { ...p.settings, exportCredit: e.target.checked } }))} />
         Credit the construction method in export footers

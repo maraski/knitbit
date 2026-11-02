@@ -27,7 +27,7 @@ M9), `6ee297f` (M10 + bust/princess options), `89c2318` (painted stitches, shapi
 > README's *Garment options* table): cross back is followed (shoulder width is a style option); the yoke splits by
 > back length and deepens until the cap is at most half rapid; body increases low in the armhole with `underarm_co`;
 > edge settings never add or remove panels (explicit *Add strips* / *Add yoke, body and sleeves*); the yoke is drawn
-> from above. Not done: the export extras (E5 of `docs/export-plan.md`; E1 page 1 and the size tables, E2 schematics, E3 stitch charts and E4 PNG are built), integrated
+> from above. Not done: integrated
 > bands on a contiguous yoke, neckband knit with the panel, dragging back-neck increases on the chart.
 
 ## 1. Project goal and architecture
@@ -442,6 +442,15 @@ chunk (`pdf-*.js`, 498 kB / 159 kB gzip); main `index-*.js` +0.61 kB (+0.17 kB g
 and Rolldown now puts its CommonJS-interop helpers in a shared `rolldown-runtime-*.js` (0.58 kB / 0.36 kB gzip,
 preloaded) because jsPDF/svg2pdf's CommonJS deps need them too (a code-splitting group can't capture the runtime).
 Gotcha: the browser preview only saves a download from a real click, and only once per file name.
+
+E5 (2026-11-02, branch `claude/export-e5-extras-0fdeb3`): `Project.notes?: string` (no schema bump; validated
+as an optional string; a Garment tab text area, empty = field removed), printed under the header as the `notes`
+section; `joinRows` / `joinLine` in `tables.ts` (one line per join per size from `joinReport`) drawn by `drawJoins` in
+`pdf.ts`. `SectionDef` gained `applies(project)` (offered and planned only when the project has something: notes,
+joins, a yoke) and `follows` (the joins flow on after the layout when it's planned). `yoke` and `layout` sections
+followed after E4 merged: `layoutSvg` / `yokeTopSvg` in `render.tsx` (the views imported on demand, as `pngViews.tsx`
+does) and `drawFittedPage` in `pdf.ts` (title, "scale 1 : N" from the view's own fit, portrait or landscape, room kept
+under the layout for the joins). E5 is done; all export milestones are built. Main chunk +0.11 kB gzip.
 
 E2 is built (2026-11-01, branch `claude/export-e2-schematics-0264dc`, PR #22): `Schematic` gets `exportMode` (an
 explicit px box, the fit snapped by a callback, no hit areas or wrapper div; the scale in `data-px-per-cm`);

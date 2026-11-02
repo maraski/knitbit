@@ -4,9 +4,9 @@
 
 import { finishedMeasurements, FINISHED_ROWS, panelRole } from '../engine/finished';
 import { garmentLabel } from '../engine/garmentInfo';
-import { cachedPanel, measureEdge, type PanelCache } from '../engine/joins';
+import { cachedPanel, edgeLabel, JOIN_TAGS, joinRatio, joinReport, measureEdge, type PanelCache, type SideTotal } from '../engine/joins';
 import { resolveMeasurements } from '../engine/measurements';
-import type { Id, Panel, Project } from '../engine/model';
+import type { Id, Join, Panel, Project } from '../engine/model';
 import { formatLength, unitLabel } from '../engine/units';
 import { orderedSizes } from './plan';
 
@@ -155,4 +155,76 @@ export function piecesTable(project: Project, sizeIds: Id[], cache: PanelCache =
     ],
     rows,
   };
+}
+
+// ---------- joins ----------
+
+/** One join for one size, as the joins table prints it. */
+export interface JoinRow {
+  name: string;
+  /** The join's kind ("Pick up stitches", "Seam", …). */
+  kind: string;
+  /** What to do, with the counts: "pick up 64 sts along 86 rows (3 sts per 4 rows)". */
+  text: string;
+  /** The edges it joins. */
+  edges: string;
+  note?: string;
+  /** It can't be measured in this size (`text` says why). */
+  problem?: boolean;
+}
+
+/** "Front neck: pick up 64 sts along 86 rows (3 sts per 4 rows)". */
+export const joinLine = (r: JoinRow) => `${r.name}: ${r.text}`;
+
+const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+const sts = (n: number) => `${n} sts`;
+const sideStitches = (t: SideTotal) => t.measures.reduce((a, m) => a + m.stitches, 0);
+/** An edge's size: its rows, or its stitches when it runs along a row (a cast-on, a bind-off, held stitches). */
+const extent = (t: SideTotal) => (t.rows > 0 ? plural(t.rows, 'row') : sts(sideStitches(t)));
+
+function joinText(project: Project, join: Join, sizeId: Id, cache: PanelCache): { text: string; problem?: boolean } {
+  const r = joinReport(project, join, sizeId, cache);
+  const bad = [...r.a.measures, ...(r.b?.measures ?? [])].find((m) => !m.ok);
+  if (!r.a.ok || (r.b && !r.b.ok)) return { text: `can't be measured in this size${bad?.error ? ` (${bad.error.replace(/\.$/, '')})` : ''}`, problem: true };
+  // Lengths to 1 mm (inches as the app shows them): a seam's length is a check, not a measurement to knit to.
+  const len = (cm: number) => formatLength(cm, project.units, project.units === 'metric' ? { decimals: 1 } : {});
+  const a = r.a;
+  const across = sideStitches(a);
+  switch (join.tag) {
+    case 'pickup': {
+      const ratio = joinRatio(project, join);
+      if (a.rows === 0) return { text: `pick up ${sts(a.pickup)}, one in each of ${across} sts` };
+      const along = `along ${plural(a.rows, 'row')} (${ratio.stitches} sts per ${ratio.rows} rows)`;
+      return { text: `pick up ${sts(a.pickup)} ${along}${across ? ` and ${across} sts` : ''}` };
+    }
+    case 'seam': {
+      const b = r.b!;
+      let text = `sew ${extent(a)} (${len(a.lengthCm)}) to ${extent(b)} (${len(b.lengthCm)})`;
+      const cm = Math.abs(r.diffCm);
+      if (!/^0 /.test(len(cm))) {
+        const tol = project.settings.seamToleranceCm;
+        text += `; the ${r.diffCm > 0 ? 'first' : 'second'} side is ${len(cm)} longer${r.withinTolerance ? '' : `, more than the ${len(tol)} tolerance: ease it in`}`;
+      }
+      return { text };
+    }
+    case 'live':
+      return { text: a.rows > 0 ? `${plural(a.rows, 'row')} worked live` : `${sts(across)} held live` };
+    case 'bindoff':
+    case 'caston': {
+      const many = join.edges.length > 1 ? 's' : '';
+      return { text: `${sts(across)} along the ${join.tag === 'caston' ? 'cast-on' : 'bound-off'} edge${many}` };
+    }
+    default:
+      return { text: `free edge, ${extent(a)} (${len(a.lengthCm)})` };
+  }
+}
+
+/** Every join of the project for one size, in the project's order. */
+export function joinRows(project: Project, sizeId: Id, cache: PanelCache = new Map()): JoinRow[] {
+  return (project.joins ?? []).map((join) => {
+    const labels = (refs: Join['edges']) => refs.map((ref) => edgeLabel(project, ref)).join(', ');
+    const edges = join.tag === 'seam' && join.partner.length ? `${labels(join.edges)}, sewn to ${labels(join.partner)}` : labels(join.edges);
+    const note = join.note.trim();
+    return { name: join.name.trim() || JOIN_TAGS[join.tag].label, kind: JOIN_TAGS[join.tag].label, ...joinText(project, join, sizeId, cache), edges, ...(note ? { note } : {}) };
+  });
 }
