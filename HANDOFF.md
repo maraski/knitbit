@@ -27,7 +27,7 @@ M9), `6ee297f` (M10 + bust/princess options), `89c2318` (painted stitches, shapi
 > README's *Garment options* table): cross back is followed (shoulder width is a style option); the yoke splits by
 > back length and deepens until the cap is at most half rapid; body increases low in the armhole with `underarm_co`;
 > edge settings never add or remove panels (explicit *Add strips* / *Add yoke, body and sleeves*); the yoke is drawn
-> from above. Not done: PNG export and the extras (E4, E5 of `docs/export-plan.md`; E1 page 1 and the size tables, E2 schematics and E3 stitch charts are built), integrated
+> from above. Not done: PNG export and the yoke top view and layout PDF pages (E4 and the rest of E5 of `docs/export-plan.md`; E1 page 1 and the size tables, E2 schematics, E3 stitch charts and E5's notes and joins table are built), integrated
 > bands on a contiguous yoke, neckband knit with the panel, dragging back-neck increases on the chart.
 
 ## 1. Project goal and architecture
@@ -442,6 +442,14 @@ chunk (`pdf-*.js`, 498 kB / 159 kB gzip); main `index-*.js` +0.61 kB (+0.17 kB g
 and Rolldown now puts its CommonJS-interop helpers in a shared `rolldown-runtime-*.js` (0.58 kB / 0.36 kB gzip,
 preloaded) because jsPDF/svg2pdf's CommonJS deps need them too (a code-splitting group can't capture the runtime).
 Gotcha: the browser preview only saves a download from a real click, and only once per file name.
+
+E5 part 1 (2026-11-02, branch `claude/export-e5-extras-0fdeb3`): `Project.notes?: string` (no schema bump; validated
+as an optional string; a Garment tab text area, empty = field removed), printed under the header as the `notes`
+section; `joinRows` / `joinLine` in `tables.ts` (one line per join per size from `joinReport`) drawn by `drawJoins` in
+`pdf.ts`. `SectionDef` gained `applies(project)` (offered and planned only when the project has something: notes,
+joins, a yoke) and `follows` (the joins flow on after the layout when it's planned). `yoke` and `layout` sections
+are listed with `ready: false`: they wait for E4's `exportMode` on `YokeTopView` / `LayoutView`; hand those views over
+through `views.ts` like `Schematic`, and render them with `renderSvg` fitted to the page. Main chunk +0.12 kB gzip.
 
 E2 is built (2026-11-01, branch `claude/export-e2-schematics-0264dc`, PR #22): `Schematic` gets `exportMode` (an
 explicit px box, the fit snapped by a callback, no hit areas or wrapper div; the scale in `data-px-per-cm`);

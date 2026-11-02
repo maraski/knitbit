@@ -567,6 +567,8 @@ export interface Project {
   garment: GarmentOptions;
   /** Free-form labels; some are added for you (e.g. "contiguous" for that construction). */
   tags: string[];
+  /** Free-text notes, printed under the header of the PDF export; absent = none. */
+  notes?: string;
   /** Hem, cuff, neckband and front-band settings; absent = the defaults, not yet applied to any panel. */
   edges?: EdgeTreatments;
   /** Cardigan bands, buttons and closing width; absent = the defaults. */

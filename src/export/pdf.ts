@@ -13,7 +13,7 @@ import { cachedPanel, type PanelCache } from '../engine/joins';
 import type { Id, Project } from '../engine/model';
 import { drawCharts } from './charts';
 import { orderedSizes, planExport, type ExportOptions, type Paper, type Part } from './plan';
-import { bodyTable, exportDate, finishedTable, headerInfo, pieceEntries, piecesTable, type Table } from './tables';
+import { bodyTable, exportDate, finishedTable, headerInfo, joinRows, pieceEntries, piecesTable, type Table } from './tables';
 import { helveticaText, printable, splitArrows, type Arrow } from './text';
 import { printScale, scaleText, waypointTable, yokeTable } from './schematics';
 
@@ -28,6 +28,7 @@ const PT = 0.3528; // mm per point
 const INK: [number, number, number] = [30, 28, 24];
 const MUTED: [number, number, number] = [110, 106, 98];
 const RULE: [number, number, number] = [190, 186, 178];
+const WARN: [number, number, number] = [160, 60, 30];
 
 export interface TextStyle {
   size?: number; // pt
@@ -321,12 +322,84 @@ export const RENDERERS: Partial<Record<Part['section'], Renderer>> = {
     }
     w.y += 2;
   },
+  notes: (w, _p, { project }) => drawNotes(w, project.notes ?? ''),
   body: (w, _p, { project, sizeIds }) => section(w, bodyTable(project, sizeIds)),
   finished: (w, _p, { project, sizeIds, cache }) => section(w, finishedTable(project, sizeIds, cache)),
   pieces: (w, _p, { project, sizeIds, cache }) => section(w, piecesTable(project, sizeIds, cache)),
   schematics: (w, part, ctx) => drawSchematics(w, part, ctx),
+  joins: (w, part, ctx) => drawJoins(w, part, ctx),
   charts: drawCharts,
 };
+
+const sizeLabel = (project: Project, sizeId: Id) => project.sizes.find((s) => s.id === sizeId)?.name ?? '?';
+
+/** The project's notes under the header: paragraphs as typed, wrapped, flowing onto the next pages when long. */
+function drawNotes(w: Writer, notes: string): void {
+  const { left, width } = w.box();
+  const LINE = 4.3;
+  w.y += 3;
+  w.ensure(LINE * 3);
+  w.y += LINE;
+  w.text('Notes', left, w.y, { size: 9.5, bold: true });
+  w.y += 1;
+  for (const para of notes.trim().split(/\r?\n/)) {
+    // An empty line in the notes is a half-line gap.
+    if (!para.trim()) {
+      w.y += LINE / 2;
+      continue;
+    }
+    for (const l of w.wrap(para, width, { size: 9 })) {
+      w.ensure(LINE);
+      w.y += LINE;
+      w.text(l, left, w.y, { size: 9 });
+    }
+  }
+  w.y += 2;
+}
+
+/**
+ * The joins table for the part's size: each join's name and kind on the left, what to do (with the stitch and row
+ * counts), the edges it joins and its note on the right. Flows after the layout when that's printed, else on its own
+ * page; a join is never split across pages.
+ */
+function drawJoins(w: Writer, part: Part, { project, cache }: RenderContext): void {
+  const rows = joinRows(project, part.sizeId!, cache);
+  const { left, right, width } = w.box();
+  const nameW = Math.min(52, width * 0.3);
+  const textW = width - nameW - 3;
+  const LINE = 4.1;
+  const SMALL = 3.3;
+  w.y += part.newPage ? 5 : 8;
+  w.ensure(16);
+  w.text(`Joins · size ${sizeLabel(project, part.sizeId!)}`, left, w.y, { size: 12, bold: true });
+  w.y += 3;
+  w.rule(left, w.y, right, INK, 0.3);
+  if (!rows.length) {
+    w.y += 6;
+    w.text('This project has no joins.', left, w.y, { size: 9.5, color: MUTED });
+    return;
+  }
+  for (const r of rows) {
+    const name = w.wrap(r.name, nameW, { size: 9, bold: true });
+    const kind = w.wrap(r.kind, nameW, { size: 7.5 });
+    const text = w.wrap(r.text, textW, { size: 9 });
+    const edges = w.wrap(r.edges, textW, { size: 7.5 });
+    const note = r.note ? w.wrap(`Note: ${r.note}`, textW, { size: 7.5 }) : [];
+    const h = Math.max(name.length * LINE + kind.length * SMALL, text.length * LINE + (edges.length + note.length) * SMALL) + 2.5;
+    w.ensure(h);
+    const top = w.y + 1.2;
+    let y = top;
+    for (const l of name) w.text(l, left, (y += LINE), { size: 9, bold: true });
+    for (const l of kind) w.text(l, left, (y += SMALL), { size: 7.5, color: MUTED });
+    y = top;
+    const x = left + nameW + 3;
+    for (const l of text) w.text(l, x, (y += LINE), { size: 9, bold: r.problem, color: r.problem ? WARN : INK });
+    for (const l of edges) w.text(l, x, (y += SMALL), { size: 7.5, color: MUTED });
+    for (const l of note) w.text(l, x, (y += SMALL), { size: 7.5 });
+    w.y += h;
+    w.rule(left, w.y, right);
+  }
+}
 
 /** The header band's text: the project, and the size for per-size pages (else the ticked sizes). */
 function bandLabel(project: Project, sizeIds: Id[], part: Part): string {

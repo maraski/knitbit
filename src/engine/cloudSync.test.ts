@@ -89,6 +89,14 @@ describe('decideSync', () => {
     expect(d.action === 'download' && d.project.name).toBe('From the laptop');
   });
 
+  it('notes are part of the content: a change to them changes the fingerprint and downloads', () => {
+    const p = fixtureProject();
+    const other = { ...p, notes: 'Changed on the laptop', updatedAt: '2026-10-18T11:00:00.000Z' };
+    expect(fingerprint(other)).not.toBe(fingerprint({ ...p, updatedAt: other.updatedAt }));
+    const d = decideSync(local(p), markerFor(p, 't1'), { ...toRemoteDoc(other), updatedAt: 't2' });
+    expect(d.action === 'download' && d.project.notes).toBe('Changed on the laptop');
+  });
+
   it('reports a conflict when both sides changed', () => {
     const p = fixtureProject();
     const doc = { ...toRemoteDoc(edited(p, 'Online')), updatedAt: 't2' };

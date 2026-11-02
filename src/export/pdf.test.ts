@@ -90,6 +90,32 @@ describe('buildPdf', () => {
   });
 });
 
+describe('notes and joins', () => {
+  it('notes under the header on page 1, wrapped, flowing onto the next page when long', async () => {
+    const p = { ...garment({}), notes: 'Yarn: 6 skeins of DK.\n\nKnit the sleeves two at a time.' };
+    const text = await pdfText(await buildPdf(p, { sizeIds: [sizeId(p, 'M')], paper: 'a4', sections: readySections(p) }));
+    expect(text).toContain('(Notes)');
+    expect(text).toContain('(Yarn: 6 skeins of DK.)');
+    expect(text).toContain('(Knit the sleeves two at a time.)');
+    expect(text.indexOf('(Notes)')).toBeLessThan(text.indexOf('(Body measurements)'));
+    const long = { ...p, notes: Array.from({ length: 90 }, (_, i) => `Line ${i + 1} of a long note that goes on and on.`).join('\n') };
+    const t2 = await pdfText(await buildPdf(long, { sizeIds: [sizeId(p, 'M')], paper: 'a4', sections: ['notes'] }));
+    expect(t2).toContain('(Line 90 of a long note that goes on and on.)');
+    expect(t2).toContain('(p. 2 of 2)');
+  });
+
+  it('a top-down project lists every join with its stitch counts', async () => {
+    const p = garment({ method: 'top-down' });
+    const text = await pdfText(await buildPdf(p, { sizeIds: [sizeId(p, 'M')], paper: 'a4', sections: ['joins'] }));
+    expect(text).toContain('(Joins · size M)');
+    // Names wrap in their column: check each one's first word.
+    for (const j of p.joins!) expect(text).toContain(`(${j.name.split(' ')[0]}`);
+    expect(text).toMatch(/\(pick up \d+ sts along \d+ rows \\\(3 sts per 4 rows\\\) and \d+ sts\)/);
+    expect(text).toMatch(/\(\d+ sts along the cast-on edges\)/);
+    expect(text).toContain('(p. 2 of 2)');
+  });
+});
+
 describe('chart pages', () => {
   /** A plain rectangle `sts` wide and `rows` tall (gauge 10 × 10 per 10 cm, so 1 st and 1 row per cm; plus 2 selvedge stitches). */
   function big(sts: number, rows: number, symbols = false) {

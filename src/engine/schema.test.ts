@@ -17,6 +17,15 @@ describe('JSON round-trip', () => {
     }
   });
 
+  it('keeps the notes (optional: absent loads as no notes, a non-string is refused)', () => {
+    const p = { ...fixtureProject(), notes: 'Yarn: 6 skeins DK\nNeedles 4 mm' };
+    const r = loadProject(serializeProject(p));
+    expect(r.ok && r.project.notes).toBe('Yarn: 6 skeins DK\nNeedles 4 mm');
+    const none = loadProject(serializeProject(fixtureProject()));
+    expect(none.ok && none.project.notes).toBeUndefined();
+    expect(loadProject(serializeProject({ ...p, notes: 3 as unknown as string })).ok).toBe(false);
+  });
+
   it('round-trips twice to identical text', () => {
     const text = serializeProject(fixtureProject());
     const r = loadProject(text);
