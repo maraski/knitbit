@@ -44,16 +44,21 @@ describe('plan', () => {
     const p = garment();
     const parts = planExport(p, { sizeIds: [sizeId(p, 'L'), sizeId(p, 'M')], paper: 'a4', sections: readySections() });
     // No notes: no notes section.
-    expect(parts.map((x) => x.section)).toEqual(['header', 'body', 'finished', 'pieces', 'schematics', 'joins', 'charts', 'schematics', 'joins', 'charts']);
+    expect(parts.map((x) => x.section)).toEqual(['header', 'body', 'finished', 'pieces', 'schematics', 'layout', 'joins', 'charts', 'schematics', 'layout', 'joins', 'charts']);
     expect(parts[0].newPage).toBe(true);
     // The tables flow on.
     expect(parts.slice(1, 4).every((x) => !x.newPage)).toBe(true);
-    // Per size, in the project's order: schematics on a new page, the joins on a new page (no layout to follow), the
-    // charts start their own pages (portrait or landscape).
+    // Per size, in the project's order: schematics on a new page, the layout and the charts start their own pages
+    // (portrait or landscape), the joins flow on under the layout. No yoke: no top view.
     expect(parts.slice(4).map((x) => [x.section, x.sizeId, x.newPage])).toEqual([
-      ['schematics', sizeId(p, 'M'), true], ['joins', sizeId(p, 'M'), true], ['charts', sizeId(p, 'M'), false],
-      ['schematics', sizeId(p, 'L'), true], ['joins', sizeId(p, 'L'), true], ['charts', sizeId(p, 'L'), false],
+      ['schematics', sizeId(p, 'M'), true], ['layout', sizeId(p, 'M'), false], ['joins', sizeId(p, 'M'), false], ['charts', sizeId(p, 'M'), false],
+      ['schematics', sizeId(p, 'L'), true], ['layout', sizeId(p, 'L'), false], ['joins', sizeId(p, 'L'), false], ['charts', sizeId(p, 'L'), false],
     ]);
+    // Without the layout the joins start a page.
+    expect(planExport(p, { sizeIds: [sizeId(p, 'M')], paper: 'a4', sections: ['joins'] })[1]).toMatchObject({ section: 'joins', newPage: true });
+    // A yoke gets its top view after the schematics.
+    const y = garment({ method: 'contiguous', sleeve: 'contiguous' });
+    expect(planExport(y, { sizeIds: [sizeId(y, 'M')], paper: 'a4', sections: readySections(y) }).slice(4).map((x) => x.section)).toEqual(['schematics', 'yoke', 'layout', 'joins', 'charts']);
     expect(planExport(p, { sizeIds: [], paper: 'a4', sections: ['finished', 'charts'] }).map((x) => x.section)).toEqual(['header', 'finished']);
   });
 });

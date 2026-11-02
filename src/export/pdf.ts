@@ -16,6 +16,7 @@ import { orderedSizes, planExport, type ExportOptions, type Paper, type Part } f
 import { bodyTable, exportDate, finishedTable, headerInfo, joinRows, pieceEntries, piecesTable, type Table } from './tables';
 import { helveticaText, printable, splitArrows, type Arrow } from './text';
 import { printScale, scaleText, waypointTable, yokeTable } from './schematics';
+import type { Fitted } from './render';
 
 export type Orientation = 'portrait' | 'landscape';
 
@@ -327,6 +328,8 @@ export const RENDERERS: Partial<Record<Part['section'], Renderer>> = {
   finished: (w, _p, { project, sizeIds, cache }) => section(w, finishedTable(project, sizeIds, cache)),
   pieces: (w, _p, { project, sizeIds, cache }) => section(w, piecesTable(project, sizeIds, cache)),
   schematics: (w, part, ctx) => drawSchematics(w, part, ctx),
+  yoke: (w, part, ctx) => drawYokeTop(w, part, ctx),
+  layout: (w, part, ctx) => drawLayout(w, part, ctx),
   joins: (w, part, ctx) => drawJoins(w, part, ctx),
   charts: drawCharts,
 };
@@ -503,4 +506,69 @@ async function drawSchematics(w: Writer, part: Part, { project, cache }: RenderC
     w.y += dh + 6;
     drawTable(w, table);
   }
+}
+
+// ---------- yoke top view and layout ----------
+
+/** A drawing fitted to the page by its view (not snapped to a standard scale): "1 : 7.3". */
+const fittedScale = (pxPerCm: number) => scaleText(Math.round((10 / (pxPerCm * MM_PER_PX)) * 10) / 10);
+
+/**
+ * A page with a title and one drawing fitted to it, portrait or landscape (whichever prints it bigger). `render`
+ * draws the view into a box of the given px; `keep` (mm) is left free under the drawing (the joins after the layout).
+ * With `why`, nothing is drawn and the page says why.
+ */
+async function drawFittedPage(w: Writer, title: string, render: (wpx: number, hpx: number) => Promise<Fitted>, opts: { keep?: number; why?: string } = {}): Promise<void> {
+  const [pw, ph] = PAPER_MM[w.paper];
+  const TITLE_H = 9;
+  const frame = w.doc.internal.pageSize.getHeight() - w.box().height;
+  const fits: (Fitted & { o: Orientation; width: number; height: number })[] = [];
+  if (!opts.why) {
+    for (const o of ['portrait', 'landscape'] as const) {
+      const [W, H] = o === 'portrait' ? [pw, ph] : [ph, pw];
+      const room = H - frame - TITLE_H - 6;
+      const box = { width: W - 2 * MARGIN, height: room - Math.min(opts.keep ?? 0, room * 0.4) };
+      fits.push({ o, ...box, ...(await render(box.width / MM_PER_PX, box.height / MM_PER_PX)) });
+    }
+  }
+  const best = fits.length ? fits.reduce((a, b) => (b.pxPerCm > a.pxPerCm + 1e-9 ? b : a)) : null;
+  w.newPage(best?.o ?? 'portrait');
+  const { left, right, width } = w.box();
+  w.y += 5;
+  w.text(title, left, w.y, { size: 12, bold: true });
+  if (best) w.text(`scale ${fittedScale(best.pxPerCm)}`, right, w.y, { size: 9.5, align: 'right' });
+  w.y += TITLE_H - 5;
+  if (!best) {
+    for (const l of w.wrap(opts.why ?? '', width, { size: 9.5 })) {
+      w.y += 5;
+      w.text(l, left, w.y, { size: 9.5 });
+    }
+    return;
+  }
+  forPdf(best.svg, w);
+  const dw = Math.min(width, Number(best.svg.getAttribute('width')) * MM_PER_PX || best.width);
+  const dh = Math.min(best.height, Number(best.svg.getAttribute('height')) * MM_PER_PX || best.height);
+  w.y += 4;
+  await svg2pdf(best.svg, w.doc, { x: left + (width - dw) / 2, y: w.y, width: dw, height: dh });
+  w.y += dh + 2;
+}
+
+/** Each yoke seen from above, a page per yoke for the part's size. */
+async function drawYokeTop(w: Writer, part: Part, { project, cache }: RenderContext): Promise<void> {
+  const sizeId = part.sizeId!;
+  const { yokeTopSvg } = await import('./render');
+  for (const panel of project.panels.filter((p) => p.yoke)) {
+    const c = cachedPanel(project, panel.id, sizeId, cache);
+    const why = c?.ok && c.yoke ? undefined : `This yoke can't be drawn in size ${sizeLabel(project, sizeId)}. ${c?.issues.find((x) => x.severity === 'error')?.message ?? ''}`;
+    await drawFittedPage(w, `${panel.name} top view · size ${sizeLabel(project, sizeId)}`, (wpx, hpx) => yokeTopSvg(project, panel, c!, wpx, hpx), { why });
+  }
+}
+
+/** The Layout tab for the part's size; the joins table flows on under it, so room is kept for it. */
+async function drawLayout(w: Writer, part: Part, { project, options, cache }: RenderContext): Promise<void> {
+  const sizeId = part.sizeId!;
+  const { layoutSvg } = await import('./render');
+  const joins = options.sections.includes('joins') ? (project.joins ?? []).length : 0;
+  const why = project.panels.length ? undefined : 'This project has no pieces.';
+  await drawFittedPage(w, `Layout · size ${sizeLabel(project, sizeId)}`, (wpx, hpx) => layoutSvg(project, sizeId, wpx, hpx, cache), { keep: joins ? 20 + 12 * joins : 0, why });
 }

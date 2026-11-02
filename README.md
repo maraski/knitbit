@@ -225,7 +225,9 @@ removed; delete them in the console if you want the space back.
   off-screen with its CSS inlined, for svg2pdf now and PNG later; its own small chunk), `views.ts` (the app hands it
   `Schematic`, so the bundler keeps the engine in the main chunk), `tiles.ts` (cutting a chart into page tiles),
   `ChartSheet.tsx` (one tile as SVG), `sheetDom.tsx` (renders it off-screen for svg2pdf), `charts.tsx` (the chart
-  pages). jsPDF and svg2pdf.js are imported only here. `ui/components/ExportDialog.tsx` is the dialog;
+  pages), `pngViews.tsx` (the view on screen as a standalone SVG for the PNG), `png.ts` (SVG → canvas → PNG, scale and
+  the canvas limit). jsPDF and svg2pdf.js are imported only here. `ui/components/ExportDialog.tsx` is the PDF dialog,
+  `PngDialog.tsx` the PNG one;
   `ui/schematicBands.ts` is a cardigan front's band and buttons, shared by the Schematic tab and the export.
 - `firestore.rules`, `firebase.json`, `.env.example`: Firebase security rules and config (see *Cloud save setup*).
 - `samples/`: the sample sizing table (`sizing_table_ysolda_cm.csv`, and `.json` with the same data).
@@ -234,13 +236,15 @@ removed; delete them in the console if you want the space back.
 ## Export (PDF)
 
 **Export…** in the toolbar makes a PDF to knit from (the plan and the user's decisions: `docs/export-plan.md`). Built
-so far: page 1 and the size tables (milestone E1), a schematic page per piece (E2), the stitch charts (E3), and from
-the extras (E5) the notes and the joins table. PNG (E4), the yoke top view page and the layout page come next.
+so far: page 1 and the size tables (milestone E1), a schematic page per piece (E2), the stitch charts (E3), a PNG
+of the view on screen (E4, see *Export (PNG)*), and the extras (E5): notes, the yoke top view, the layout and the
+joins table.
 
 - **Dialog** (`ExportDialog.tsx`, lazy): tick sizes (the current size is ticked; *All*, *Just this size*), A4 or US
   Letter (remembered in `localStorage` `knitbit.export.v1`), and the sections built so far that the project has
-  something for (notes, body measurements, finished measurements, key numbers per piece, schematics, joins, stitch
-  charts; the header is always there; notes only with notes, joins only with joins). With charts
+  something for (notes, body measurements, finished measurements, key numbers per piece, schematics, yoke top view,
+  layout, joins, stitch charts; the header is always there; notes only with notes, the top view only with a yoke,
+  joins only with joins). With charts
   ticked, *Collapse plain middle* starts from the Chart tab's setting. It warns before exporting when a project,
   size, piece, measurement or join name, a custom symbol, a join note or the notes have characters the PDF font
   can't draw (they print as "?").
@@ -276,12 +280,18 @@ the extras (E5) the notes and the joins table. PNG (E4), the yoke top view page 
   below, as the yoke's Front view) with a table of its phases (rows, depth, stitches after, increases), the cast-on and
   the split. A piece that can't be computed in a size gets a page saying why. Width labels and the short-row note are
   pushed apart where waypoints are close, which happens at print scale (also in the app).
-- **Joins** (per ticked size, after the schematics, on a new page): every join in the project's order, from
+- **Yoke top view** (contiguous and raglan yokes, per ticked size, after the schematics): a page per yoke with the
+  yoke seen from above, as the Schematic tab's top view in one size (`YokeTopView` `exportMode`; a cardigan's buttons
+  marked), fitted to the page, portrait or landscape, with its scale ("scale 1 : 3.9": the view fits itself, so the
+  scale isn't a round number).
+- **Layout** (per ticked size): the Layout tab in one size, read-only (`LayoutView` `exportMode`), fitted the same way,
+  room kept under it for the joins table, which flows on below.
+- **Joins** (per ticked size, under the layout, or on a new page without it): every join in the project's order, from
   `joinReport`, built by `joinRows` in `tables.ts`: the name and kind on the left; on the right what to do with the
   counts ("pick up 90 sts along 52 rows (3 sts per 4 rows) and 50 sts"; a seam "sew 93 rows (32 cm) to 93 rows
   (31.4 cm); the first side is 0.6 cm longer", with "ease it in" past the seam tolerance; "240 sts held live";
   "10 sts along the cast-on edges"), the edges it joins and its note. A join that can't be measured in that size says
-  why. When the layout page lands (E5, after E4) the joins flow on under it.
+  why.
 - **Stitch charts** (per ticked size, after the schematics and joins): every piece's chart from `buildChart` (a cardigan pair
   once, the left front; a sleeve once), drawn as on the Chart tab: the app's glyphs, short rows (SR1…), repeats, a
   front band's stripe, yoke zones, markers and phases, buttonholes, top-down charts with row 1 at the top. A chart
@@ -301,6 +311,32 @@ the extras (E5) the notes and the joins table. PNG (E4), the yoke top view page 
   are drawn as small vector shapes with svg2pdf.js.
 - **Size**: jsPDF + svg2pdf.js are about 160 kB gzip, in their own chunk (`pdf-*.js`) loaded only when you export;
   jsPDF's optional `html2canvas`, `canvg` and `dompurify` chunks are never loaded.
+
+## Export (PNG)
+
+**PNG…** in the bar over the Schematic, Chart or Layout tab saves the view on screen as an image (milestone E4 of
+`docs/export-plan.md`): the current piece, size and size mode (one size, overlay or grid), and for a yoke the Top or
+Front view.
+
+- **Dialog** (`PngDialog.tsx`, lazy): 1×, 2× or 3× (remembered in `localStorage` `knitbit.png.v1`), with the image's
+  size in px. 1× is the drawing pane's size on screen (a chart: 18 px cells).
+- **What's in it**: the same drawing as on screen, on a white background, without handles, hover readouts,
+  selection, touch grips or zoom: each view has an `exportMode` prop (`Schematic`, `LayoutView`, `YokeTopView`,
+  `SizeGrid`: `{ width, height }` px; the drawing is fitted to that box, and only the `<svg>` is rendered). HTML
+  extras on screen aren't drawn (the yoke's key box, hints, tool buttons), except an overlay's size legend, which is
+  drawn into the SVG (`SizeLegendSvg`). The laid-flat yoke draws one size (the PDF's `YokeFrontSheet`).
+- **A chart** is drawn whole (every row and stitch, not just the scrolled part) with the PDF's `ChartSheet`, a title
+  line and the symbol key under it; *Collapse plain middle* follows the Chart tab. In grid mode, every size's chart as
+  coloured blocks, as on the Chart tab. The yoke's Top view chart is the ring chart as on screen.
+- **Canvas limit**: a big chart at 3× can pass what a browser can draw (about 16 000 px a side, 268 M pixels in
+  Chrome). The dialog says so before exporting, and the PNG is saved at the largest scale that fits, rounded down to a
+  tenth ("saved at 1.4× (3674 × 15792 px)"); `pngScale` in `png.ts`, tested.
+- **File name**: `<project>-<view>-<size>.png`, e.g. `My top-Back schematic-M.png`, `My top-layout-11-sizes-grid.png`,
+  `My top-Yoke top view chart-M.png`.
+- **How**: `renderSvg` (render.tsx) draws the view off-screen with its CSS inlined; it's serialised, loaded as an image,
+  drawn on a white canvas at the final size (so text stays sharp) and saved with `toBlob('image/png')`. No library.
+  The code is loaded only when the dialog opens; the main chunk grew 0.24 kB gzip (the button and the views'
+  `exportMode` branches).
 
 ## Checks
 

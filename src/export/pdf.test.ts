@@ -36,6 +36,9 @@ vi.mock('./render', () => ({
     svg: { kids: [{ attrs: { transform: `schematic ${panel.name}` } }], querySelectorAll: () => [], getAttribute: () => null },
     pxPerCm: snap(width / 60),
   }),
+  // The layout and the yoke top view fit themselves (no snap): about 100 cm across.
+  layoutSvg: async (_p: unknown, _s: unknown, width: number) => ({ svg: { kids: [{ attrs: { transform: 'layout' } }], querySelectorAll: () => [], getAttribute: () => null }, pxPerCm: width / 100 }),
+  yokeTopSvg: async (_p: unknown, panel: { name: string }, _c: unknown, width: number) => ({ svg: { kids: [{ attrs: { transform: `top ${panel.name}` } }], querySelectorAll: () => [], getAttribute: () => null }, pxPerCm: width / 100 }),
 }));
 const el = () => ({ attrs: {} as Record<string, string>, kids: [] as unknown[], setAttribute(k: string, v: string) { this.attrs[k] = v; }, append(...k: unknown[]) { this.kids.push(...k); } });
 vi.stubGlobal('document', { createElementNS: el });
@@ -113,6 +116,33 @@ describe('notes and joins', () => {
     expect(text).toMatch(/\(pick up \d+ sts along \d+ rows \\\(3 sts per 4 rows\\\) and \d+ sts\)/);
     expect(text).toMatch(/\(\d+ sts along the cast-on edges\)/);
     expect(text).toContain('(p. 2 of 2)');
+  });
+});
+
+describe('yoke top view and layout pages', () => {
+  it('a contiguous project: a top view page per yoke after the schematics, the layout, then the joins under it', async () => {
+    const p = garment({ method: 'contiguous', sleeve: 'contiguous' });
+    drawn.length = 0;
+    const text = await pdfText(await buildPdf(p, { sizeIds: [sizeId(p, 'S'), sizeId(p, 'M')], paper: 'a4', sections: ['schematics', 'yoke', 'layout', 'joins'] }));
+    expect(text).toContain('(Yoke top view · size S)');
+    expect(text).toContain('(Yoke top view · size M)');
+    expect(text).toContain('(Layout · size M)');
+    expect(text).toMatch(/\(scale 1 : [\d.]+\)/);
+    expect(drawn.filter((d) => d === 'top Yoke').length).toBe(2);
+    expect(drawn.filter((d) => d === 'layout').length).toBe(2);
+    // Per size: schematics, top view, layout, joins.
+    const at = (s: string) => text.indexOf(s);
+    expect(at('(Yoke · size M)')).toBeLessThan(at('(Yoke top view · size M)'));
+    expect(at('(Yoke top view · size M)')).toBeLessThan(at('(Layout · size M)'));
+    expect(at('(Layout · size M)')).toBeLessThan(at('(Joins · size M)'));
+    expect(at('(Joins · size S)')).toBeLessThan(at('(Yoke · size M)'));
+  });
+
+  it('no top view for a project without a yoke', async () => {
+    const p = garment({});
+    const text = await pdfText(await buildPdf(p, { sizeIds: [sizeId(p, 'M')], paper: 'a4', sections: readySections(p) }));
+    expect(text).not.toContain('top view');
+    expect(text).toContain('(Layout · size M)');
   });
 });
 

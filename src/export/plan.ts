@@ -30,8 +30,8 @@ export const SECTIONS: SectionDef[] = [
   { id: 'finished', label: 'Finished measurements', scope: 'once', ready: true },
   { id: 'pieces', label: 'Key numbers per piece', scope: 'once', ready: true },
   { id: 'schematics', label: 'Schematics', scope: 'perSize', ready: true },
-  { id: 'yoke', label: 'Yoke top view', scope: 'perSize', ready: false, ownPages: true, applies: hasYoke },
-  { id: 'layout', label: 'Layout', scope: 'perSize', ready: false, ownPages: true },
+  { id: 'yoke', label: 'Yoke top view', scope: 'perSize', ready: true, ownPages: true, applies: hasYoke },
+  { id: 'layout', label: 'Layout', scope: 'perSize', ready: true, ownPages: true },
   { id: 'joins', label: 'Joins', scope: 'perSize', ready: true, follows: 'layout', applies: hasJoins },
   { id: 'charts', label: 'Stitch charts', scope: 'perSize', ready: true, ownPages: true },
 ];

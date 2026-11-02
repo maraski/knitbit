@@ -6,7 +6,8 @@
 import type { ReactElement, ReactNode } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
-import { panelJoins, type PanelCache } from '../engine/joins';
+import { buttonPlan } from '../engine/buttons';
+import { cachedPanel, panelJoins, type PanelCache } from '../engine/joins';
 import { buildScope } from '../engine/measurements';
 import type { Id, Panel, Project } from '../engine/model';
 import { panelExtras, resolvePanelDims, type ComputedPanel } from '../engine/panel';
@@ -129,6 +130,28 @@ export async function pieceSvg(project: Project, panel: Panel, c: ComputedPanel,
   }
   const svg = renderSvg(node, { crop: 4 });
   return { svg, pxPerCm: Number(svg.getAttribute('data-px-per-cm')) || 1 };
+}
+
+/** A rendered view in export mode, cut to what it draws, with the px per cm it was fitted at. */
+function fitted(node: ReactNode): Fitted {
+  const svg = renderSvg(node, { crop: 4 });
+  return { svg, pxPerCm: Number(svg.getAttribute('data-px-per-cm')) || 1 };
+}
+
+/** The Layout tab for one size (every piece where it's placed, read-only), fitted to `width` × `height` px. */
+export async function layoutSvg(project: Project, sizeId: Id, width: number, height: number, cache: PanelCache = new Map()): Promise<Fitted> {
+  // The layout is its own chunk, loaded by the app only for the Layout tab.
+  const { LayoutView } = await import('../ui/components/LayoutView');
+  const computed = (panelId: Id, sid: Id) => cachedPanel(project, panelId, sid, cache)!;
+  return fitted(<LayoutView project={project} sizeId={sizeId} mode="single" compare={[sizeId]} align="hem" computed={computed} exportMode={{ width, height }} />);
+}
+
+/** A yoke seen from above, as on the Schematic tab's top view in one size, fitted to `width` × `height` px. */
+export async function yokeTopSvg(project: Project, panel: Panel, c: ComputedPanel, width: number, height: number): Promise<Fitted> {
+  const { YokeTopView } = await import('../ui/components/YokeTopView');
+  const plan = project.garment.opening === 'cardigan' ? buttonPlan(project, c.sizeId) : null;
+  const buttons = plan ? { positions: plan.positions, bodyEdgeCm: plan.bodyEdgeCm, holeSide: project.cardigan?.buttonholeSide ?? 'right' } : undefined;
+  return fitted(<YokeTopView project={project} panel={panel} computed={c} view="schematic" mode="single" compare={[c]} units={project.units} buttons={buttons} exportMode={{ width, height }} />);
 }
 
 // A chart sheet (ChartSheet / KeySwatches, from charts.tsx): its colours are passed in as attributes already, so it

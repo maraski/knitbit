@@ -504,6 +504,7 @@ export function Schematic({ computed: c, direction, units, selection, onSelect, 
       shapes: [localOutline(x)],
       caption: `${x.counts[x.topDown ? x.totalRows : 0]} sts · ${x.totalRows} rows`,
     }));
+    if (exportMode) return <SizeGrid cells={cells} size={size} project={project} exportMode={exportMode} />;
     return (
       <div className="canvas" ref={wrapRef}>
         <SizeGrid cells={cells} size={size} project={project} />
@@ -515,9 +516,8 @@ export function Schematic({ computed: c, direction, units, selection, onSelect, 
     const L = (p: Pt) => ({ x: v.ox + p.x * v.scale, y: v.oy - p.y * v.scale });
     const sizeIdx = (sid: string) => project.sizes.findIndex((z) => z.id === sid);
     const shown = compare.filter((x) => x.ok).sort((a, b) => sizeIdx(b.sizeId) - sizeIdx(a.sizeId));
-    return (
-      <div className="canvas" ref={wrapRef} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp}>
-        <svg width={size.w} height={size.h} className="schematic">
+    const overlay = (
+        <svg width={box.w} height={box.h} className="schematic" {...(exportMode && { viewBox: `0 0 ${box.w} ${box.h}`, 'data-px-per-cm': v.scale })}>
           {shown.map((x) => {
             const shift = alignShift(x, c, align);
             const color = sizeColor(sizeIdx(x.sizeId), project.sizes.length);
@@ -543,6 +543,11 @@ export function Schematic({ computed: c, direction, units, selection, onSelect, 
             );
           })}
         </svg>
+    );
+    if (exportMode) return overlay;
+    return (
+      <div className="canvas" ref={wrapRef} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp}>
+        {overlay}
         <SizeLegend project={project} sizes={compare.map((x) => x.sizeId)} current={c.sizeId} align={align} />
         <div className="canvas-hint">Overlay: outlines aligned at the {align}{c.bust ? ' · bust points and short-row wedges per size' : ''}</div>
       </div>
