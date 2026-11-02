@@ -28,9 +28,13 @@ export interface GridCell {
   caption?: string;
 }
 
-/** Lays out cells in a grid at one shared scale. */
-export function SizeGrid({ cells, size, project }: { cells: GridCell[]; size: { w: number; h: number }; project: Project }) {
+/**
+ * Lays out cells in a grid at one shared scale. `exportMode` (PDF, PNG): drawn into that box (px) with a viewBox,
+ * instead of the pane's size.
+ */
+export function SizeGrid({ cells, size: paneSize, project, exportMode }: { cells: GridCell[]; size: { w: number; h: number }; project: Project; exportMode?: { width: number; height: number } }) {
   if (!cells.length) return null;
+  const size = exportMode ? { w: exportMode.width, h: exportMode.height } : paneSize;
   const boxes = cells.map((c) => bbox(c.shapes.flat()));
   const cw = Math.max(...boxes.map((b) => b.maxX - b.minX), 1);
   const ch = Math.max(...boxes.map((b) => b.maxY - b.minY), 1);
@@ -45,7 +49,7 @@ export function SizeGrid({ cells, size, project }: { cells: GridCell[]; size: { 
   const cellW = cw * 1.15 * scale;
   const cellH = ch * 1.15 * scale + 22;
   return (
-    <svg width={size.w} height={size.h} className="schematic">
+    <svg width={size.w} height={size.h} className="schematic" {...(exportMode && { viewBox: `0 0 ${size.w} ${size.h}` })}>
       {cells.map((cell, i) => {
         const b = boxes[i];
         const col = i % cols;
