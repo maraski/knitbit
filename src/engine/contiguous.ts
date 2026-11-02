@@ -23,9 +23,9 @@ import type { DimExpr, Id, NecklineShape, Project, StitchPattern, StrapGives, Yo
 import { dim, newPanel, type Panel } from './model';
 import { backNeckFor, bodiceNeck, FRONT_NECKS } from './templates';
 import { defaultRaglan, generateRaglan, offShoulderRaised } from './raglan';
+import { registerYokeEngine, STRAP_YOKE_BACK, STRAP_YOKE_NECK, YOKE_NAMES, ZONES, type Zone } from './yokeEngine';
 
-export type Zone = 'leftFront' | 'leftSleeve' | 'back' | 'rightSleeve' | 'rightFront';
-export const ZONES: Zone[] = ['leftFront', 'leftSleeve', 'back', 'rightSleeve', 'rightFront'];
+export { ZONES, YOKE_NAMES, type Zone };
 export type ZoneCounts = Record<Zone, number>;
 
 /** Phases of a row; 'band' = an off-shoulder raglan's band, knit first (raglan.ts). */
@@ -335,10 +335,7 @@ export function neckRest(nc: YokeResult['neckContinues'], cardigan: boolean): nu
 
 // ---------- strap width ----------
 
-/** A yoke's neck width linked to the garment's strap (Strap gives at: Neck): the generator solves it. */
-export const STRAP_YOKE_NECK = 'strap_neck_w';
-/** A yoke's back width linked to the strap (Strap gives at: Armhole): the back is the neck plus the seam's increases. */
-export const STRAP_YOKE_BACK = 'strap_back_w';
+export { STRAP_YOKE_BACK, STRAP_YOKE_NECK };
 
 const linkedTo = (d: DimExpr | undefined, name: string, sizeId: Id) => !!d && d.expr.trim() === name && !(sizeId in d.overrides);
 
@@ -987,11 +984,6 @@ export function yokePanel(shape: NecklineShape = 'round', start?: YokeStart): Pa
 
 // ---------- names for the panels that continue from the yoke ----------
 
-/** `yoke.*` names: each held part plus its share of the underarm cast-on, as widths (cm), the yoke depth, and a front
- * neck that continues into the front body: its rows below the split, increases per side and centre (rows, sts; 0 when
- * the neck closes in the yoke). */
-export const YOKE_NAMES = ['yoke.back_w', 'yoke.front_w', 'yoke.sleeve_w', 'yoke.underarm_co', 'yoke.depth', 'yoke.neck_rows', 'yoke.neck_per_side', 'yoke.neck_centre'] as const;
-
 /**
  * Values of the `yoke.*` names in one size, from the project's contiguous yoke: the back and front at the split with
  * half the underarm cast-on at each side, the sleeve with the whole cast-on, and the yoke's depth (rows from the neck).
@@ -1042,3 +1034,5 @@ export function yokeNeckContinues(project: Project, sizeId: Id): { neck: NonNull
   const y = generateYoke(project, panel.yoke!, sizeId);
   return y.ok && y.neckContinues ? { neck: y.neckContinues, shape: panel.yoke!.neck.shape } : null;
 }
+
+registerYokeEngine({ generateYoke, yokeNames, yokeNeckContinues });

@@ -13,8 +13,8 @@
 // over is no longer linked (the readout offers to re-link it); each field's own value from before it was linked is
 // kept in `strap.saved` and restored when the strap stops driving it. Projects without a strap are unchanged.
 
-import { generateYoke, STRAP_YOKE_BACK, STRAP_YOKE_NECK } from './contiguous';
-import { garmentChoice } from './garmentSetup';
+import { garmentChoice } from './garmentInfo';
+import { STRAP_YOKE_BACK, STRAP_YOKE_NECK, yokeEngine } from './yokeEngine';
 import { resolveDefinitions } from './expr';
 import { buildScope } from './measurements';
 import type { DimExpr, Id, Panel, Project, StrapGives, StrapSettings, Waypoint } from './model';
@@ -229,7 +229,7 @@ export function defaultStrapWidth(p: Project): DimExpr {
 /** The yoke's seam as it is in each size, to 0.1 cm (finer than a row, so it gives the same rows back). */
 function defaultYokeStrap(p: Project, yoke: Panel): DimExpr {
   const r1 = (x: number) => Math.round(x * 10) / 10;
-  const vals = p.sizes.map((s) => ({ id: s.id, v: r1(generateYoke(p, yoke.yoke!, s.id).derived.seamCm) }));
+  const vals = p.sizes.map((s) => ({ id: s.id, v: r1(yokeEngine()!.generateYoke(p, yoke.yoke!, s.id).derived.seamCm) }));
   if (!vals.length) return dim(BOAT_STRAP);
   const base = vals.find((x) => x.id === p.baseSizeId) ?? vals[0];
   return dim(base.v, Object.fromEntries(vals.filter((x) => x.id !== base.id && x.v !== base.v).map((x) => [x.id, x.v])));
@@ -336,6 +336,6 @@ export interface YokeStrapReadout {
 /** The yoke's strap (its shoulder seam) in a size: cm and rows, the neck cast-on and the back at the end of A. */
 export function yokeStrapReadout(p: Project, panel: Panel, sizeId: Id): YokeStrapReadout | null {
   if (!isStrapYoke(panel)) return null;
-  const y = generateYoke(p, panel.yoke!, sizeId);
+  const y = yokeEngine()!.generateYoke(p, panel.yoke!, sizeId); // loaded: the project has a yoke
   return { strapCm: y.derived.seamCm, rows: y.counts.A, neckCm: y.neck.backNeck / y.stitchesPerCm, backCm: y.derived.backEndOfACm };
 }

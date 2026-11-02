@@ -22,6 +22,7 @@
 
 import { belowSplitFix, continuesPast, defaultShortRows, neckContinuation, neckRest, shortRowsFitFix, defaultYoke, generateYoke, shortRowSpan, ZONES, type PhaseSummary, type YokeCastOn, type YokeInc, type YokeIssue, type YokeParam, type YokePhase, type YokeResult, type YokeRow, type ZoneCounts } from './contiguous';
 import { plugIn } from './bust';
+import { offShoulderRaised } from './garmentInfo';
 import { ceil1, cmText, exprErrorText, field, fixOf, floor1, rowsCm, stsCm, YOKE_LABELS } from './issues';
 import { distributeAcross } from './distribute';
 import { edgePattern, edgesOf } from './edgeTreatments';
@@ -60,11 +61,7 @@ export function defaultOffShoulder(raised = false): NonNullable<YokeSpec['offSho
   return { bandEase: dim(-0.1), ringEase: dim(0), armArc: dim('bicep * 0.5'), backRaise: dim(raised ? 2 : 0) };
 }
 
-/** An off-shoulder yoke whose back is raised (read back as the Modified raglan): any back raise other than 0. */
-export function offShoulderRaised(spec: YokeSpec): boolean {
-  const e = spec.offShoulder?.backRaise.expr.trim() ?? '';
-  return e !== '' && Number(e) !== 0;
-}
+export { offShoulderRaised };
 
 /**
  * A new raglan yoke: 2-st raglan lines with M1R / M1L, the front neck shaped by increases unless `start` = 'neck'.

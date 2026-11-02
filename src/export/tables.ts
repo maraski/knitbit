@@ -3,7 +3,7 @@
 // Helvetica-safe).
 
 import { finishedMeasurements, FINISHED_ROWS, panelRole } from '../engine/finished';
-import { garmentLabel } from '../engine/garmentSetup';
+import { garmentLabel } from '../engine/garmentInfo';
 import { cachedPanel, measureEdge, type PanelCache } from '../engine/joins';
 import { resolveMeasurements } from '../engine/measurements';
 import type { Id, Panel, Project } from '../engine/model';

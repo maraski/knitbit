@@ -2,7 +2,8 @@
 // stitch count, centred, top-down) so the schematic, layout, overlay and joins work on it. Its stitch chart is built
 // in yokeChart.ts (loaded with the chart).
 
-import { generateYoke, ZONES, type YokeResult, type Zone } from './contiguous';
+import type { YokeResult } from './contiguous';
+import { yokeEngine, ZONES, type Zone } from './yokeEngine';
 import type { Id, Panel, Project } from './model';
 import type { ComputedPanel, ComputedWaypoint, Issue, Point } from './panel';
 import { roundRows } from './rounding';
@@ -46,8 +47,9 @@ export function yokeIssues(y: YokeResult): Issue[] {
   }));
 }
 
+/** The yoke panel (the generators must be loaded: see yokeEngine.ts). */
 export function computeYokePanel(project: Project, panel: Panel, sizeId: Id): ComputedPanel {
-  const y = generateYoke(project, panel.yoke!, sizeId);
+  const y = yokeEngine()!.generateYoke(project, panel.yoke!, sizeId);
   const spc = y.stitchesPerCm;
   const rpc = y.rowsPerCm;
   const T = y.rows.length;

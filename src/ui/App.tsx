@@ -29,10 +29,9 @@ import { setButtonPosition } from '../engine/bands';
 import { applyEdgeTreatments } from '../engine/edgeTreatments';
 import { PANEL_SELECTION, type Selection } from './selection';
 import { projectChecks } from '../engine/checks';
-import { applyAcrossSizes, applyFix, applySummary, canApply } from '../engine/applyFix';
+import { canApply } from '../engine/applyFields';
 import type { FieldRef, FixApply } from '../engine/issues';
 import type { IssueActions } from './components/IssueFix';
-import { fieldSpot, flashField } from './fieldNav';
 import { len } from './format';
 import { loadSample, migrationNotice, useProjectStore, type Notice, type StartState } from './store';
 
@@ -277,7 +276,8 @@ export function App({ start }: { start: StartState }) {
   });
 
   // Go to field: select the piece, size and selection (or the sidebar tab) that show a fix's field, then highlight it.
-  const goToField = (f: FieldRef, sid?: Id) => {
+  // Its code (and Apply's) loads on the first click.
+  const goToField = (f: FieldRef, sid?: Id) => void import('./fieldNav').then(({ fieldSpot, flashField }) => {
     if (sid) setSizeId(sid);
     const spot = fieldSpot(f);
     if (f.target === 'measurement') {
@@ -295,7 +295,7 @@ export function App({ start }: { start: StartState }) {
       if (!side.panels.right) side.toggle('right');
     }
     flashField(spot);
-  };
+  });
   // Apply: the fix's change in every size with the same problem, one undo step, said in a toast.
   const [toast, setToast] = useState<{ text: string; at: number } | null>(null);
   useEffect(() => {
@@ -308,13 +308,14 @@ export function App({ start }: { start: StartState }) {
     goToField,
     canApply: (i) => !!i.fix?.apply && canApply(project, i.fix.apply),
     format: formatValue,
-    apply: (pid, issue) => {
-      const a = applyAcrossSizes(projectChecks(project), pid, issue);
-      const next = a && applyFix(project, a.field, a.values);
-      if (!a || !next) return;
-      update(() => next);
-      setToast({ text: applySummary(project, a.field, a.unit, a.values, formatValue), at: Date.now() });
-    },
+    apply: (pid, issue) =>
+      void import('../engine/applyFix').then(({ applyAcrossSizes, applyFix, applySummary }) => {
+        const a = applyAcrossSizes(projectChecks(project), pid, issue);
+        const next = a && applyFix(project, a.field, a.values);
+        if (!a || !next) return;
+        update(() => next);
+        setToast({ text: applySummary(project, a.field, a.unit, a.values, formatValue), at: Date.now() });
+      }),
   };
 
   const ctx: PropsContext | null =
