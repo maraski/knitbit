@@ -2,10 +2,11 @@
 //   cup        → bust, dart_height, apex_to_apex
 //   hem        → hem_circ, hem_drop
 //   broad back → shoulder_w, cross_back_w
+//   waist split → waist_shift (a formula: 0 for even, (bust − waist) / 4 back-weighted)
 // These names are derived (like a measurement with an expression rule) unless the project has a measurement of the
 // same name, which then wins.
 
-import type { CupChoice, HemChoice, Measurement, Project } from './model';
+import type { CupChoice, HemChoice, Measurement, Project, WaistSplit } from './model';
 
 export const CUPS: { id: Exclude<CupChoice, 'custom'>; label: string; apex: string }[] = [
   { id: 'ab', label: 'A/B', apex: 'b' },
@@ -15,6 +16,11 @@ export const CUPS: { id: Exclude<CupChoice, 'custom'>; label: string; apex: stri
 ];
 
 export const CUSTOM_BUST = 'bust_custom';
+
+export const WAIST_SPLITS: { id: WaistSplit; label: string; expr: string }[] = [
+  { id: 'even', label: 'Even (side seams mirror)', expr: '0' },
+  { id: 'back', label: 'Back-weighted (princess lines, darts)', expr: '(bust - waist) / 4' },
+];
 
 export const HEMS: { id: HemChoice; label: string; drop: string }[] = [
   { id: 'high_hip', label: 'High hip', drop: 'waist_to_high_hip' },
@@ -43,7 +49,8 @@ export function closestCup(d: number): Exclude<CupChoice, 'custom'> {
 
 export interface FitAlias {
   name: string;
-  expr: string; // the column it copies
+  expr: string; // the column it copies (or, with `needs`, a formula over other names)
+  needs?: string[];
   choice: string; // which choice sets it, for labels and hints
   description: string;
 }
@@ -74,6 +81,8 @@ export function fitAliasList(project: Pick<Project, 'fit'>): FitAlias[] {
     { name: 'shoulder_w', expr: broad ? 'back_shoulder_width_broad' : 'back_shoulder_width', choice: back, description: 'Back shoulder width' },
     { name: 'cross_back_w', expr: broad ? 'cross_back_broad' : 'cross_back', choice: back, description: 'Cross back' },
   );
+  const split = WAIST_SPLITS.find((w) => w.id === (fit.waistSplit ?? 'even'))!;
+  out.push({ name: 'waist_shift', expr: split.expr, needs: split.id === 'even' ? [] : ['bust', 'waist'], choice: `${split.id === 'even' ? 'even' : 'back-weighted'} waist split`, description: 'Waist width moved from the back to the front' });
   return out;
 }
 
@@ -84,7 +93,10 @@ export function fitAliasList(project: Pick<Project, 'fit'>): FitAlias[] {
 export function fitAliases(project: Pick<Project, 'fit' | 'measurements'>): Record<string, string> {
   const have = new Set(project.measurements.map((m: Measurement) => m.name));
   const out: Record<string, string> = {};
-  for (const a of fitAliasList(project)) if (!have.has(a.name) && have.has(a.expr)) out[a.name] = a.expr;
+  for (const a of fitAliasList(project)) {
+    if (have.has(a.name) || !(a.needs ? a.needs.every((n) => have.has(n) || n in out) : have.has(a.expr))) continue;
+    out[a.name] = a.expr;
+  }
   return out;
 }
 
@@ -108,5 +120,6 @@ export function customCupNames(project: Pick<Project, 'fit' | 'measurements'>, v
 export function missingAliasHint(project: Pick<Project, 'fit' | 'measurements'>, name: string): string | null {
   const a = fitAliasList(project).find((x) => x.name === name);
   if (!a || project.measurements.some((m) => m.name === name || m.name === a.expr)) return null;
+  if (a.needs) return `${name} (${a.choice}) needs ${a.needs.join(' and ')}, which this project doesn't have`;
   return `${name} follows ${a.expr} (${a.choice}), which this project doesn't have: import or merge the sizing table, or change the fit choice under Project`;
 }

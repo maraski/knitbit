@@ -33,7 +33,7 @@ export function IssueFixLine({ fix, issue, panelId, sizeId, actions, needs }: { 
           ))}
           {apply && (
             <button className="fix-apply" onClick={() => actions!.apply(panelId, issue)} title="Set it in every size with this problem (one undo step)">
-              Apply: {fix.apply!.field.label} = {actions!.format(fix.apply!.value, fix.apply!.unit)}
+              Apply: {fix.apply!.label ?? `${fix.apply!.field.label} = ${actions!.format(fix.apply!.value, fix.apply!.unit)}`}
             </button>
           )}
         </span>

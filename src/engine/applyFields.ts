@@ -21,6 +21,7 @@ const has = (list: readonly string[], k: string) => list.includes(k);
 /** Can Apply set this field in this project? */
 export function canApply(project: Project, a: FixApply): boolean {
   const f = a.field;
+  if (f.target === 'settings') return f.key === 'waistSplit';
   const panel = project.panels.find((p) => p.id === f.panelId);
   if (!panel) return false;
   if (f.target === 'yoke') return !!panel.yoke && has(YOKE_APPLY_KEYS, f.key);

@@ -282,7 +282,7 @@ const project = obj({
     }),
   ),
   ease: obj({ global: num, per: rec(num) }),
-  fit: obj({ cup: oneOf('ab', 'cd', 'ef', 'gh', 'custom'), hem: optional(oneOf('high_hip', 'hip_seat_straight', 'hip_seat_curvy')), broadBack: optional(bool) }),
+  fit: obj({ cup: oneOf('ab', 'cd', 'ef', 'gh', 'custom'), hem: optional(oneOf('high_hip', 'hip_seat_straight', 'hip_seat_curvy')), broadBack: optional(bool), waistSplit: optional(oneOf('even', 'back')) }),
   garment: obj({ construction: oneOf('panels', 'contiguous'), opening: oneOf('closed', 'cardigan'), strap: optional(obj({ width: dimExpr, gives: oneOf('neck', 'armhole'), saved: rec(rec(dimExpr)) })) }),
   tags: arr(str),
   cardigan: optional(

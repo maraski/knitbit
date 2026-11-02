@@ -6,7 +6,7 @@ how panels are joined.
 Projects are auto-saved in the browser and, optionally, online with Google sign-in (see *Saving online*).
 
 **Sizing**: an 11-size table of body measurements (4XS–4X, cm) with bust by cup (A/B to G/H), hips straight or curvy,
-and bust dart data; a measurement dictionary with tooltips; project-wide fit choices (cup, hem level, broad back);
+and bust dart data; a measurement dictionary with tooltips; project-wide fit choices (cup, hem level, broad back, waist split);
 optional region sizing (upper body, lower body and sleeves from different sizes) and custom one-off sizes. See
 *Sizing tables*, *Region sizing*, *Bust shaping* and *Project JSON → Loading and migrations*.
 
@@ -181,7 +181,8 @@ removed; delete them in the console if you want the space back.
   - `measurements.ts`: per-size measurement resolution and the expression scope.
   - `seed.ts`: project from a sizing table, plus estimated and derived measurements.
   - `dictionary.ts`: the measurement dictionary (category, region, definition, tooltip for every sizing-table column).
-  - `fit.ts`: fit choices (cup, hem, broad back) and the names they derive (`bust`, `hem_circ`, `shoulder_w` …).
+  - `fit.ts`: fit choices (cup, hem, broad back, waist split) and the names they derive (`bust`, `hem_circ`, `shoulder_w`, `waist_shift` …).
+  - `sideSeams.ts`: the waist split's Apply, and the check that front and back side edges shape alike.
   - `legacy.ts`: old measurement names and the schema 1 → 2 migration.
   - `regions.ts`, `regionShaping.ts`: region sizing (upper / lower / sleeves per size) and the segments between regions.
   - `schema.ts`: JSON validation, migrations, load/save. `history.ts`: undo/redo. `autosave.ts`: localStorage safety net.
@@ -608,6 +609,24 @@ wins over them.
 | `hem_circ` | `high_hip` (default), `hip_seat_straight` or `hip_seat_curvy` | hem |
 | `hem_drop` | `waist_to_high_hip` (high hip) or `waist_to_full_hip` (seat) | hem |
 | `shoulder_w`, `cross_back_w` | `back_shoulder_width`, `cross_back` (or the `_broad` columns) | broad back |
+| `waist_shift` | `0` (even, default) or `(bust - waist) / 4` (back-weighted) | waist split |
+
+**Waist split** (`waist_shift`): the bodice waists are `waist/2 + ease/2 − waist_shift` (back) and `+ waist_shift`
+(front). *Even* (the default) narrows front and back alike, so the decreases from the hem to the waist and the
+increases from the waist to the underarm mirror at the side seams, on the same rows, stitch for stitch. The front
+still adds the bust width (`bust_side_w`) at its side seams above the waist. *Back-weighted* moves
+`(bust − waist) / 4` of the waist from the back to the front: more shaping at the back, as princess lines or darts
+usually want. Projects made before the choice keep their back-weighted `waist_shift` estimate (a measurement, so it
+wins); the side-seam check and the *Fit* settings offer the even split, which removes that estimate (a hand-edited
+`waist_shift` stays, and the fix names it). Stored waypoint expressions are never rewritten.
+
+**Side-seam check** (`join.side-shaping`): the two side edges of each side seam (a seam join between a front and a
+back, or front and back knitted together below the underarm) are compared from the hem to the waist and from the waist
+to the underarm. Different stitch counts, or the same counts on different rows, are a warning naming the hem, waist
+and underarm widths of both pieces; when `waist_shift` is the cause, *Apply: Even waist split* fixes it. With
+*Back-weighted* chosen it is a note. Not reported: the front's bust width above the waist, and segments shaped at
+princess lines. Princess-line waist shaping with the even split gets a note suggesting back-weighted
+(`fit.waist-split-princess`).
 
 A template that refers to a choice whose column the project lacks (e.g. an old project without `high_hip`) says so in
 the checks: import or merge the sizing table, or pick another choice. `waist_to_underarm` is a derived, editable
@@ -944,10 +963,13 @@ nothing a second time:
 
 | Panel | Starts with (`underarm` width) | Below |
 |---|---|---|
-| Back | the yoke's back + half the underarm cast-on each side (`yoke.back_w`) | waist and hem as the bodice template |
-| Front (pullover) | both fronts + the centre cast-on + half the cast-on each side (`yoke.front_w`; the whole front, also while the neck is still open) | the same, with bust shaping |
+| Back | the yoke's back + half the underarm cast-on each side (`yoke.back_w`) | waist and hem as the bodice template, plus `(yoke.back_w − yoke.front_w) / 2` |
+| Front (pullover) | both fronts + the centre cast-on + half the cast-on each side (`yoke.front_w`; the whole front, also while the neck is still open) | the same with `(yoke.front_w − yoke.back_w) / 2`, with bust shaping |
 | Left / Right front (cardigan) | each front + its half of the cast-on; `yoke.front_w` describes the whole front, so each half rounds to exactly that | a mirrored pair, as in Panels mode |
 | Left / right sleeve | the held sleeve + the whole underarm cast-on (`yoke.sleeve_w`) | tapering to `wrist + ease.wrist` at `arm_length` |
+
+The yoke rarely splits front and back evenly, so the body's hem and waist carry its front/back difference down
+(the same total): both side edges then shape alike and the side line runs straight.
 
 Pullovers work the body and sleeves in the round, cardigans flat (each panel's *Worked* setting can be changed). The
 panels use *Stitch count: Same as the first row* (parity of the waypoint the panel starts from), so every change
@@ -1319,7 +1341,6 @@ shipped table has most of them; the first group is only seeded for older tables.
 | `cap_height` | `round(armhole_depth * 0.65, 0.5)` |
 | `underarm_co` | `round(upper_chest * 0.05, 0.5)` |
 | `cap_ease` | `1.5` |
-| `waist_shift` | `(bust - waist) / 4`: share of the bust-to-waist narrowing taken by the back. Back waist `waist/2 + ease/2 − waist_shift`, front waist `+ waist_shift`. Use `/ 2` for a more shaped back. |
 
 **Ease** is total circumference ease in cm. `ease` is the global value; `ease.<measurement>` is a
 per-measurement value that falls back to the global one. Expressions decide how it is split, e.g. a back panel
@@ -1353,7 +1374,8 @@ Saved files are `*.knitbit.json`. All lengths are in cm, whatever the display un
   "ease": { "global": 5, "per": { "bust": 8 } },
   "fit": { "cup": "cd",                        // which bust column `bust` follows: ab | cd | ef | gh | custom (bust_custom)
            "hem": "high_hip",                  // optional: high_hip | hip_seat_straight | hip_seat_curvy
-           "broadBack": false },               // optional
+           "broadBack": false,                 // optional
+           "waistSplit": "even" },             // optional: even (default) | back
   "garment": { "construction": "panels" | "contiguous",   // contiguous = top-down contiguous yoke (generator)
                "opening": "closed" | "cardigan",
                "strap": { "width": Dim, "gives": "neck" | "armhole",   // optional: strap_w (see Shoulder strap width)

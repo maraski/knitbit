@@ -41,12 +41,6 @@ export const ESTIMATED_MEASUREMENTS: { name: string; label: string; expr: string
   { name: 'elbow_length', label: 'Underarm to elbow', expr: 'round(arm_length * 0.42, 0.5)', note: 'Underarm to the edge of an elbow-length sleeve, cuff band included.', region: 'sleeves' },
   { name: 'three_quarter_length', label: 'Three-quarter sleeve length', expr: 'round(arm_length * 0.7, 0.5)', note: 'Underarm to the edge of a three-quarter sleeve (mid forearm), cuff band included.', region: 'sleeves' },
   { name: 'cap_ease', label: 'Sleeve cap ease', expr: '1.5', note: 'How much longer the cap edge is than the armhole it is sewn into (cm, both sides together).' },
-  {
-    name: 'waist_shift',
-    label: 'Waist shift (back → front)',
-    expr: '(bust - waist) / 4',
-    note: 'Share of the bust-to-waist narrowing taken by the back: back waist = waist/2 + ease/2 − waist_shift, front waist = waist/2 + ease/2 + waist_shift.',
-  },
   // Off-shoulder necklines only (raglan.ts). Bodies vary a lot here: measure them.
   {
     name: 'off_shoulder_circ',
