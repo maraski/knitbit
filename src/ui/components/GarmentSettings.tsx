@@ -1,14 +1,16 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { CONTIGUOUS_CREDIT, OPENINGS, parseTags, setOpening } from '../../engine/garment';
-import { changeMethod, garmentChoice, lengthsFor, METHODS, NECKLINES, necklinesFor, offShoulderNote, setNeckline, setSleeve, setSleeveLength, SLEEVES, sleevesFor, type GarmentMethod, type SleeveChoice } from '../../engine/garmentSetup';
+import { garmentChoice, lengthsFor, METHODS, missingYokePanels, NECKLINES, necklinesFor, offShoulderNote, SLEEVES, sleevesFor, type GarmentMethod, type SleeveChoice } from '../../engine/garmentInfo';
 import { SLEEVE_LENGTHS } from '../../engine/sleeveLength';
 import type { FrontOpening, Id, Project, SleeveLength } from '../../engine/model';
-import { generateBodyAndSleeves, missingYokePanels } from '../../engine/contiguousGarment';
 import { EdgeSettings } from './EdgeSettings';
 import { PropsLoading } from './Properties';
 
 // The Shoulders section loads on first use, keeping it out of the startup code.
 const StrapSettings = lazy(() => import('./StrapSettings').then((m) => ({ default: m.StrapSettings })));
+
+// The builders (they bring in the yoke generators) load when a choice is changed.
+const builders = () => import('../../engine/garmentSetup');
 
 interface Props {
   project: Project;
@@ -31,24 +33,27 @@ export function GarmentSettings({ project, update, sizeId }: Props & { sizeId: I
   const [pending, setPending] = useState<Pending | null>(null);
   const sleeves = sleevesFor(choice.method);
 
-  const askMethod = (m: Exclude<GarmentMethod, 'blank'>) => {
-    const notes: string[] = [];
-    changeMethod(project, m, notes); // to say what changes
-    setPending({ title: `Rebuild as ${METHODS.find((x) => x.id === m)!.label.toLowerCase()}?`, notes, apply: (p) => changeMethod(p, m) });
-  };
-  const askSleeve = (sl: SleeveChoice) => {
-    const notes: string[] = [];
-    setSleeve(project, sl, notes);
-    setPending({ title: `Change the sleeves to ${SLEEVES.find((x) => x.id === sl)!.label.toLowerCase()}?`, notes: [...notes, 'Undo goes back.'], apply: (p) => setSleeve(p, sl) });
-  };
+  const askMethod = (m: Exclude<GarmentMethod, 'blank'>) =>
+    void builders().then(({ changeMethod }) => {
+      const notes: string[] = [];
+      changeMethod(project, m, notes); // to say what changes
+      setPending({ title: `Rebuild as ${METHODS.find((x) => x.id === m)!.label.toLowerCase()}?`, notes, apply: (p) => changeMethod(p, m) });
+    });
+  const askSleeve = (sl: SleeveChoice) =>
+    void builders().then(({ setSleeve }) => {
+      const notes: string[] = [];
+      setSleeve(project, sl, notes);
+      setPending({ title: `Change the sleeves to ${SLEEVES.find((x) => x.id === sl)!.label.toLowerCase()}?`, notes: [...notes, 'Undo goes back.'], apply: (p) => setSleeve(p, sl) });
+    });
 
   const lengths = lengthsFor(choice.sleeve);
-  const askLength = (len: SleeveLength) => {
-    const notes: string[] = [];
-    setSleeveLength(project, len, notes);
-    const label = len === 'cap' ? 'cap sleeves' : SLEEVE_LENGTHS.find((x) => x.id === len)!.label.toLowerCase();
-    setPending({ title: `Make the sleeves ${label}?`, notes: [...notes, 'Undo goes back.'], apply: (p) => setSleeveLength(p, len) });
-  };
+  const askLength = (len: SleeveLength) =>
+    void builders().then(({ setSleeveLength }) => {
+      const notes: string[] = [];
+      setSleeveLength(project, len, notes);
+      const label = len === 'cap' ? 'cap sleeves' : SLEEVE_LENGTHS.find((x) => x.id === len)!.label.toLowerCase();
+      setPending({ title: `Make the sleeves ${label}?`, notes: [...notes, 'Undo goes back.'], apply: (p) => setSleeveLength(p, len) });
+    });
 
   return (
     <>
@@ -96,7 +101,7 @@ export function GarmentSettings({ project, update, sizeId }: Props & { sizeId: I
         <div className="row2">
           <div className="field">
             <label>Neckline</label>
-            <select value={choice.neckline} onChange={(e) => update((p) => setNeckline(p, e.target.value as typeof choice.neckline))} title="Sets the front and back necks (and the shoulder tops) to this shape’s defaults">
+            <select value={choice.neckline} onChange={(e) => { const shape = e.target.value as typeof choice.neckline; void builders().then(({ setNeckline }) => update((p) => setNeckline(p, shape))); }} title="Sets the front and back necks (and the shoulder tops) to this shape’s defaults">
               {NECKLINES.filter((n) => n.id === choice.neckline || necklinesFor(choice.method, choice.opening).includes(n.id)).map((n) => <option key={n.id} value={n.id}>{n.label}</option>)}
             </select>
           </div>
@@ -144,7 +149,7 @@ export function ContiguousPanels({ project, update }: Props) {
       <span className="hint">
         Not made yet: {what.join(', ')}.{project.panels.some((p) => !p.yoke && !p.fromYoke && (p.template === 'back' || p.template === 'front' || (p.template ?? '').startsWith('sleeve'))) ? ' Your other body and sleeve panels are kept; delete them if you don’t need them.' : ''}
       </span>{' '}
-      <button onClick={() => update((p) => generateBodyAndSleeves(p))}>Add {hasYoke ? 'body and sleeves' : 'yoke, body and sleeves'}</button>
+      <button onClick={() => void import('../../engine/contiguousGarment').then(({ generateBodyAndSleeves }) => update((p) => generateBodyAndSleeves(p)))}>Add {hasYoke ? 'body and sleeves' : 'yoke, body and sleeves'}</button>
     </div>
   );
 }

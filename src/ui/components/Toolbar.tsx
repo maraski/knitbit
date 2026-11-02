@@ -5,7 +5,7 @@ import { AboutBox } from './AboutBox';
 import { sizeText } from './EstMark';
 import { CloudStatus } from './CloudStatus';
 import type { Cloud } from '../cloud/useCloud';
-import { garmentLabel } from '../../engine/garmentSetup';
+import { garmentLabel } from '../../engine/garmentInfo';
 
 interface Props {
   project: Project;

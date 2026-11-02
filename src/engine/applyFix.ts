@@ -7,9 +7,12 @@ import type { Check } from './checks';
 import type { FieldRef, FixApply, IssueFix } from './issues';
 import { dim, type DimExpr, type Id, type Panel, type Project, type YokeSpec } from './model';
 import { defaultOffShoulder, RAGLAN_SLEEVE_TOP } from './raglan';
+import { canApply, NECK_KEYS, WAYPOINT_KEYS, YOKE_APPLY_KEYS, type YokeApplyKey } from './applyFields';
+
+export { canApply };
 
 /** Where a yoke parameter lives in the YokeSpec (the optional parts get their defaults when first set). */
-const YOKE_DIMS: Record<string, { get: (s: YokeSpec) => DimExpr; set: (s: YokeSpec, d: DimExpr) => void }> = {
+const YOKE_DIMS: Record<YokeApplyKey, { get: (s: YokeSpec) => DimExpr; set: (s: YokeSpec, d: DimExpr) => void }> = {
   seamSts: { get: (s) => s.seamSts, set: (s, d) => void (s.seamSts = d) },
   frontCo: { get: (s) => (s.shortRows ?? defaultShortRows()).frontCo, set: (s, d) => void ((s.shortRows ??= defaultShortRows()).frontCo = d) },
   srPairs: { get: (s) => (s.shortRows ?? defaultShortRows()).pairs, set: (s, d) => void ((s.shortRows ??= defaultShortRows()).pairs = d) },
@@ -41,13 +44,11 @@ const YOKE_DIMS: Record<string, { get: (s: YokeSpec) => DimExpr; set: (s: YokeSp
   backRaise: { get: (s) => (s.offShoulder ?? defaultOffShoulder()).backRaise, set: (s, d) => void ((s.offShoulder ??= defaultOffShoulder()).backRaise = d) },
 };
 
-const NECK_KEYS = { width: 'width', depth: 'depth', centre: 'centreWidth' } as const;
-
 /** The DimExpr a field edits, with its setter, in a (cloned) panel; null when Apply can't set it. */
 function dimOf(panel: Panel, f: FieldRef): { get: () => DimExpr; set: (d: DimExpr) => void } | null {
-  if (f.target === 'yoke' && panel.yoke && YOKE_DIMS[f.key]) {
+  if (f.target === 'yoke' && panel.yoke && (YOKE_APPLY_KEYS as readonly string[]).includes(f.key)) {
     const y = panel.yoke;
-    const m = YOKE_DIMS[f.key];
+    const m = YOKE_DIMS[f.key as YokeApplyKey];
     return { get: () => m.get(y), set: (d) => m.set(y, d) };
   }
   if (f.target === 'neckline' && panel.neckline && f.key in NECK_KEYS) {
@@ -57,8 +58,8 @@ function dimOf(panel: Panel, f: FieldRef): { get: () => DimExpr; set: (d: DimExp
   }
   if (f.target === 'waypoint') {
     const wp = panel.waypoints.find((w) => w.id === f.id);
-    const k = f.key as 'height' | 'width' | 'left' | 'right';
-    if (!wp || !['height', 'width', 'left', 'right'].includes(k)) return null;
+    const k = f.key as (typeof WAYPOINT_KEYS)[number];
+    if (!wp || !WAYPOINT_KEYS.includes(k)) return null;
     return { get: () => wp[k], set: (d) => void (wp[k] = d) };
   }
   return null;
@@ -71,12 +72,6 @@ export function sameField(a: FieldRef, b: FieldRef): boolean {
 
 /** A number as an expression or override: at most 2 decimals. */
 const num = (v: number) => Math.round(v * 100) / 100;
-
-/** Can Apply set this field in this project? */
-export function canApply(project: Project, a: FixApply): boolean {
-  const panel = project.panels.find((p) => p.id === a.field.panelId);
-  return !!panel && !!dimOf(structuredClone(panel), a.field);
-}
 
 /**
  * Set the field to each size's value. Every size of the project failing with one value: the expression becomes that

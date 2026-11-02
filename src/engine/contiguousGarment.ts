@@ -4,14 +4,14 @@
 // Made only when the knitter asks (never on a setting change).
 
 import { yokePanel } from './contiguous';
+import { missingYokePanels, type YokeRole } from './garmentInfo';
 import { conformToGarment } from './garment';
 import type { EdgeRef, Join, Panel, Project, SleeveLength } from './model';
 import { defaultAutoMethod, defaultBust, newId, newPanel, newSegment, newWaypoint } from './model';
 import { ensureEstimates } from './estimates';
 import { sleeveLengthNeeds, sleeveLengthOf, withSleeveLength } from './sleeveLength';
 
-export type YokeRole = NonNullable<Panel['fromYoke']>;
-export const YOKE_ROLES: YokeRole[] = ['back', 'front', 'leftSleeve', 'rightSleeve'];
+export { missingYokePanels, YOKE_ROLES, type YokeRole } from './garmentInfo';
 const ROLE_NAMES: Record<YokeRole, string> = { back: 'Back', front: 'Front', leftSleeve: 'Left sleeve', rightSleeve: 'Right sleeve' };
 
 /** Measurements the generated panels use that a project may only have as estimates. */
@@ -57,13 +57,6 @@ function sleevePanel(side: 'leftSleeve' | 'rightSleeve', cardigan: boolean): Pan
   p.segments = [newSegment(cuff.id, { ...defaultAutoMethod(), align: 'center' })];
   p.notes = 'Continues from the yoke’s held sleeve stitches plus the underarm cast-on.';
   return p;
-}
-
-/** Which body and sleeve panels the yoke still lacks. */
-export function missingYokePanels(project: Project): YokeRole[] {
-  const have = new Set(project.panels.map((p) => p.fromYoke).filter(Boolean));
-  // A cardigan's front is a pair; either half counts.
-  return YOKE_ROLES.filter((r) => !have.has(r));
 }
 
 function uniqueName(project: Project, name: string): string {

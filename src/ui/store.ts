@@ -5,6 +5,7 @@ import { readAutosave, writeAutosave } from '../engine/autosave';
 import { canRedo, canUndo, commit, createHistory, redo, revert, undo, type History } from '../engine/history';
 import type { Project } from '../engine/model';
 import { syncFrontPairs } from '../engine/cardigan';
+import { loadYokeEngine, needsYokeEngine } from '../engine/yokeEngine';
 
 export interface Notice {
   kind: 'error' | 'warning' | 'info';
@@ -44,6 +45,13 @@ export interface StartState {
  * those only wait for the sample's code.
  */
 export function startState(): StartState | Promise<StartState> {
+  const s = savedState();
+  // A project with a yoke also waits for the yoke's generators (see engine/yokeEngine.ts).
+  if (s instanceof Promise) return s.then((v) => (needsYokeEngine(v.project) ? loadYokeEngine().then(() => v) : v));
+  return needsYokeEngine(s.project) ? loadYokeEngine().then(() => s) : s;
+}
+
+function savedState(): StartState | Promise<StartState> {
   const saved = readAutosave(window.localStorage);
   if (!saved.found) return loadSample().then((m) => ({ project: m.sampleTable(), notice: null, firstRun: true }));
   if (saved.ok) {
@@ -71,8 +79,11 @@ export function useProjectStore(init: StartState) {
     setHistory((h) => commit(h, { ...syncFrontPairs(h.present, fn(h.present)), updatedAt: new Date().toISOString() }, key));
   }, []);
 
-  /** Replace the whole project (open / new); undoable. */
-  const replace = useCallback((p: Project) => setHistory((h) => commit(h, p)), []);
+  /** Replace the whole project (open / new); undoable. A project with a yoke waits for the yoke's generators. */
+  const replace = useCallback((p: Project) => {
+    if (needsYokeEngine(p)) void loadYokeEngine().then(() => setHistory((h) => commit(h, p)));
+    else setHistory((h) => commit(h, p));
+  }, []);
 
   // A canvas drag cut short by a two-finger pinch takes its edit back (see ui/touch.ts).
   useEffect(() => {

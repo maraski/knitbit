@@ -21,7 +21,8 @@ import { bustValues, computeBust, type ComputedBust } from './bust';
 import { sideEdgeLength } from './edges';
 import { measureEdge } from './joins';
 import { computeYokePanel, yokeIssues } from './yokePanel';
-import { YOKE_NAMES, yokeNames, yokeNeckContinues, type YokeResult } from './contiguous';
+import type { yokeNames, YokeResult } from './contiguous';
+import { YOKE_NAMES, yokeEngine } from './yokeEngine';
 import { defaultSymbol } from './symbols';
 import { bandOnFront } from './bands';
 import { edgePattern } from './edgeTreatments';
@@ -270,10 +271,17 @@ export function panelExtras(project: Project, panel: Panel, sizeId: Id): Record<
     if ('lengthCm' in j) Object.assign(extra, { edge_len: j.lengthCm, edge_rows: j.rows, edge_pickup: j.pickup });
   }
   if (usesYoke(panel)) {
-    const n = yokeNames(project, sizeId);
+    const n = yokeNamesOf(project, sizeId);
     if ('values' in n) Object.assign(extra, n.values);
   }
   return extra;
+}
+
+/** The `yoke.*` values (see contiguous.ts yokeNames); an error while the yoke's generators aren't loaded. */
+function yokeNamesOf(project: Project, sizeId: Id): ReturnType<typeof yokeNames> {
+  const e = yokeEngine();
+  if (e) return e.yokeNames(project, sizeId);
+  return project.panels.some((p) => p.yoke) ? { error: 'the yoke is still loading.' } : { error: 'there is no contiguous yoke panel.' };
 }
 
 /** The panel's expressions mention a `yoke.*` name (and it isn't the yoke itself). */
@@ -447,7 +455,11 @@ function emptyPanel(panel: Panel, sizeId: Id, spc: number, rpc: number, issues: 
 }
 
 export function computePanel(project: Project, panel: Panel, sizeId: Id): ComputedPanel {
-  if (panel.yoke) return computeYokePanel(project, panel, sizeId);
+  if (panel.yoke) {
+    if (yokeEngine()) return computeYokePanel(project, panel, sizeId);
+    // Not loaded yet (the app loads the generators before it shows a project with a yoke).
+    return emptyPanel(panel, sizeId, stitchesPerCm(project.gauge), rowsPerCm(project.gauge), [{ severity: 'info', message: 'Loading the yoke…', ref: { kind: 'panel' } }]);
+  }
   const raw = computePanelRaw(project, panel, sizeId);
   const c = panel.half ? cropHalf(raw, panel, panel.half, halfFrame(project, panel.half, raw.stitchesPerCm, buildScope(project, sizeId))) : raw;
   // Explain unknown names that follow a fit choice (e.g. hem_circ when the table has no high_hip).
@@ -496,7 +508,7 @@ function computePanelRaw(project: Project, panel: Panel, sizeId: Id): ComputedPa
     else sourceFailed(EDGE_NAMES, j.cause, 'knock-on.edge', `The joined edge can't be measured: ${j.error}`);
   }
   if (usesYoke(panel)) {
-    const n = yokeNames(project, sizeId);
+    const n = yokeNamesOf(project, sizeId);
     if ('error' in n) sourceFailed(YOKE_NAMES, n.source && rootCause(n.source.panel, yokeIssues(n.source.yoke)), 'knock-on.yoke', `Waits on the yoke: ${n.error}`);
   }
   const { values, errors } = resolvePanelDims(project, panel, sizeId);
@@ -525,7 +537,7 @@ function computePanelRaw(project: Project, panel: Panel, sizeId: Id): ComputedPa
   const scope = { ...buildScope(project, sizeId), ...panelExtras(project, panel, sizeId), ...values };
   // A front neck deeper than the yoke's split: the body pieces from the yoke start with it still open, and the Front
   // works the rest of it (its own neckline, if it has one, wins).
-  const yokeNeck = topDown && !panel.yoke && (panel.fromYoke === 'front' || panel.fromYoke === 'back') ? yokeNeckContinues(project, sizeId) : null;
+  const yokeNeck = topDown && !panel.yoke && (panel.fromYoke === 'front' || panel.fromYoke === 'back') ? (yokeEngine()?.yokeNeckContinues(project, sizeId) ?? null) : null;
   const neckline = panel.neckline ?? (yokeNeck && panel.fromYoke === 'front' ? yokeNeckline(yokeNeck.shape) : null);
   const frame = half ? halfFrame(project, half, spc, scope) : null;
   const rawSections = panel.sections.flatMap((sec) => {

@@ -3,7 +3,7 @@ import { DEFAULT_REGION_GAP } from '../../engine/fitChecks';
 import { FitSettings } from './FitSettings';
 import { ContiguousPanels, GarmentSettings } from './GarmentSettings';
 import { conformToGarment } from '../../engine/garment';
-import { EASE_PRESETS, easePresetOf, extraPieces, garmentChoice, isYokeMethod, withEasePreset, type EasePresetId } from '../../engine/garmentSetup';
+import { EASE_PRESETS, easePresetOf, extraPieces, garmentChoice, isYokeMethod, withEasePreset, type EasePresetId } from '../../engine/garmentInfo';
 import { convertGauge, type GaugeBasis } from '../../engine/gauge';
 import { newId, type Id, type Project, type SleeveLength } from '../../engine/model';
 import { ensureEstimates } from '../../engine/estimates';
