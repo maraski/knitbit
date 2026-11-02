@@ -50,9 +50,9 @@ export const TEMPLATES: { id: TemplateId; label: string; description: string; op
 
 /** Measurements each template's expressions rely on that may be missing (seeded estimates). */
 export const TEMPLATE_MEASUREMENTS: Record<TemplateId, string[]> = {
-  top: ['back_shoulder_width', 'shoulder_drop', 'back_neck_width', 'front_neck_drop', 'back_neck_drop', 'waist_to_underarm', 'waist_shift', 'hps_to_apex', 'apex_to_apex', 'underarm_co'],
-  back: ['back_shoulder_width', 'shoulder_drop', 'back_neck_width', 'back_neck_drop', 'waist_to_underarm', 'waist_shift', 'underarm_co'],
-  front: ['back_shoulder_width', 'shoulder_drop', 'back_neck_width', 'front_neck_drop', 'back_neck_drop', 'waist_to_underarm', 'waist_shift', 'hps_to_apex', 'apex_to_apex', 'underarm_co'],
+  top: ['back_shoulder_width', 'shoulder_drop', 'back_neck_width', 'front_neck_drop', 'back_neck_drop', 'waist_to_underarm', 'hps_to_apex', 'apex_to_apex', 'underarm_co'],
+  back: ['back_shoulder_width', 'shoulder_drop', 'back_neck_width', 'back_neck_drop', 'waist_to_underarm', 'underarm_co'],
+  front: ['back_shoulder_width', 'shoulder_drop', 'back_neck_width', 'front_neck_drop', 'back_neck_drop', 'waist_to_underarm', 'hps_to_apex', 'apex_to_apex', 'underarm_co'],
   sleeve: ['cap_height', 'cap_ease'],
   rectangle: [],
   neckband: ['back_neck_width', 'front_neck_drop', 'back_shoulder_width'],

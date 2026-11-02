@@ -1,5 +1,6 @@
-import { CUPS, CUSTOM_BUST, fitAliases, fitAliasList, HEMS } from '../../engine/fit';
-import type { CupChoice, FitChoices, HemChoice, Project } from '../../engine/model';
+import { CUPS, CUSTOM_BUST, fitAliases, fitAliasList, HEMS, WAIST_SPLITS } from '../../engine/fit';
+import type { CupChoice, FitChoices, HemChoice, Project, WaistSplit } from '../../engine/model';
+import { isOldWaistShift, ownWaistShift, setWaistSplit } from '../../engine/sideSeams';
 
 interface Props {
   project: Project;
@@ -12,7 +13,8 @@ export function FitSettings({ project, update }: Props) {
   const set = (patch: Partial<FitChoices>) => update((p) => ({ ...p, fit: { ...p.fit, ...patch } }));
   const live = fitAliases(project);
   const missing = fitAliasList(project).filter((a) => !(a.name in live) && !project.measurements.some((m) => m.name === a.name));
-  const overridden = fitAliasList(project).filter((a) => project.measurements.some((m) => m.name === a.name));
+  // waist_shift has its own notice under the Waist split.
+  const overridden = fitAliasList(project).filter((a) => a.name !== 'waist_shift' && project.measurements.some((m) => m.name === a.name));
   return (
     <>
       <h4>Fit</h4>
@@ -29,6 +31,24 @@ export function FitSettings({ project, update }: Props) {
           {HEMS.map((h) => <option key={h.id} value={h.id}>{h.label} (waist to hem: {h.drop})</option>)}
         </select>
       </div>
+      <div className="field" data-field="fit.waistSplit">
+        <label>Waist split, back ↔ front (waist_shift)</label>
+        <select value={fit.waistSplit ?? 'even'} onChange={(e) => update((p) => setWaistSplit(p, e.target.value as WaistSplit))}>
+          {WAIST_SPLITS.map((w) => <option key={w.id} value={w.id}>{w.label}</option>)}
+        </select>
+      </div>
+      {ownWaistShift(project) && (
+        <p className="notice-inline">
+          {isOldWaistShift(project) ? (
+            <>
+              This project keeps the older back-weighted waist_shift estimate, so the back narrows more than the front and the side seams don't mirror.{' '}
+              <button className="link" onClick={() => update((p) => setWaistSplit(p, p.fit.waistSplit ?? 'even'))}>Follow the choice</button>
+            </>
+          ) : (
+            'Your own waist_shift measurement wins over this choice: delete it in Measurements to follow the choice.'
+          )}
+        </p>
+      )}
       <label className="check" title="shoulder_w and cross_back_w use back_shoulder_width_broad and cross_back_broad">
         <input type="checkbox" checked={!!fit.broadBack} onChange={(e) => set({ broadBack: e.target.checked })} />
         Broad back (shoulder_w, cross_back_w)

@@ -13,7 +13,7 @@ export interface FieldRef {
   /**
    * yoke: a key in `YokeResult.params`; neckline: 'width' | 'depth' | 'centre'; waypoint: 'height' | 'width' | 'left' |
    * 'right'; segment: 'method' | 'princess'; bust: a BustSpec field; line: 'amount' | 'start' | 'end'; panel: 'waypoints';
-   * measurement: its name; settings: 'strap' | 'edges' | 'cuff' | 'seamTolerance' | 'regionGap' | 'joins'.
+   * measurement: its name; settings: 'strap' | 'edges' | 'cuff' | 'seamTolerance' | 'regionGap' | 'joins' | 'waistSplit'.
    */
   key: string;
   label: string;
@@ -24,6 +24,8 @@ export interface FixApply {
   field: FieldRef;
   value: number;
   unit: 'cm' | 'rows' | 'sts' | '';
+  /** The button's words when the change isn't "field = value" (a project choice, e.g. "Even waist split"). */
+  label?: string;
 }
 
 export interface IssueFix {
@@ -118,6 +120,7 @@ export const SETTINGS_LABELS: Record<string, string> = {
   seamTolerance: 'Seam tolerance',
   regionGap: 'Region sizing gap',
   joins: 'Joins',
+  waistSplit: 'Waist split',
 };
 
 export const field = {

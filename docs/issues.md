@@ -193,6 +193,18 @@ Every error and warning has a **Fix** naming the field as the properties show it
 | `joins.shaping-rounds` | info | Joined panels shape their side seams on different rounds (…). | Different side shaping in joined pieces. | — |
 | `join.measure` | warning | <join>: <edge>: <why it can't be measured> | A join's edge that can't be measured. | Check the join's edges. |
 | `join.one-side` | info | <join>: seam has only one side; add the edge it is sewn to. | A seam with one side. | — |
+| `join.side-shaping` | warning or info | <join>: the side seams don't mirror (hem to waist <front> … sts, <back> … sts; waist to underarm … at this edge). | Front and back side edges sewn (or knitted) together shape differently: a back-weighted waist split (info when chosen under Fit), or different hem / waist / underarm widths. The bust width at the front side seams above the waist and princess-line shaping are not reported. | Use an even waist split (Apply), or make the hem, waist and underarm widths match. |
+
+## Fit checks
+
+| Code | Severity | Message | Cause | Fix |
+|---|---|---|---|---|
+| `fit.waist-split-princess` | info | <Panel> shapes the waist at princess lines with an even waist split; a back-weighted split (Settings → Fit) takes more of the narrowing at the back. | Princess-line waist shaping with the even split. | Back-weighted waist split (Apply), or keep even. |
+
+## Joins
+
+| Code | Severity | Message | Cause | Fix |
+|---|---|---|---|---|
 | `join.seam-differ` | warning | <join>: the sides differ by … cm (… rows), more than the … cm tolerance. | Seam sides of different lengths. | Make the sides the same length, or a larger Seam tolerance. |
 | `join.same-edge` | info | The same edge is in "…" (…) and "…" (…). | One edge in two joins. | — |
 

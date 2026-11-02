@@ -15,7 +15,7 @@ export const YOKE_ROLES: YokeRole[] = ['back', 'front', 'leftSleeve', 'rightSlee
 const ROLE_NAMES: Record<YokeRole, string> = { back: 'Back', front: 'Front', leftSleeve: 'Left sleeve', rightSleeve: 'Right sleeve' };
 
 /** Measurements the generated panels use that a project may only have as estimates. */
-const NEEDS = ['waist_to_underarm', 'waist_shift', 'hps_to_apex', 'apex_to_apex', 'underarm_co'];
+const NEEDS = ['waist_to_underarm', 'hps_to_apex', 'apex_to_apex', 'underarm_co'];
 
 function body(kind: 'back' | 'front', cardigan: boolean): Panel {
   const p = newPanel(ROLE_NAMES[kind]);
@@ -26,8 +26,10 @@ function body(kind: 'back' | 'front', cardigan: boolean): Panel {
   p.inTheRound = !cardigan;
   p.rounding.parity = 'start'; // the yoke sets the top count; every change below it is even
   const shift = kind === 'back' ? '- waist_shift' : '+ waist_shift';
-  const hem = newWaypoint('hem', 0, 'hem_circ / 2 + ease / 2');
-  const waist = newWaypoint('waist', 'hem_drop', `waist / 2 + ease / 2 ${shift}`);
+  // The yoke's front/back split carried down to the hem, so both side edges shape alike (the side line runs straight).
+  const split = kind === 'back' ? '(yoke.back_w - yoke.front_w) / 2' : '(yoke.front_w - yoke.back_w) / 2';
+  const hem = newWaypoint('hem', 0, `hem_circ / 2 + ease / 2 + ${split}`);
+  const waist = newWaypoint('waist', 'hem_drop', `waist / 2 + ease / 2 ${shift} + ${split}`);
   const underarm = newWaypoint('underarm', 'waist.height + waist_to_underarm', kind === 'back' ? 'yoke.back_w' : 'yoke.front_w');
   p.waypoints = [hem, waist, underarm];
   p.segments = [newSegment(hem.id), newSegment(waist.id)];

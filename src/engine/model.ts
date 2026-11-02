@@ -55,6 +55,8 @@ export type ValueSource = 'table' | 'rule' | 'manual';
 export type CupChoice = 'ab' | 'cd' | 'ef' | 'gh' | 'custom';
 
 export type HemChoice = 'high_hip' | 'hip_seat_straight' | 'hip_seat_curvy';
+/** How the bust-to-waist narrowing is shared between back and front (`waist_shift`). */
+export type WaistSplit = 'even' | 'back';
 
 /** Project-level choices that pick sizing-table columns for the names templates use. */
 export interface FitChoices {
@@ -63,6 +65,11 @@ export interface FitChoices {
   hem?: HemChoice;
   /** Use the broad-back columns for `shoulder_w` and `cross_back_w`. */
   broadBack?: boolean;
+  /**
+   * Even (default): front and back narrow alike, so side-seam shaping mirrors (`waist_shift` = 0). Back-weighted: the
+   * back takes more of the narrowing (`waist_shift` = (bust − waist) / 4), e.g. for princess-line or dart shaping.
+   */
+  waistSplit?: WaistSplit;
 }
 
 /** Ease is total circumference ease in cm, split between panels by the expressions that use it. */

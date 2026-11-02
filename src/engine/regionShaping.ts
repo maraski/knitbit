@@ -16,7 +16,7 @@ function refs(expr: string): string[] {
 
 /**
  * The regions a waypoint's width comes from. Measurements are taken at their region; fit names at their column's
- * region; other waypoints' widths through their own regions. Formula measurements (estimates such as waist_shift)
+ * region; other waypoints' widths through their own regions. Formula measurements (estimates such as cap_height)
  * only count when nothing else in the expression has a region, so `waist / 2 − waist_shift` is lower body.
  */
 export function waypointRegions(project: Project, panel: Panel): Map<Id, Set<BodyRegion>> {
