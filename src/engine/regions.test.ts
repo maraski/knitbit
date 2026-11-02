@@ -41,7 +41,8 @@ describe('region sizing: measurements', () => {
     expect(v.upper_chest).toEqual({ value: 114.5, source: 'table' });
     expect(v.back_waist_length.value).toBe(42); // stays with the upper body
     expect(v.bicep.value).toBe(36.5); // S sleeves
-    expect(v.waist_shift.value).toBeCloseTo((122 - 119.5) / 4, 6); // formulas see the mixed values
+    expect(v.waist_shift.value).toBe(0); // even waist split (the default)
+    expect(resolveMeasurements({ ...p, fit: { ...p.fit, waistSplit: 'back' } }, M).values.waist_shift.value).toBeCloseTo((122 - 119.5) / 4, 6); // formulas see the mixed values
     p.measurements.find((m) => m.name === 'waist')!.manual[M] = 112;
     expect(resolveMeasurements(p, M).values.waist).toEqual({ value: 112, source: 'manual' });
     expect(sizeLabel(p, p.sizes.find((s) => s.id === M)!)).toBe('M (lower L, sleeves S)');

@@ -7,6 +7,7 @@ import type { Check } from './checks';
 import type { FieldRef, FixApply, IssueFix } from './issues';
 import { dim, type DimExpr, type Id, type Panel, type Project, type YokeSpec } from './model';
 import { defaultOffShoulder, RAGLAN_SLEEVE_TOP } from './raglan';
+import { setWaistSplit } from './sideSeams';
 
 /** Where a yoke parameter lives in the YokeSpec (the optional parts get their defaults when first set). */
 const YOKE_DIMS: Record<string, { get: (s: YokeSpec) => DimExpr; set: (s: YokeSpec, d: DimExpr) => void }> = {
@@ -74,6 +75,7 @@ const num = (v: number) => Math.round(v * 100) / 100;
 
 /** Can Apply set this field in this project? */
 export function canApply(project: Project, a: FixApply): boolean {
+  if (a.field.target === 'settings') return a.field.key === 'waistSplit';
   const panel = project.panels.find((p) => p.id === a.field.panelId);
   return !!panel && !!dimOf(structuredClone(panel), a.field);
 }
@@ -84,6 +86,8 @@ export function canApply(project: Project, a: FixApply): boolean {
  */
 export function applyFix(project: Project, f: FieldRef, values: { sizeId: Id; value: number }[]): Project | null {
   if (!values.length) return null;
+  // A project choice: the same in every size.
+  if (f.target === 'settings') return f.key === 'waistSplit' ? { ...setWaistSplit(project, values[0].value ? 'back' : 'even'), updatedAt: new Date().toISOString() } : null;
   const next = structuredClone(project);
   const panel = next.panels.find((p) => p.id === f.panelId);
   const d = panel && dimOf(panel, f);
@@ -147,6 +151,7 @@ export function sizesText(project: Project, ids: Id[]): string {
 
 /** "Set Extra depth to 5.7 cm in 4XS–XS" (a different value per size: "to 5.7–7.2 cm"). */
 export function applySummary(project: Project, f: FieldRef, unit: FixApply['unit'], values: { sizeId: Id; value: number }[], fmt: (v: number, unit: FixApply['unit']) => string): string {
+  if (f.target === 'settings' && f.key === 'waistSplit') return `Set the waist split to ${values[0]?.value ? 'back-weighted' : 'even'} (all sizes)`;
   const vs = values.map((v) => num(v.value));
   const lo = Math.min(...vs);
   const hi = Math.max(...vs);

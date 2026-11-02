@@ -30,6 +30,7 @@ const SETTINGS: Record<string, { tab: SidebarTab; keys: string[] }> = {
   joins: { tab: 'pieces', keys: [] },
   seamTolerance: { tab: 'settings', keys: ['settings.tol'] },
   regionGap: { tab: 'settings', keys: ['settings.regionGap'] },
+  waistSplit: { tab: 'settings', keys: ['fit.waistSplit'] },
 };
 
 export function fieldSpot(f: FieldRef): FieldSpot {

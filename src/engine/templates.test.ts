@@ -47,14 +47,16 @@ describe('templates', () => {
     expect(TEMPLATES.map((t) => t.id).sort()).toEqual(['back', 'front', 'neckband', 'rectangle', 'sleeve', 'top', 'yoke']);
   });
 
-  it('front and back share side seams: same rows, front wider at the waist by 2 × waist_shift', () => {
-    const p = fixtureProject();
-    const M = sizeId(p, 'M');
-    const back = computePanel(p, fromTemplate('back'), M);
-    const front = computePanel(p, fromTemplate('front'), M);
-    const at = (c: typeof back, n: string) => c.waypoints.find((w) => w.name === n)!;
-    for (const n of ['hem', 'waist', 'underarm', 'shoulder']) expect(at(front, n).row, n).toBe(at(back, n).row);
-    expect(at(front, 'waist').widthCm - at(back, 'waist').widthCm).toBeCloseTo(6.375, 6); // (122 − 109.25)/4 × 2
+  it('front and back share side seams: same rows; same waist (even split), or front wider by 2 × waist_shift (back-weighted)', () => {
+    const even = fixtureProject();
+    const M = sizeId(even, 'M');
+    for (const p of [even, { ...even, fit: { ...even.fit, waistSplit: 'back' as const } }]) {
+      const back = computePanel(p, fromTemplate('back'), M);
+      const front = computePanel(p, fromTemplate('front'), M);
+      const at = (c: typeof back, n: string) => c.waypoints.find((w) => w.name === n)!;
+      for (const n of ['hem', 'waist', 'underarm', 'shoulder']) expect(at(front, n).row, n).toBe(at(back, n).row);
+      expect(at(front, 'waist').widthCm - at(back, 'waist').widthCm).toBeCloseTo(p === even ? 0 : 6.375, 6); // (122 − 109.25)/4 × 2
+    }
   });
 
   it('necklines differ as expected', () => {
