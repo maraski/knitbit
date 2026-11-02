@@ -139,4 +139,24 @@ describe('neck shapes on a contiguous yoke', () => {
     delete legacy.neck.width;
     expect(generateYoke(p, legacy, M).castOnZones.back).toBe(round.castOnZones.back);
   });
+
+  it('a V wide for its depth increases on WS rows too, so the front keeps every stitch', () => {
+    const p = contiguous('closed', {}, 'back');
+    const narrow = defaultYoke('v', 'back');
+    const wide = defaultYoke('v', 'back');
+    wide.neck.width = { expr: 'back_neck_width * 2.5', overrides: {} };
+    wide.neck.depth = { expr: 'front_neck_drop * 2', overrides: {} };
+    for (const size of p.sizes) {
+      const fronts = (y: ReturnType<typeof generateYoke>) => { const z = y.rows[y.rows.length - 1].zones; return z.leftFront + z.rightFront; };
+      const base = generateYoke(p, narrow, size.id);
+      const y = generateYoke(p, wide, size.id);
+      expect(y.issues.filter((i) => i.code === 'yoke.front-neck-rows')).toEqual([]);
+      // The front keeps up with the back as in the narrow V: the extra neck width is all increased back.
+      const z = y.rows[y.rows.length - 1].zones;
+      const b = base.rows[base.rows.length - 1].zones;
+      expect(Math.abs(z.back - fronts(y) - (b.back - fronts(base)))).toBeLessThanOrEqual(2);
+      if (y.issues.some((i) => i.code === 'yoke.front-neck-every-row')) expect(y.neck.row).toBeLessThan(2 * y.neck.perSide);
+    }
+    expect(p.sizes.some((s) => generateYoke(p, wide, s.id).issues.some((i) => i.code === 'yoke.front-neck-every-row'))).toBe(true);
+  });
 });

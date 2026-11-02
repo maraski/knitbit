@@ -625,10 +625,22 @@ function workYoke(project: Project, spec: YokeSpec, sizeId: Id, scope: Record<st
   const neckRows: number[] = [];
   if (perSide > 0) {
     if (spec.neck.shape === 'v') {
-      const s = distributeAuto(perSide, { from: lo, to: R - 1 }, { side: 'rs', align: 'start' });
-      // Each increase on its own RS row before the cast-on row: R − 1 ≥ 2 × perSide − 1.
-      const deeper = ceil1((2 * perSide) / rpc);
-      for (const w of s.warnings) issues.push({ severity: 'warning', code: 'yoke.front-neck-rows', param: 'neckDepth', message: `Front neck: ${w}`, fix: fixOf(`Make Depth below the neck point at least ${cmText(deeper)} (now ${cmText(depthCm)}) so each of the ${perSide} increases has its own RS row.`, [field.yoke('neckDepth')], { now: cmText(depthCm), need: `≥ ${cmText(deeper)}`, apply: { field: field.yoke('neckDepth'), value: deeper, unit: 'cm' } }) });
+      // Spread over the depth on RS rows (the slope sets the rhythm); a V too wide for its depth increases on WS rows
+      // too, so the front still gets every stitch.
+      let s = distributeAuto(perSide, { from: lo, to: R - 1 }, { side: 'rs', align: 'start' });
+      if (s.warnings.length) {
+        const any = distributeAuto(perSide, { from: lo, to: R - 1 }, { side: 'any', align: 'start' });
+        if (!any.warnings.length) {
+          s = any;
+          const rsDeeper = ceil1((2 * perSide + lo - 1) / rpc);
+          issues.push({ severity: 'info', code: 'yoke.front-neck-every-row', param: 'neckDepth', message: `Front neck: ${perSide} increases each side don't fit on RS rows in ${rowsCm(R - lo, rpc)}, so some are on WS rows too (at most every row). For RS rows only, make Depth below the neck point at least ${cmText(rsDeeper)} or the neck narrower.` });
+        } else {
+          s = any;
+          // Each increase on its own row before the cast-on row: R − 1 ≥ perSide.
+          const deeper = ceil1((perSide + lo) / rpc);
+          for (const w of s.warnings) issues.push({ severity: 'error', code: 'yoke.front-neck-rows', param: 'neckDepth', message: `Front neck: ${w}`, fix: fixOf(`Make Depth below the neck point at least ${cmText(deeper)} (now ${cmText(depthCm)}) so each of the ${perSide} increases has its own row, or make the Neck width narrower.`, [field.yoke('neckDepth'), field.yoke('neckWidth')], { now: cmText(depthCm), need: `≥ ${cmText(deeper)}`, apply: { field: field.yoke('neckDepth'), value: deeper, unit: 'cm' } }) });
+        }
+      }
       neckRows.push(...s.rows);
     } else {
       // Every row next to the centre (the last rows before the cast-on), then every other row above.
