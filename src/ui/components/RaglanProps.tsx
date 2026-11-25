@@ -1,4 +1,4 @@
-import { defaultShortRows, type YokeResult } from '../../engine/contiguous';
+import { defaultShortRows, yokeFieldNames, type YokeResult } from '../../engine/contiguous';
 import { generateBodyAndSleeves, missingYokePanels } from '../../engine/contiguousGarment';
 import { edgesOf } from '../../engine/edgeTreatments';
 import { garmentChoice, NECKLINES, necklinesFor, setNeckline } from '../../engine/garmentSetup';
@@ -60,8 +60,7 @@ export function RaglanProps({ ctx }: { ctx: PropsContext }) {
   const rg = y?.raglan;
   const cardigan = project.garment.opening === 'cardigan';
   const setYoke = (fn: (s: YokeSpec) => void, key: string | null = null) => update((p) => editPanel(p, panel.id, (pp) => fn(pp.yoke!)), key);
-  // An off-shoulder yoke's depth uses its back raise (back_raise, cm).
-  const scope = y?.offShoulder ? { ...ctx.scope, back_raise: y.offShoulder.backRaiseCm } : ctx.scope;
+  const scope = { ...ctx.scope, ...yokeFieldNames(y, ctx.scope) };
   const cm = (label: string, get: (s: YokeSpec) => DimExpr, set: (s: YokeSpec, d: DimExpr) => void, key: string) => (
     <ExprField label={label} value={get(spec)} sizeId={sizeId} sizeName={sizeName} scope={scope} units={ctx.units} fieldKey={`yoke.${key}`} onChange={(d, k) => setYoke((s) => set(s, d), `yoke.${panel.id}.${k}`)} />
   );
@@ -265,6 +264,7 @@ export function RaglanProps({ ctx }: { ctx: PropsContext }) {
       </div>
       {cm('Neck width, cast on across the back (cm)', (s) => s.neck.width ?? dim('back_neck_width'), (s, d) => (s.neck.width = d), 'neckWidth')}
       {cm('Depth below the neck point (cm)', (s) => s.neck.depth, (s, d) => (s.neck.depth = d), 'neckDepth')}
+      {spec.neck.shape === 'boat' && cm('Back depth, from the strap top (cm)', (s) => s.neck.backDepth ?? dim('back_neck_drop'), (s, d) => (s.neck.backDepth = d), 'neckBackDepth')}
       {spec.neck.shape !== 'v' && spec.neck.shape !== 'square' && cm('Centre (cm)', (s) => s.neck.centre, (s, d) => (s.neck.centre = d), 'neckCentre')}
       {spec.start === 'neck' ? (
         <>

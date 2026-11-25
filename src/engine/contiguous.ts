@@ -219,6 +219,19 @@ export function defaultYoke(shape: NecklineShape = 'round', start: YokeStart = s
 const BOAT_BACK_LENGTH = 'shoulder_drop * min(1, (shoulder_w - neck_w) / max(1, shoulder_w - back_neck_width)) + armhole_depth - back_depth';
 
 /**
+ * The yoke's own names (not measurements) its expressions can use, as this size works them: the neck width and depths
+ * (a boat neck's centre and back length), an off-shoulder's back raise, the strap's solved neck and back widths. For
+ * the property panels; the generators pass the same names to the fields that use them.
+ */
+export function yokeFieldNames(y: YokeResult | null | undefined, scope: Record<string, number>): Record<string, number> {
+  if (!y) return {};
+  if (y.offShoulder) return { back_raise: y.offShoulder.backRaiseCm };
+  const names: Record<string, number> = { neck_w: y.params.neckWidth?.value ?? scope.back_neck_width ?? 0, neck_depth: y.params.neckDepth?.value ?? 0, back_depth: y.params.neckBackDepth?.value ?? scope.back_neck_drop ?? 0 };
+  if (y.strap) Object.assign(names, { [STRAP_YOKE_NECK]: y.params.neckWidth?.value ?? 0, [STRAP_YOKE_BACK]: y.params.backWidth?.value ?? 0 });
+  return names;
+}
+
+/**
  * A yoke with another neck shape: the neck takes the new shape's defaults, and any other setting still at the old
  * shape's default follows the new shape's default (settings you changed are kept). Off-shoulder is always a raglan
  * yoke: from a modified raglan (a contiguous yoke started with the whole neck) it raises the back, and back from a

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { backNeckPositions, defaultShortRows, STRAP_YOKE_BACK, STRAP_YOKE_NECK, yokeWithNeck, type YokeParam } from '../../engine/contiguous';
+import { backNeckPositions, defaultShortRows, yokeFieldNames, yokeWithNeck, type YokeParam } from '../../engine/contiguous';
 import { generateBodyAndSleeves, missingYokePanels } from '../../engine/contiguousGarment';
 import { NECKLINES, necklinesFor, setNeckline } from '../../engine/garmentSetup';
 import { cmText } from '../../engine/issues';
@@ -23,11 +23,7 @@ export function YokeProps({ ctx }: { ctx: PropsContext }) {
   // The whole-neck start is the modified raglan method; switching start is a method change (Garment tab).
   const modified = spec.start === 'neck';
   const setYoke = (fn: (s: YokeSpec) => void, key: string | null = null) => update((p) => editPanel(p, panel.id, (pp) => fn(pp.yoke!)), key);
-  // The yoke's own names (the boat neck's centre and back length use them), as this size works them.
-  const local: Record<string, number> = y ? { neck_w: y.params.neckWidth?.value ?? ctx.scope.back_neck_width, neck_depth: y.params.neckDepth?.value ?? 0, back_depth: y.params.neckBackDepth?.value ?? ctx.scope.back_neck_drop } : {};
-  // The strap's solved neck or back width (the linked fields name them).
-  if (y?.strap) Object.assign(local, { [STRAP_YOKE_NECK]: y.params.neckWidth?.value ?? 0, [STRAP_YOKE_BACK]: y.params.backWidth?.value ?? 0 });
-  const scope = { ...ctx.scope, ...local };
+  const scope = { ...ctx.scope, ...yokeFieldNames(y, ctx.scope) };
   const linked = strapLinks(project, panel).linked;
   // A strap-solved neck keeps the back-start front neck's increases per side: the centre takes the rest.
   const keptShaping = y?.strap?.gives === 'neck' && !modified;
